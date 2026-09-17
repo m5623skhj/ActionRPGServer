@@ -1,0 +1,15 @@
+<Project>
+  <!-- Upstream projects use SolutionDir-based include paths; adapt them without editing the submodule. -->
+  <ItemDefinitionGroup Condition="'$(RudpRoot)' != ''">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RudpRoot)MultiSocketRUDP\MultiSocketRUDPServer;$(RudpRoot)MultiSocketRUDP\Logger;$(RudpRoot)external\CommonCode\Common;$(RudpRoot)external\CommonCode\Common\json-develop\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateRudpDependency" BeforeTargets="PrepareForBuild" Condition="'$(RudpRoot)' != ''">
+    <Error Condition="'$(Platform)' != 'x64'" Text="MultiSocketRUDP integration requires the x64 platform." />
+    <Error Condition="!Exists('$(RudpRoot)external\CommonCode\Common\NetServerSerializeBuffer.h')" Text="Initialize dependencies: git submodule update --init --recursive" />
+  </Target>
+</Project>

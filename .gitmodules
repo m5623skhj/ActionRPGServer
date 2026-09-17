@@ -1,0 +1,3 @@
+[submodule "External/MultiSocketRUDP"]
+	path = External/MultiSocketRUDP
+	url = https://github.com/m5623skhj/MultiSocketRUDP.git

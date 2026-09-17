@@ -143,7 +143,17 @@
     </Manifest>
   </ItemDefinitionGroup>
 
-  <ItemGroup></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\External\MultiSocketRUDP\MultiSocketRUDP\MultiSocketRUDPServer\MultiSocketRUDP.vcxproj">
+      <Project>{16f99c50-d24a-47b7-9402-2278bc3f0b0b}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\External\MultiSocketRUDP\MultiSocketRUDP\Logger\Logger.vcxproj">
+      <Project>{d1d0cbc0-97d6-4b95-b06d-3b16df2d3cea}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

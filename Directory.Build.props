@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'GameRoomServer' Or '$(MSBuildProjectName)' == 'MultiSocketRUDP' Or '$(MSBuildProjectName)' == 'Logger'">
+    <RudpRoot>$(MSBuildThisFileDirectory)External\MultiSocketRUDP\</RudpRoot>
+    <OutDir>$(MSBuildThisFileDirectory)artifacts\bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)artifacts\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+</Project>
