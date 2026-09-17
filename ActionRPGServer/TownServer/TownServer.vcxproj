@@ -22,8 +22,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{6edc8f7a-f519-4806-ac93-08669dec20f6}</ProjectGuid>
-    <RootNamespace>ActionRPGServer</RootNamespace>
+    <ProjectGuid>{e91c3d1d-9d15-4c6b-abaf-be9837b1ec85}</ProjectGuid>
+    <RootNamespace>TownServer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />

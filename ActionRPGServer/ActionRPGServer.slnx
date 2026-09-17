@@ -3,5 +3,6 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="ActionRPGServer/ActionRPGServer.vcxproj" />
+  <Project Path="ActionRPGServer/ActionRPGServer.vcxproj" Id="6edc8f7a-f519-4806-ac93-08669dec20f6" />
+  <Project Path="GameRoomServer/GameRoomServer.vcxproj" Id="9e7905ea-6a78-4835-885b-dff71c56d92f" />
 </Solution>
