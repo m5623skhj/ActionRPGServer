@@ -2,10 +2,10 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="TownServer/TownServer.vcxproj" Id="e91c3d1d-9d15-4c6b-abaf-be9837b1ec85" />
   <Folder Name="/External/">
-    <Project Path="../External/MultiSocketRUDP/MultiSocketRUDP/MultiSocketRUDPServer/MultiSocketRUDP.vcxproj" />
-    <Project Path="../External/MultiSocketRUDP/MultiSocketRUDP/Logger/Logger.vcxproj" />
+    <Project Path="../External/MultiSocketRUDP/MultiSocketRUDP/Logger/Logger.vcxproj" Id="d1d0cbc0-97d6-4b95-b06d-3b16df2d3cea" />
+    <Project Path="../External/MultiSocketRUDP/MultiSocketRUDP/MultiSocketRUDPServer/MultiSocketRUDP.vcxproj" Id="16f99c50-d24a-47b7-9402-2278bc3f0b0b" />
   </Folder>
   <Project Path="GameRoomServer/GameRoomServer.vcxproj" Id="9e7905ea-6a78-4835-885b-dff71c56d92f" />
+  <Project Path="TownServer/TownServer.vcxproj" Id="e91c3d1d-9d15-4c6b-abaf-be9837b1ec85" />
 </Solution>
