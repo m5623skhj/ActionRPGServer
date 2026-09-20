@@ -15,12 +15,16 @@ namespace TownServer::Network
     {
     public:
         using CloseHandler = std::function<void(std::uint64_t)>;
+        using ReceiveHandler = std::function<void(std::vector<std::uint8_t>)>;
 
         TcpSession(std::uint64_t inSessionId, asio::ip::tcp::socket inSocket, CloseHandler inCloseHandler);
 
         void Start();
         void Stop();
         void Send(std::vector<std::uint8_t> inPacketBody);
+        void SetReceiveHandler(ReceiveHandler inReceiveHandler);
+
+        [[nodiscard]] std::uint64_t GetSessionId() const noexcept;
 
     private:
         void ReadHeader();
@@ -36,6 +40,7 @@ namespace TownServer::Network
         std::uint64_t sessionId;
         asio::ip::tcp::socket socket;
         CloseHandler closeHandler;
+        ReceiveHandler receiveHandler;
         std::array<std::uint8_t, 4> receiveHeader{};
         std::vector<std::uint8_t> receiveBody;
         std::deque<std::vector<std::uint8_t>> sendQueue;

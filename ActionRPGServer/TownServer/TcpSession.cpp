@@ -44,6 +44,16 @@ namespace TownServer::Network
         });
     }
 
+    void TcpSession::SetReceiveHandler(ReceiveHandler inReceiveHandler)
+    {
+        receiveHandler = std::move(inReceiveHandler);
+    }
+
+    std::uint64_t TcpSession::GetSessionId() const noexcept
+    {
+        return sessionId;
+    }
+
     void TcpSession::ReadHeader()
     {
         const std::shared_ptr<TcpSession> self = shared_from_this();
@@ -92,8 +102,12 @@ namespace TownServer::Network
 
     void TcpSession::HandlePacket()
     {
-        // Echo keeps the transport independently testable until game packet handlers are introduced.
-        QueuePacket(receiveBody);
+        if (!receiveHandler)
+        {
+            Close();
+            return;
+        }
+        receiveHandler(std::move(receiveBody));
     }
 
     void TcpSession::QueuePacket(std::vector<std::uint8_t> inPacketBody)

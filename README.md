@@ -1,7 +1,7 @@
 # ActionRPGServer
 
 GameRoomServer references the MultiSocketRUDP server core and Logger as C++ projects.
-TownServer is a separate application; its implementation is still empty.
+TownServer is a separate asynchronous TCP application for non-dungeon town content.
 
 ## Dependencies
 
@@ -40,6 +40,28 @@ linkage and basic execution. It does not listen for connections yet.
 Game sessions, packet handlers, option files and a TLS certificate are needed
 when implementing `StartServer()` usage. Upstream `ContentsServer` provides
 an example, but is not a dependency of this project.
+
+## TownServer
+
+TownServer uses standalone Asio through the repository `vcpkg.json`. It runs a
+multi-threaded I/O pool while serializing each TCP connection and the town world
+through separate strands. The server currently provides:
+
+- length-prefixed TCP packets;
+- authoritative 20 Hz movement and 10 Hz snapshots;
+- multi-image map metadata and polygon movement correction from `TownServer/Data/TownMap.json`;
+- sector-based player appearance and disappearance;
+- movement input timeouts and per-session send-queue limits.
+
+Build and run it with:
+
+```powershell
+msbuild ActionRPGServer/TownServer/TownServer.vcxproj /m /p:Configuration=Debug /p:Platform=x64
+ActionRPGServer/TownServer/x64/Debug/TownServer.exe 7777 4
+```
+
+The optional arguments are the TCP port and I/O thread count. The map file is
+copied beside the executable during the build and loaded when the server starts.
 
 ## Updating the library
 

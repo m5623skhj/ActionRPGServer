@@ -1,15 +1,19 @@
 #include "TcpServer.h"
 
+#include "PlayerSession.h"
 #include "TcpSession.h"
+#include "TownInstance.h"
 
 #include <utility>
 
 namespace TownServer::Network
 {
-    TcpServer::TcpServer(asio::io_context& inIoContext, const asio::ip::tcp::endpoint& inEndpoint)
+    TcpServer::TcpServer(asio::io_context& inIoContext, const asio::ip::tcp::endpoint& inEndpoint,
+        std::shared_ptr<Domain::TownInstance> inTownInstance)
         : ioContext(inIoContext),
           endpoint(inEndpoint),
-          acceptor(asio::make_strand(inIoContext))
+          acceptor(asio::make_strand(inIoContext)),
+          townInstance(std::move(inTownInstance))
     {
     }
 
@@ -25,6 +29,7 @@ namespace TownServer::Network
         acceptor.bind(endpoint);
         acceptor.listen(asio::socket_base::max_listen_connections);
         running = true;
+        townInstance->Start();
         AcceptNext();
     }
 
@@ -45,6 +50,7 @@ namespace TownServer::Network
             {
                 session->Stop();
             }
+            townInstance->Stop();
         });
     }
 
@@ -56,8 +62,9 @@ namespace TownServer::Network
         {
             if (!inError)
             {
+                inSocket.set_option(asio::ip::tcp::no_delay(true));
                 const std::uint64_t sessionId = nextSessionId++;
-                std::shared_ptr<TcpSession> session = std::make_shared<TcpSession>(
+                std::shared_ptr<TcpSession> tcpSession = std::make_shared<TcpSession>(
                     sessionId,
                     std::move(inSocket),
                     [this](const std::uint64_t inClosedSessionId)
@@ -65,6 +72,7 @@ namespace TownServer::Network
                         RemoveSession(inClosedSessionId);
                     });
 
+                std::shared_ptr<PlayerSession> session = std::make_shared<PlayerSession>(tcpSession, townInstance);
                 sessions.emplace(sessionId, session);
                 session->Start();
             }
@@ -80,7 +88,12 @@ namespace TownServer::Network
     {
         asio::dispatch(acceptor.get_executor(), [this, inSessionId]()
         {
-            sessions.erase(inSessionId);
+            const auto iterator = sessions.find(inSessionId);
+            if (iterator != sessions.end())
+            {
+                iterator->second->Disconnect();
+                sessions.erase(iterator);
+            }
         });
     }
 }

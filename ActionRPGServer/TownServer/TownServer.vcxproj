@@ -147,15 +147,36 @@
 
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Player.cpp" />
+    <ClCompile Include="PlayerSession.cpp" />
+    <ClCompile Include="Protocol.cpp" />
     <ClCompile Include="TcpServer.cpp" />
     <ClCompile Include="TcpSession.cpp" />
+    <ClCompile Include="TownInstance.cpp" />
+    <ClCompile Include="TownMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetworkConstants.h" />
+    <ClInclude Include="Player.h" />
+    <ClInclude Include="PlayerSession.h" />
+    <ClInclude Include="Protocol.h" />
     <ClInclude Include="TcpServer.h" />
     <ClInclude Include="TcpSession.h" />
+    <ClInclude Include="TownInstance.h" />
+    <ClInclude Include="TownMap.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Data\TownMap.json" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyTownData" AfterTargets="Build">
+    <ItemGroup>
+      <TownDataFiles Include="$(ProjectDir)Data\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TownDataFiles)"
+          DestinationFiles="@(TownDataFiles-&gt;'$(OutDir)Data\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
