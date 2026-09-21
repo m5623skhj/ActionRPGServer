@@ -122,15 +122,27 @@ namespace
 
     bool IsSafeRelativeAsset(const std::string& inAsset)
     {
-        const std::filesystem::path path(inAsset);
-        if (path.empty() || path.is_absolute())
+        // Asset names are UTF-8; checking separator bytes avoids a locale-dependent path conversion.
+        if (inAsset.empty() || inAsset.front() == '/' || inAsset.front() == '\\'
+            || inAsset.find(':') != std::string::npos || inAsset.find('\0') != std::string::npos)
         {
             return false;
         }
-        return std::ranges::none_of(path, [](const std::filesystem::path& inComponent)
+
+        std::size_t componentStart = 0;
+        for (std::size_t index = 0; index <= inAsset.size(); ++index)
         {
-            return inComponent == "..";
-        });
+            if (index != inAsset.size() && inAsset[index] != '/' && inAsset[index] != '\\')
+            {
+                continue;
+            }
+            if (inAsset.compare(componentStart, index - componentStart, "..") == 0)
+            {
+                return false;
+            }
+            componentStart = index + 1;
+        }
+        return true;
     }
 }
 
@@ -198,12 +210,6 @@ namespace TownServer::Domain
                 || image.width <= 0.0f || image.height <= 0.0f)
             {
                 throw std::runtime_error("Invalid town image.");
-            }
-            if (image.x < info.worldLeft || image.y < info.worldTop
-                || image.x + image.width > info.worldRight
-                || image.y + image.height > info.worldBottom)
-            {
-                throw std::runtime_error("Town image lies outside the world bounds.");
             }
             info.images.push_back(std::move(image));
         }

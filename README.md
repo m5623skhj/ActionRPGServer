@@ -63,6 +63,13 @@ ActionRPGServer/TownServer/x64/Debug/TownServer.exe 7777 4
 The optional arguments are the TCP port and I/O thread count. The map file is
 copied beside the executable during the build and loaded when the server starts.
 
+Debug x64 TownServer와 ActionRPGClient 두 개를 함께 실행하는 로컬 테스트는 저장소 루트의
+`RunTownLocalTest.bat`을 실행합니다. 서버와 클라이언트를 먼저 Debug x64로 빌드해야 하며,
+TCP 7777 포트가 이미 사용 중이면 배치 파일은 새 프로세스를 실행하지 않습니다.
+
+Town 콘텐츠와 TCP 패킷을 추가하는 방법은
+[`TownServer/DEVELOPMENT.md`](ActionRPGServer/TownServer/DEVELOPMENT.md)를 참고합니다.
+
 ## Updating the library
 
 Check out the desired tested commit in `External/MultiSocketRUDP`, update its

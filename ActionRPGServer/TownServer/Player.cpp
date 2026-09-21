@@ -48,12 +48,11 @@ namespace TownServer::Domain
 
         directionX = inInput.directionX;
         directionY = inInput.directionY;
-        running = inInput.running;
         lastProcessedInput = inInput.sequence;
         lastInputTime = inReceivedTime;
     }
 
-    void Player::Simulate(const float inDeltaSeconds, const float inWalkSpeed, const float inRunSpeed,
+    void Player::Simulate(const float inDeltaSeconds, const float inWalkSpeed,
         const std::chrono::steady_clock::time_point inNow) noexcept
     {
         constexpr auto INPUT_TIMEOUT = std::chrono::milliseconds(500);
@@ -61,7 +60,6 @@ namespace TownServer::Domain
         {
             directionX = 0;
             directionY = 0;
-            running = false;
         }
 
         float x = static_cast<float>(directionX);
@@ -74,8 +72,7 @@ namespace TownServer::Domain
             y *= inverseLength;
         }
 
-        const float speed = running ? inRunSpeed : inWalkSpeed;
-        velocity = TownProtocol::Vector2{ x * speed, y * speed };
+        velocity = TownProtocol::Vector2{ x * inWalkSpeed, y * inWalkSpeed };
         position.x += velocity.x * inDeltaSeconds;
         position.y += velocity.y * inDeltaSeconds;
     }

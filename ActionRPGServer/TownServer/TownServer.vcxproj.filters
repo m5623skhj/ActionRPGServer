@@ -70,5 +70,8 @@
     <None Include="Data\TownMap.json">
       <Filter>리소스 파일</Filter>
     </None>
+    <None Include="DEVELOPMENT.md">
+      <Filter>리소스 파일</Filter>
+    </None>
   </ItemGroup>
 </Project>

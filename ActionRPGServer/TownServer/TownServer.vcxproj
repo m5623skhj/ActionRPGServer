@@ -167,6 +167,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\TownMap.json" />
+    <None Include="DEVELOPMENT.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyTownData" AfterTargets="Build">

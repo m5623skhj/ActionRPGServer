@@ -50,6 +50,8 @@ namespace TownServer::Domain
             std::shared_ptr<Network::PlayerSession> session;
             SectorCoordinate sector;
             std::unordered_set<PlayerId> visiblePlayers;
+            TownProtocol::Vector2 lastBroadcastPosition;
+            bool wasMovingOnLastBroadcast{};
         };
 
         void ScheduleTick();

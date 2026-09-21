@@ -115,7 +115,7 @@ namespace TownServer::Domain
         for (auto& [playerId, entry] : players)
         {
             const TownProtocol::Vector2 previousPosition = entry.player.GetPosition();
-            entry.player.Simulate(TICK_SECONDS, mapInfo.walkSpeed, mapInfo.runSpeed, now);
+            entry.player.Simulate(TICK_SECONDS, mapInfo.walkSpeed, now);
             const TownProtocol::Vector2 proposedPosition = entry.player.GetPosition();
             const TownProtocol::Vector2 constrainedPosition = map.ConstrainMovement(
                 previousPosition, proposedPosition);
@@ -163,7 +163,9 @@ namespace TownServer::Domain
             Player(playerId, std::move(inPlayerName), spawn),
             std::move(inSession),
             sector,
-            {}
+            {},
+            spawn,
+            false
         };
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
@@ -259,12 +261,22 @@ namespace TownServer::Domain
     {
         for (auto& [playerId, entry] : players)
         {
+            const TownProtocol::Vector2 position = entry.player.GetPosition();
+            const TownProtocol::Vector2 velocity = entry.player.GetVelocity();
+            const bool isMoving = velocity.x != 0.0f || velocity.y != 0.0f;
+            const bool positionChanged = position.x != entry.lastBroadcastPosition.x
+                || position.y != entry.lastBroadcastPosition.y;
+            if (!isMoving && !entry.wasMovingOnLastBroadcast && !positionChanged)
+            {
+                continue;
+            }
+
             const TownProtocol::PlayerMove movement{
                 playerId,
                 serverTick,
                 entry.player.GetLastProcessedInput(),
-                entry.player.GetPosition(),
-                entry.player.GetVelocity()
+                position,
+                velocity
             };
             const std::vector<std::uint8_t> encoded = TownProtocol::Encode(movement);
             entry.session->Send(encoded);
@@ -276,6 +288,9 @@ namespace TownServer::Domain
                     observerIterator->second.session->Send(encoded);
                 }
             }
+
+            entry.lastBroadcastPosition = position;
+            entry.wasMovingOnLastBroadcast = isMoving;
         }
     }
 

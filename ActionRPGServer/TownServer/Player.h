@@ -24,7 +24,7 @@ namespace TownServer::Domain
 
         void SetMovementInput(const TownProtocol::MoveInput& inInput,
             std::chrono::steady_clock::time_point inReceivedTime) noexcept;
-        void Simulate(float inDeltaSeconds, float inWalkSpeed, float inRunSpeed,
+        void Simulate(float inDeltaSeconds, float inWalkSpeed,
             std::chrono::steady_clock::time_point inNow) noexcept;
         void SetPosition(TownProtocol::Vector2 inPosition) noexcept;
         void StopMovement() noexcept;
@@ -38,6 +38,5 @@ namespace TownServer::Domain
         std::int8_t directionY{};
         std::uint32_t lastProcessedInput{};
         std::chrono::steady_clock::time_point lastInputTime{};
-        bool running{};
     };
 }
