@@ -171,20 +171,31 @@ namespace TownServer::Domain
         info.worldBottom = document.at("world").at("bottom").get<float>();
         info.spawnX = document.at("spawn").at("x").get<float>();
         info.spawnY = document.at("spawn").at("y").get<float>();
-        info.sectorSize = document.at("sectorSize").get<float>();
+        if (document.contains("sectorWidth") || document.contains("sectorHeight"))
+        {
+            info.sectorWidth = document.at("sectorWidth").get<float>();
+            info.sectorHeight = document.at("sectorHeight").get<float>();
+        }
+        else
+        {
+            info.sectorWidth = document.at("sectorSize").get<float>();
+            info.sectorHeight = info.sectorWidth;
+        }
         info.walkSpeed = document.at("walkSpeed").get<float>();
         info.runSpeed = document.at("runSpeed").get<float>();
 
         const float values[] = {
             info.worldLeft, info.worldTop, info.worldRight, info.worldBottom,
-            info.spawnX, info.spawnY, info.sectorSize, info.walkSpeed, info.runSpeed
+            info.spawnX, info.spawnY, info.sectorWidth, info.sectorHeight,
+            info.walkSpeed, info.runSpeed
         };
         for (const float value : values)
         {
             ValidateFinite(value, "map scalar");
         }
         if (info.mapId.empty() || info.worldRight <= info.worldLeft || info.worldBottom <= info.worldTop
-            || info.sectorSize <= 0.0f || info.walkSpeed <= 0.0f || info.runSpeed < info.walkSpeed)
+            || info.sectorWidth <= 0.0f || info.sectorHeight <= 0.0f
+            || info.walkSpeed <= 0.0f || info.runSpeed < info.walkSpeed)
         {
             throw std::runtime_error("Town map scalar values are inconsistent.");
         }

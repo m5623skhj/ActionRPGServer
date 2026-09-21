@@ -332,8 +332,8 @@ namespace TownServer::Domain
     {
         const TownProtocol::MapInfo& mapInfo = map.GetInfo();
         return SectorCoordinate{
-            static_cast<int>(std::floor((inPosition.x - mapInfo.worldLeft) / mapInfo.sectorSize)),
-            static_cast<int>(std::floor((inPosition.y - mapInfo.worldTop) / mapInfo.sectorSize))
+            static_cast<int>(std::floor((inPosition.x - mapInfo.worldLeft) / mapInfo.sectorWidth)),
+            static_cast<int>(std::floor((inPosition.y - mapInfo.worldTop) / mapInfo.sectorHeight))
         };
     }
 

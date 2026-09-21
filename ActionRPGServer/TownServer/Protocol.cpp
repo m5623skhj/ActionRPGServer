@@ -205,7 +205,8 @@ namespace
         writePolygons(inMap.blockedPolygons);
         inWriter.WriteFloat(inMap.spawnX);
         inWriter.WriteFloat(inMap.spawnY);
-        inWriter.WriteFloat(inMap.sectorSize);
+        inWriter.WriteFloat(inMap.sectorWidth);
+        inWriter.WriteFloat(inMap.sectorHeight);
         inWriter.WriteFloat(inMap.walkSpeed);
         inWriter.WriteFloat(inMap.runSpeed);
     }
@@ -278,7 +279,8 @@ namespace
             && readPolygons(outMap.blockedPolygons)
             && inReader.ReadFloat(outMap.spawnX)
             && inReader.ReadFloat(outMap.spawnY)
-            && inReader.ReadFloat(outMap.sectorSize)
+            && inReader.ReadFloat(outMap.sectorWidth)
+            && inReader.ReadFloat(outMap.sectorHeight)
             && inReader.ReadFloat(outMap.walkSpeed)
             && inReader.ReadFloat(outMap.runSpeed);
     }

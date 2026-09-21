@@ -46,7 +46,8 @@ namespace TownProtocol
         std::vector<Polygon> blockedPolygons;
         float spawnX{};
         float spawnY{};
-        float sectorSize{};
+        float sectorWidth{};
+        float sectorHeight{};
         float walkSpeed{};
         float runSpeed{};
     };
