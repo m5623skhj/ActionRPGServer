@@ -362,6 +362,32 @@ namespace TownProtocol
         return writer.Finish();
     }
 
+    std::vector<std::uint8_t> Encode(const ConfirmDungeonJoin& inPacket)
+    {
+        PacketWriter writer(PacketType::ConfirmDungeonJoin);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.challenge);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const EnterDungeonRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::EnterDungeonRequest);
+        writer.WriteUInt32(inPacket.dungeonId);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const EnterDungeonResponse& inPacket)
+    {
+        PacketWriter writer(PacketType::EnterDungeonResponse);
+        writer.WriteUInt8(inPacket.succeeded ? 1 : 0);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.combatSeed);
+        writer.WriteString(inPacket.sessionBrokerAddress);
+        writer.WriteUInt16(inPacket.sessionBrokerPort);
+        return writer.Finish();
+    }
+
     std::optional<EnterTownRequest> DecodeEnterTownRequest(const std::vector<std::uint8_t>& inPacket)
     {
         PacketReader reader(inPacket);
@@ -452,6 +478,62 @@ namespace TownProtocol
         if (!ReadExpectedType(reader, PacketType::PlayerDisappear)
             || !reader.ReadUInt64(packet.playerId)
             || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<ConfirmDungeonJoin> DecodeConfirmDungeonJoin(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        ConfirmDungeonJoin packet;
+        if (!ReadExpectedType(reader, PacketType::ConfirmDungeonJoin)
+            || !reader.ReadUInt64(packet.roomId)
+            || !reader.ReadUInt64(packet.challenge)
+            || packet.roomId == 0
+            || packet.challenge == 0
+            || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<EnterDungeonRequest> DecodeEnterDungeonRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        EnterDungeonRequest packet;
+        if (!ReadExpectedType(reader, PacketType::EnterDungeonRequest)
+            || !reader.ReadUInt32(packet.dungeonId)
+            || packet.dungeonId == 0
+            || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<EnterDungeonResponse> DecodeEnterDungeonResponse(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        EnterDungeonResponse packet;
+        std::uint8_t succeeded{};
+        if (!ReadExpectedType(reader, PacketType::EnterDungeonResponse)
+            || !reader.ReadUInt8(succeeded)
+            || succeeded > 1
+            || !reader.ReadUInt64(packet.roomId)
+            || !reader.ReadUInt64(packet.combatSeed)
+            || !reader.ReadString(packet.sessionBrokerAddress)
+            || !reader.ReadUInt16(packet.sessionBrokerPort)
+            || packet.sessionBrokerAddress.size() > 255
+            || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        packet.succeeded = succeeded != 0;
+        if (packet.succeeded && (packet.roomId == 0 || packet.combatSeed == 0
+            || packet.sessionBrokerAddress.empty() || packet.sessionBrokerPort == 0))
         {
             return std::nullopt;
         }

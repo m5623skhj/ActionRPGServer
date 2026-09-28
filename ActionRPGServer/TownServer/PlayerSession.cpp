@@ -1,7 +1,8 @@
 #include "PlayerSession.h"
 
+#include "../Shared/TcpSession.h"
 #include "Protocol.h"
-#include "TcpSession.h"
+#include "RoomControlTcpServer.h"
 #include "TownInstance.h"
 
 #include <optional>
@@ -9,10 +10,12 @@
 
 namespace TownServer::Network
 {
-    PlayerSession::PlayerSession(std::shared_ptr<TcpSession> inTcpSession,
-        std::weak_ptr<Domain::TownInstance> inTownInstance)
+    PlayerSession::PlayerSession(std::shared_ptr<ActionRPG::Network::TcpSession> inTcpSession,
+        std::weak_ptr<Domain::TownInstance> inTownInstance,
+        std::weak_ptr<RoomControlTcpServer> inRoomControlServer)
         : tcpSession(std::move(inTcpSession)),
-          townInstance(std::move(inTownInstance))
+          townInstance(std::move(inTownInstance)),
+          roomControlServer(std::move(inRoomControlServer))
     {
     }
 
@@ -52,6 +55,16 @@ namespace TownServer::Network
         return tcpSession->GetSessionId();
     }
 
+    std::uint64_t PlayerSession::GetPlayerId() const noexcept
+    {
+        return playerId.load(std::memory_order_acquire);
+    }
+
+    void PlayerSession::SetPlayerId(const std::uint64_t inPlayerId) noexcept
+    {
+        playerId.store(inPlayerId, std::memory_order_release);
+    }
+
     void PlayerSession::HandlePacket(std::vector<std::uint8_t> inPacket)
     {
         const std::optional<TownProtocol::PacketType> type = TownProtocol::ReadPacketType(inPacket);
@@ -89,6 +102,48 @@ namespace TownServer::Network
                 return;
             }
             town->ApplyMovementInput(GetSessionId(), *request);
+            return;
+        }
+        case TownProtocol::PacketType::ConfirmDungeonJoin:
+        {
+            const std::optional<TownProtocol::ConfirmDungeonJoin> request =
+                TownProtocol::DecodeConfirmDungeonJoin(inPacket);
+            const std::shared_ptr<RoomControlTcpServer> roomControl = roomControlServer.lock();
+            const std::uint64_t authenticatedPlayerId = GetPlayerId();
+            if (!request.has_value() || !enterRequested || authenticatedPlayerId == 0 || !roomControl)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            roomControl->ConfirmJoin(request->roomId, authenticatedPlayerId, request->challenge);
+            return;
+        }
+        case TownProtocol::PacketType::EnterDungeonRequest:
+        {
+            const std::optional<TownProtocol::EnterDungeonRequest> request =
+                TownProtocol::DecodeEnterDungeonRequest(inPacket);
+            const std::shared_ptr<RoomControlTcpServer> roomControl = roomControlServer.lock();
+            const std::uint64_t authenticatedPlayerId = GetPlayerId();
+            if (!request.has_value() || !enterRequested || authenticatedPlayerId == 0 || !roomControl)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            const std::weak_ptr<PlayerSession> weakSelf = weak_from_this();
+            roomControl->CreateRoom(request->dungeonId, { authenticatedPlayerId },
+                [weakSelf](ActionRPG::RoomControlProtocol::CreateRoomResult inResult)
+                {
+                    if (const std::shared_ptr<PlayerSession> self = weakSelf.lock())
+                    {
+                        self->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{
+                            inResult.succeeded,
+                            inResult.roomId,
+                            inResult.combatSeed,
+                            std::move(inResult.sessionBrokerAddress),
+                            inResult.sessionBrokerPort
+                        }));
+                    }
+                });
             return;
         }
         default:

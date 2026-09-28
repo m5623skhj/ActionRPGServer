@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <iostream>
 #include <utility>
 
 namespace
@@ -77,9 +78,67 @@ namespace TownServer::Domain
             }
 
             const auto playerIterator = self->players.find(sessionIterator->second);
-            if (playerIterator != self->players.end())
+            if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0)
             {
                 playerIterator->second.player.SetMovementInput(inInput, std::chrono::steady_clock::now());
+            }
+        });
+    }
+
+    void TownInstance::EnterDungeon(
+        const PlayerId inPlayerId,
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, inRoomId]()
+        {
+            const auto iterator = self->players.find(inPlayerId);
+            if (iterator == self->players.end() || iterator->second.dungeonRoomId != 0)
+            {
+                return;
+            }
+            self->HideFromTown(inPlayerId, iterator->second);
+            iterator->second.dungeonRoomId = inRoomId;
+            iterator->second.player.StopMovement();
+        });
+    }
+
+    void TownInstance::LeaveDungeon(
+        const PlayerId inPlayerId,
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, inRoomId]()
+        {
+            const auto iterator = self->players.find(inPlayerId);
+            if (iterator == self->players.end() || iterator->second.dungeonRoomId != inRoomId)
+            {
+                return;
+            }
+            iterator->second.dungeonRoomId = 0;
+            iterator->second.sector = self->GetSector(iterator->second.player.GetPosition());
+            self->AddToSector(inPlayerId, iterator->second.sector);
+            self->RefreshVisibility(inPlayerId);
+        });
+    }
+
+    void TownInstance::HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, roomEnded = std::move(inRoomEnded)]()
+        {
+            if (roomEnded.reason != ActionRPG::RoomControlProtocol::RoomEndReason::Cleared)
+            {
+                return;
+            }
+            for (const PlayerId playerId : roomEnded.rewardPlayerIds)
+            {
+                const auto iterator = self->players.find(playerId);
+                if (iterator != self->players.end() && iterator->second.dungeonRoomId == roomEnded.roomId)
+                {
+                    std::cout << "Reward target confirmed: room=" << roomEnded.roomId
+                        << ", player=" << playerId << '\n';
+                }
             }
         });
     }
@@ -114,6 +173,10 @@ namespace TownServer::Domain
 
         for (auto& [playerId, entry] : players)
         {
+            if (entry.dungeonRoomId != 0)
+            {
+                continue;
+            }
             const TownProtocol::Vector2 previousPosition = entry.player.GetPosition();
             entry.player.Simulate(TICK_SECONDS, mapInfo.walkSpeed, now);
             const TownProtocol::Vector2 proposedPosition = entry.player.GetPosition();
@@ -165,13 +228,15 @@ namespace TownServer::Domain
             sector,
             {},
             spawn,
-            false
+            false,
+            0
         };
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
         AddToSector(playerId, sector);
 
         PlayerEntry& playerEntry = players.at(playerId);
+        playerEntry.session->SetPlayerId(playerId);
         playerEntry.session->Send(TownProtocol::Encode(TownProtocol::EnterTownResponse{ playerId, mapInfo }));
         RefreshVisibility(playerId);
     }
@@ -192,21 +257,29 @@ namespace TownServer::Domain
             return;
         }
 
+        if (playerIterator->second.dungeonRoomId == 0)
+        {
+            HideFromTown(playerId, playerIterator->second);
+        }
+        players.erase(playerIterator);
+        sessionToPlayer.erase(sessionIterator);
+    }
+
+    void TownInstance::HideFromTown(const PlayerId inPlayerId, PlayerEntry& inEntry)
+    {
         const std::vector<PlayerId> visiblePlayers(
-            playerIterator->second.visiblePlayers.begin(), playerIterator->second.visiblePlayers.end());
+            inEntry.visiblePlayers.begin(), inEntry.visiblePlayers.end());
         for (const PlayerId visibleId : visiblePlayers)
         {
             const auto visibleIterator = players.find(visibleId);
             if (visibleIterator != players.end())
             {
-                visibleIterator->second.visiblePlayers.erase(playerId);
-                SendDisappear(visibleIterator->second, playerId);
+                visibleIterator->second.visiblePlayers.erase(inPlayerId);
+                SendDisappear(visibleIterator->second, inPlayerId);
             }
         }
-
-        RemoveFromSector(playerId, playerIterator->second.sector);
-        players.erase(playerIterator);
-        sessionToPlayer.erase(sessionIterator);
+        inEntry.visiblePlayers.clear();
+        RemoveFromSector(inPlayerId, inEntry.sector);
     }
 
     void TownInstance::RefreshVisibility(const PlayerId inPlayerId)
@@ -261,6 +334,10 @@ namespace TownServer::Domain
     {
         for (auto& [playerId, entry] : players)
         {
+            if (entry.dungeonRoomId != 0)
+            {
+                continue;
+            }
             const TownProtocol::Vector2 position = entry.player.GetPosition();
             const TownProtocol::Vector2 velocity = entry.player.GetVelocity();
             const bool isMoving = velocity.x != 0.0f || velocity.y != 0.0f;
@@ -341,7 +418,7 @@ namespace TownServer::Domain
     {
         std::unordered_set<PlayerId> result;
         const auto playerIterator = players.find(inPlayerId);
-        if (playerIterator == players.end())
+        if (playerIterator == players.end() || playerIterator->second.dungeonRoomId != 0)
         {
             return result;
         }
@@ -356,7 +433,14 @@ namespace TownServer::Domain
                 {
                     continue;
                 }
-                result.insert(sectorIterator->second.begin(), sectorIterator->second.end());
+                for (const PlayerId candidateId : sectorIterator->second)
+                {
+                    const auto candidate = players.find(candidateId);
+                    if (candidate != players.end() && candidate->second.dungeonRoomId == 0)
+                    {
+                        result.insert(candidateId);
+                    }
+                }
             }
         }
         result.erase(inPlayerId);

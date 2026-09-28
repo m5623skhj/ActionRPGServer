@@ -147,21 +147,28 @@
 
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
+    <ClCompile Include="..\Shared\TcpAcceptServer.cpp" />
+    <ClCompile Include="..\Shared\TcpSession.cpp" />
     <ClCompile Include="Player.cpp" />
     <ClCompile Include="PlayerSession.cpp" />
     <ClCompile Include="Protocol.cpp" />
-    <ClCompile Include="TcpServer.cpp" />
-    <ClCompile Include="TcpSession.cpp" />
+    <ClCompile Include="RoomControlTcpServer.cpp" />
+    <ClCompile Include="TownClientTcpServer.cpp" />
     <ClCompile Include="TownInstance.cpp" />
     <ClCompile Include="TownMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetworkConstants.h" />
+    <ClInclude Include="..\Shared\NetworkConstants.h" />
+    <ClInclude Include="..\Shared\RoomControlProtocol.h" />
+    <ClInclude Include="..\Shared\TcpAcceptServer.h" />
+    <ClInclude Include="..\Shared\TcpSession.h" />
     <ClInclude Include="Player.h" />
     <ClInclude Include="PlayerSession.h" />
     <ClInclude Include="Protocol.h" />
-    <ClInclude Include="TcpServer.h" />
-    <ClInclude Include="TcpSession.h" />
+    <ClInclude Include="RoomControlTcpServer.h" />
+    <ClInclude Include="TownClientTcpServer.h" />
     <ClInclude Include="TownInstance.h" />
     <ClInclude Include="TownMap.h" />
   </ItemGroup>

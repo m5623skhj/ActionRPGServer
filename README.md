@@ -2,8 +2,8 @@
 
 이 저장소에는 용도가 다른 두 서버 프로젝트가 있습니다.
 
-- `TownServer`: 마을의 접속, 이동, 다른 플레이어의 등장·퇴장을 처리하는 독립 TCP 서버입니다. `MultiSocketRUDP`를 사용하지 않습니다.
-- `GameRoomServer`: 던전 서버용 `MultiSocketRUDP` 연결을 준비한 프로젝트입니다. 현재는 코어 생성과 링크만 확인하며 접속을 받지 않습니다.
+- `TownServer`: 마을 클라이언트 TCP와 GameRoomServer 내부 제어 TCP를 함께 관리합니다.
+- `GameRoomServer`: 여러 던전 룸과 `MultiSocketRUDP` 세션을 운영하고 TownServer에 능동적으로 연결합니다.
 
 ## 준비 사항
 
@@ -29,10 +29,10 @@ git -C External/MultiSocketRUDP submodule update --init external/CommonCode
 `ActionRPGServer/ActionRPGServer.slnx`를 Visual Studio에서 열고 `Debug | x64` 또는 `Release | x64`로 `TownServer` 프로젝트를 빌드합니다. Debug 솔루션 빌드의 실행 파일은 `ActionRPGServer/x64/Debug/TownServer.exe`입니다.
 
 ```powershell
-ActionRPGServer/x64/Debug/TownServer.exe 7777 4
+ActionRPGServer/TownServer/x64/Debug/TownServer.exe 7777 4 7780
 ```
 
-인자는 순서대로 TCP 포트와 I/O 스레드 수이며 생략할 수 있습니다. 마을의 공유 상태는 I/O 스레드 수와 관계없이 하나의 strand에서 직렬화됩니다.
+인자는 순서대로 클라이언트 TCP 포트, I/O 스레드 수, GameRoomServer 제어 TCP 포트이며 생략할 수 있습니다. 마을의 공유 상태는 I/O 스레드 수와 관계없이 하나의 strand에서 직렬화됩니다.
 
 서버는 시작할 때 **실행 파일 옆**의 `Data/TownMap.json`을 읽습니다. 빌드 시 프로젝트의 `ActionRPGServer/TownServer/Data/TownMap.json`이 실행 폴더로 복사됩니다. 맵을 수정했다면 실행 폴더의 파일도 갱신하고 서버를 재시작해야 합니다.
 
@@ -48,7 +48,7 @@ ActionRPGServer/x64/Debug/TownServer.exe 7777 4
 
 콘텐츠 및 패킷을 추가하는 절차는 [TownServer 개발 가이드](ActionRPGServer/TownServer/DEVELOPMENT.md)를 참고합니다.
 
-## GameRoomServer 빌드 상태
+## GameRoomServer 빌드와 실행
 
 `GameRoomServer`는 `MultiSocketRUDP` 서버 코어와 `Logger`를 C++ 프로젝트로 참조합니다. x64 빌드 결과는 `artifacts/bin/x64/<Configuration>/`, 중간 파일은 `artifacts/obj/`에 저장됩니다. `Directory.Build.targets`가 이 저장소의 경로에 맞춰 상위 라이브러리의 include 경로를 조정하며 서브모듈 소스는 수정하지 않습니다.
 
@@ -56,7 +56,30 @@ ActionRPGServer/x64/Debug/TownServer.exe 7777 4
 msbuild ActionRPGServer/GameRoomServer/GameRoomServer.vcxproj /m /p:Configuration=Debug /p:Platform=x64
 ```
 
-현재 `main.cpp`는 코어 객체를 생성한 뒤 종료합니다. 던전 서버가 실제로 연결을 받으려면 `StartServer()` 호출, 세션·패킷 처리, 설정 파일, TLS 인증서 등을 별도로 구현해야 합니다. 상위 라이브러리의 `ContentsServer`는 참고용이지 이 프로젝트의 의존성은 아닙니다.
+TownServer를 먼저 실행한 뒤 다음과 같이 GameRoomServer를 실행합니다.
+
+```powershell
+artifacts/bin/x64/Debug/GameRoomServer.exe 127.0.0.1 7780 1 1000 4
+```
+
+인자는 순서대로 TownServer 주소, 제어 포트, 룸 서버 ID, 최대 룸 수, Asio I/O 스레드 수입니다. 모두 생략할 수 있습니다. 서로 다른 GameRoomServer는 고유한 룸 서버 ID를 사용해야 합니다.
+
+여섯 번째와 일곱 번째 인자로 RUDP 코어 옵션 파일과 세션 브로커 옵션 파일 경로를 지정할 수 있습니다. 여러 GameRoomServer를 같은 호스트에서 실행할 때는 각 프로세스가 서로 다른 `SESSION_BROKER_PORT`를 가진 옵션 파일을 사용해야 합니다. 세션 브로커 옵션은 UTF-16 LE BOM 형식이어야 합니다.
+
+```powershell
+artifacts/bin/x64/Debug/GameRoomServer.exe 127.0.0.1 7780 2 1000 4 D:/Config/Room2Core.txt D:/Config/Room2Broker.txt
+```
+
+GameRoomServer는 다음 기능을 포함합니다.
+
+- TownServer에 등록하고 생성 요청을 받는 길이 프레임 기반 내부 TCP 채널
+- 룸별 Asio strand, 20Hz 틱, 참가 인원 확정용 30초 입장 제한 시간
+- 참가 예정 인원과 실제 입장 인원의 분리 관리
+- RUDP 연결 직후 challenge 발급 및 TownServer TCP 세션을 통한 유저 확인
+- GameRoomServer ID가 포함된 전역 고유 룸 ID와 공유 전투 시드
+- 클리어 순간 남아 있는 유저를 기준으로 한 보상 대상 전달
+
+RUDP 서버를 시작하려면 `MY/DevServerCert` 개발 인증서가 로컬 인증서 저장소에 설치되어 있어야 합니다. 빌드 시 기본 옵션 파일이 실행 폴더의 `ServerOptionFile`로 복사됩니다.
 
 ## MultiSocketRUDP 버전 갱신
 

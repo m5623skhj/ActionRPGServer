@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Player.h"
+#include "../Shared/RoomControlProtocol.h"
 #include "TownMap.h"
 
 #include <asio.hpp>
@@ -29,6 +30,9 @@ namespace TownServer::Domain
         void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName);
         void Leave(std::uint64_t inSessionId);
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
+        void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
+        void LeaveDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
+        void HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded);
 
     private:
         struct SectorCoordinate
@@ -52,12 +56,14 @@ namespace TownServer::Domain
             std::unordered_set<PlayerId> visiblePlayers;
             TownProtocol::Vector2 lastBroadcastPosition;
             bool wasMovingOnLastBroadcast{};
+            ActionRPG::RoomControlProtocol::RoomId dungeonRoomId{};
         };
 
         void ScheduleTick();
         void Tick();
         void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName);
         void LeaveOnStrand(std::uint64_t inSessionId);
+        void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
         void RefreshVisibility(PlayerId inPlayerId);
         void BroadcastMovement();
         void AddToSector(PlayerId inPlayerId, SectorCoordinate inSector);

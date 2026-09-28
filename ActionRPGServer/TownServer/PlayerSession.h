@@ -1,8 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <vector>
+
+namespace ActionRPG::Network
+{
+    class TcpSession;
+}
 
 namespace TownServer::Domain
 {
@@ -11,13 +17,14 @@ namespace TownServer::Domain
 
 namespace TownServer::Network
 {
-    class TcpSession;
+    class RoomControlTcpServer;
 
     class PlayerSession final : public std::enable_shared_from_this<PlayerSession>
     {
     public:
-        PlayerSession(std::shared_ptr<TcpSession> inTcpSession,
-            std::weak_ptr<Domain::TownInstance> inTownInstance);
+        PlayerSession(std::shared_ptr<ActionRPG::Network::TcpSession> inTcpSession,
+            std::weak_ptr<Domain::TownInstance> inTownInstance,
+            std::weak_ptr<RoomControlTcpServer> inRoomControlServer);
 
         void Start();
         void Stop();
@@ -25,12 +32,16 @@ namespace TownServer::Network
         void Send(std::vector<std::uint8_t> inPacket);
 
         [[nodiscard]] std::uint64_t GetSessionId() const noexcept;
+        [[nodiscard]] std::uint64_t GetPlayerId() const noexcept;
+        void SetPlayerId(std::uint64_t inPlayerId) noexcept;
 
     private:
         void HandlePacket(std::vector<std::uint8_t> inPacket);
 
-        std::shared_ptr<TcpSession> tcpSession;
+        std::shared_ptr<ActionRPG::Network::TcpSession> tcpSession;
         std::weak_ptr<Domain::TownInstance> townInstance;
+        std::weak_ptr<RoomControlTcpServer> roomControlServer;
+        std::atomic_uint64_t playerId{};
         bool enterRequested = false;
     };
 }

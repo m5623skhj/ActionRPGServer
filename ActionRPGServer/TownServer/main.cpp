@@ -1,5 +1,6 @@
 #include "NetworkConstants.h"
-#include "TcpServer.h"
+#include "RoomControlTcpServer.h"
+#include "TownClientTcpServer.h"
 #include "TownInstance.h"
 #include "TownMap.h"
 
@@ -42,11 +43,19 @@ int main(const int inArgumentCount, char* inArguments[])
     using namespace TownServer::Network;
 
     std::uint16_t port = DEFAULT_PORT;
+    std::uint16_t roomControlPort = DEFAULT_ROOM_CONTROL_PORT;
     std::size_t ioThreadCount = DEFAULT_IO_THREAD_COUNT;
 
     if (inArgumentCount > 1 && (!ParseNumber(std::string_view(inArguments[1]), port) || port == 0))
     {
-        std::cerr << "Invalid port. Usage: TownServer [port] [io-thread-count]\n";
+        std::cerr << "Invalid port. Usage: TownServer [client-port] [io-thread-count] [room-control-port]\n";
+        return 1;
+    }
+
+    if (inArgumentCount > 3
+        && (!ParseNumber(std::string_view(inArguments[3]), roomControlPort) || roomControlPort == 0))
+    {
+        std::cerr << "Invalid room control port.\n";
         return 1;
     }
 
@@ -66,19 +75,25 @@ int main(const int inArgumentCount, char* inArguments[])
             GetExecutableDirectory() / "Data" / "TownMap.json");
         std::shared_ptr<TownServer::Domain::TownInstance> townInstance =
             std::make_shared<TownServer::Domain::TownInstance>(ioContext, std::move(townMap));
-        TcpServer server(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance);
+        std::shared_ptr<RoomControlTcpServer> roomControlServer = std::make_shared<RoomControlTcpServer>(
+            ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), roomControlPort), townInstance);
+        TownClientTcpServer server(
+            ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
 
-        shutdownSignals.async_wait([&server](const asio::error_code& inError, const int)
+        shutdownSignals.async_wait([&server, &roomControlServer](const asio::error_code& inError, const int)
         {
             if (!inError)
             {
                 server.Stop();
+                roomControlServer->Stop();
             }
         });
 
+        roomControlServer->Start();
         server.Start();
         std::cout << "TownServer listening on TCP port " << port
+            << " and room control port " << roomControlPort
             << " with " << ioThreadCount << " I/O threads.\n";
 
         std::vector<std::thread> ioThreads;

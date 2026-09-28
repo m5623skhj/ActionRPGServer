@@ -14,7 +14,10 @@ namespace TownProtocol
         MoveInput = 3,
         PlayerAppear = 4,
         PlayerMove = 5,
-        PlayerDisappear = 6
+        PlayerDisappear = 6,
+        ConfirmDungeonJoin = 7,
+        EnterDungeonRequest = 8,
+        EnterDungeonResponse = 9
     };
 
     struct Vector2
@@ -93,6 +96,26 @@ namespace TownProtocol
         std::uint64_t playerId{};
     };
 
+    struct ConfirmDungeonJoin
+    {
+        std::uint64_t roomId{};
+        std::uint64_t challenge{};
+    };
+
+    struct EnterDungeonRequest
+    {
+        std::uint32_t dungeonId{};
+    };
+
+    struct EnterDungeonResponse
+    {
+        bool succeeded{};
+        std::uint64_t roomId{};
+        std::uint64_t combatSeed{};
+        std::string sessionBrokerAddress;
+        std::uint16_t sessionBrokerPort{};
+    };
+
     [[nodiscard]] std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket);
 
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterTownRequest& inPacket);
@@ -101,6 +124,9 @@ namespace TownProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PlayerAppear& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PlayerMove& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PlayerDisappear& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const ConfirmDungeonJoin& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterDungeonRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterDungeonResponse& inPacket);
 
     [[nodiscard]] std::optional<EnterTownRequest> DecodeEnterTownRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<EnterTownResponse> DecodeEnterTownResponse(const std::vector<std::uint8_t>& inPacket);
@@ -108,4 +134,7 @@ namespace TownProtocol
     [[nodiscard]] std::optional<PlayerAppear> DecodePlayerAppear(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<PlayerMove> DecodePlayerMove(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<PlayerDisappear> DecodePlayerDisappear(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<ConfirmDungeonJoin> DecodeConfirmDungeonJoin(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<EnterDungeonRequest> DecodeEnterDungeonRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<EnterDungeonResponse> DecodeEnterDungeonResponse(const std::vector<std::uint8_t>& inPacket);
 }
