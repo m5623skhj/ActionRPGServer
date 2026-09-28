@@ -224,7 +224,7 @@ int main(const int inArgumentCount, char* inArguments[])
                 ioContext, roomManager, roomServerId, maxRoomCount);
 
         MultiSocketRUDPCore rudpCore(L"MY", L"DevServerCert");
-        GameRoomServer::RegisterDungeonPackets();
+        ActionRPG::DungeonProtocol::RegisterPackets();
         const std::weak_ptr<GameRoomServer::RoomManager> weakRoomManager = roomManager;
         if (!rudpCore.StartServer(coreOptionPath.wstring(), brokerOptionPath.wstring(),
             [weakRoomManager](MultiSocketRUDPCore& inCore) -> RUDPSession*

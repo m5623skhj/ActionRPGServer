@@ -1,0 +1,21 @@
+Protocol:
+  Namespace: ActionRPG::DungeonProtocol
+  PacketIdEnum: PacketType
+  RegisterFunction: RegisterPackets
+  Targets:
+    - Header: ActionRPGServer/GameRoomServer/DungeonProtocol.h
+      Source: ActionRPGServer/GameRoomServer/DungeonProtocol.cpp
+      PrerequisiteHeader: RudpPrerequisites.h
+
+Packet:
+  - Type: ReplyPacket
+    PacketName: DungeonChallenge
+    Items:
+      - Type: std::uint64_t
+        Name: challenge
+
+  - Type: ReplyPacket
+    PacketName: DungeonAuthResult
+    Items:
+      - Type: std::uint8_t
+        Name: succeeded

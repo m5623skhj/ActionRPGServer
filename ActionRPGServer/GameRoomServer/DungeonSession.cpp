@@ -34,7 +34,7 @@ namespace GameRoomServer
             playerId = inPlayerId;
         }
 
-        DungeonAuthResult result;
+        ActionRPG::DungeonProtocol::DungeonAuthResult result;
         result.succeeded = 1;
         if (!SendPacket(result))
         {
@@ -63,7 +63,7 @@ namespace GameRoomServer
         }
         manager->RegisterChallenge(newChallenge, this, generation);
 
-        DungeonChallenge packet;
+        ActionRPG::DungeonProtocol::DungeonChallenge packet;
         packet.challenge = newChallenge;
         if (!SendPacket(packet))
         {
