@@ -1,0 +1,82 @@
+{
+  "version": 3,
+  "mapId": "town_capital",
+  "world": {
+    "left": 0.0,
+    "top": 0.0,
+    "right": 4608.0,
+    "bottom": 1024.0
+  },
+  "images": [
+    {
+      "asset": "Images/Towns/town_capital_west.png",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 1536.0,
+      "height": 1024.0
+    },
+    {
+      "asset": "Images/Towns/town_capital_central.png",
+      "x": 1536.0,
+      "y": 0.0,
+      "width": 1536.0,
+      "height": 1024.0
+    },
+    {
+      "asset": "Images/Towns/town_capital_east.png",
+      "x": 3072.0,
+      "y": 0.0,
+      "width": 1536.0,
+      "height": 1024.0
+    }
+  ],
+  "walkablePolygons": [
+    [
+      { "x": 32.0, "y": 560.0 },
+      { "x": 4576.0, "y": 560.0 },
+      { "x": 4576.0, "y": 960.0 },
+      { "x": 32.0, "y": 960.0 }
+    ]
+  ],
+  "blockedPolygons": [],
+  "entryPoints": [
+    {
+      "id": "from_market",
+      "position": { "x": 220.0, "y": 760.0 }
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "capital_to_market",
+      "polygon": [
+        { "x": 32.0, "y": 600.0 },
+        { "x": 140.0, "y": 600.0 },
+        { "x": 140.0, "y": 920.0 },
+        { "x": 32.0, "y": 920.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_market",
+        "targetEntryPointId": "from_capital"
+      }
+    },
+    {
+      "id": "capital_dungeon_gate",
+      "polygon": [
+        { "x": 4436.0, "y": 600.0 },
+        { "x": 4576.0, "y": 600.0 },
+        { "x": 4576.0, "y": 920.0 },
+        { "x": 4436.0, "y": 920.0 }
+      ],
+      "action": {
+        "type": "DungeonSelection",
+        "dungeonGroupId": "west_coast_dungeons"
+      }
+    }
+  ],
+  "spawn": { "x": 2304.0, "y": 760.0 },
+  "sectorWidth": 768.0,
+  "sectorHeight": 512.0,
+  "walkSpeed": 280.0,
+  "runSpeed": 480.0
+}

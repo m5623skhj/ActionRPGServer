@@ -1,0 +1,73 @@
+{
+  "version": 3,
+  "mapId": "town_hillside",
+  "world": {
+    "left": 0.0,
+    "top": 0.0,
+    "right": 1536.0,
+    "bottom": 1024.0
+  },
+  "images": [
+    {
+      "asset": "Images/Towns/town_hillside.png",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 1536.0,
+      "height": 1024.0
+    }
+  ],
+  "walkablePolygons": [
+    [
+      { "x": 32.0, "y": 560.0 },
+      { "x": 1504.0, "y": 560.0 },
+      { "x": 1504.0, "y": 960.0 },
+      { "x": 32.0, "y": 960.0 }
+    ]
+  ],
+  "blockedPolygons": [],
+  "entryPoints": [
+    {
+      "id": "from_harbor",
+      "position": { "x": 220.0, "y": 760.0 }
+    },
+    {
+      "id": "from_market",
+      "position": { "x": 1316.0, "y": 760.0 }
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "hillside_to_harbor",
+      "polygon": [
+        { "x": 32.0, "y": 600.0 },
+        { "x": 140.0, "y": 600.0 },
+        { "x": 140.0, "y": 920.0 },
+        { "x": 32.0, "y": 920.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_harbor",
+        "targetEntryPointId": "from_hillside"
+      }
+    },
+    {
+      "id": "hillside_to_market",
+      "polygon": [
+        { "x": 1396.0, "y": 600.0 },
+        { "x": 1504.0, "y": 600.0 },
+        { "x": 1504.0, "y": 920.0 },
+        { "x": 1396.0, "y": 920.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_market",
+        "targetEntryPointId": "from_hillside"
+      }
+    }
+  ],
+  "spawn": { "x": 768.0, "y": 760.0 },
+  "sectorWidth": 768.0,
+  "sectorHeight": 512.0,
+  "walkSpeed": 280.0,
+  "runSpeed": 480.0
+}

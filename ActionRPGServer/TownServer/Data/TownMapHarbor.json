@@ -32,6 +32,13 @@
         "x": 230.0,
         "y": 760.0
       }
+    },
+    {
+      "id": "from_hillside",
+      "position": {
+        "x": 1100.0,
+        "y": 760.0
+      }
     }
   ],
   "transitionZones": [
@@ -47,6 +54,20 @@
         "type": "MapTransfer",
         "targetMapId": "town_01",
         "targetEntryPointId": "harbor_arrival"
+      }
+    },
+    {
+      "id": "harbor_to_hillside",
+      "polygon": [
+        { "x": 850.0, "y": 620.0 },
+        { "x": 1020.0, "y": 620.0 },
+        { "x": 1020.0, "y": 910.0 },
+        { "x": 850.0, "y": 910.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_hillside",
+        "targetEntryPointId": "from_harbor"
       }
     },
     {
