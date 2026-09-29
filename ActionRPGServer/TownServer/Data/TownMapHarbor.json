@@ -1,0 +1,74 @@
+{
+  "version": 3,
+  "mapId": "town_harbor",
+  "world": {
+    "left": 0.0,
+    "top": 0.0,
+    "right": 1536.0,
+    "bottom": 1024.0
+  },
+  "images": [
+    {
+      "asset": "Images/Towns/harbor_district.png",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 1536.0,
+      "height": 1024.0
+    }
+  ],
+  "walkablePolygons": [
+    [
+      { "x": 32.0, "y": 600.0 },
+      { "x": 1504.0, "y": 600.0 },
+      { "x": 1504.0, "y": 950.0 },
+      { "x": 32.0, "y": 950.0 }
+    ]
+  ],
+  "blockedPolygons": [],
+  "entryPoints": [
+    {
+      "id": "from_town",
+      "position": {
+        "x": 230.0,
+        "y": 760.0
+      }
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "harbor_to_town",
+      "polygon": [
+        { "x": 32.0, "y": 620.0 },
+        { "x": 140.0, "y": 620.0 },
+        { "x": 140.0, "y": 910.0 },
+        { "x": 32.0, "y": 910.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_01",
+        "targetEntryPointId": "harbor_arrival"
+      }
+    },
+    {
+      "id": "harbor_cave_gate",
+      "polygon": [
+        { "x": 1360.0, "y": 600.0 },
+        { "x": 1504.0, "y": 600.0 },
+        { "x": 1504.0, "y": 850.0 },
+        { "x": 1360.0, "y": 850.0 }
+      ],
+      "action": {
+        "type": "DungeonSelection",
+        "dungeonGroupId": "west_coast_dungeons"
+      }
+    }
+  ],
+  "spawn": {
+    "x": 768.0,
+    "y": 800.0
+  },
+  "sectorWidth": 768.0,
+  "sectorHeight": 512.0,
+  "walkSpeed": 280.0,
+  "runSpeed": 480.0
+}

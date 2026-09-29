@@ -160,9 +160,30 @@
         "x": 908.35791015625,
         "y": 1366.0780029296875
       }
+    },
+    {
+      "id": "harbor_arrival",
+      "position": {
+        "x": 420.0,
+        "y": 1400.0
+      }
     }
   ],
   "transitionZones": [
+    {
+      "id": "town_to_harbor",
+      "polygon": [
+        { "x": 128.0, "y": 1200.0 },
+        { "x": 300.0, "y": 1200.0 },
+        { "x": 300.0, "y": 1600.0 },
+        { "x": 128.0, "y": 1600.0 }
+      ],
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "town_harbor",
+        "targetEntryPointId": "from_town"
+      }
+    },
     {
       "id": "dungeon_gate_01",
       "polygon": [

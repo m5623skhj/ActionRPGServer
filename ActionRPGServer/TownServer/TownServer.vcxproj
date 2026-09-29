@@ -177,6 +177,7 @@
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />
     <None Include="Data\TownMap.json" />
+    <None Include="Data\TownMapHarbor.json" />
     <None Include="DEVELOPMENT.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
