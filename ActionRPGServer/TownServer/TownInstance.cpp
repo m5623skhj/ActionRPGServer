@@ -83,12 +83,14 @@ namespace TownServer::Domain
         });
     }
 
-    void TownInstance::Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName)
+    void TownInstance::Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
+        const std::uint32_t inCharacterId)
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
-        asio::dispatch(strand, [self, session = std::move(inSession), playerName = std::move(inPlayerName)]() mutable
+        asio::dispatch(strand, [self, session = std::move(inSession),
+            playerName = std::move(inPlayerName), inCharacterId]() mutable
         {
-            self->EnterOnStrand(std::move(session), std::move(playerName));
+            self->EnterOnStrand(std::move(session), std::move(playerName), inCharacterId);
         });
     }
 
@@ -275,7 +277,8 @@ namespace TownServer::Domain
         }
     }
 
-    void TownInstance::EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName)
+    void TownInstance::EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession,
+        std::string inPlayerName, const std::uint32_t inCharacterId)
     {
         const std::uint64_t sessionId = inSession->GetSessionId();
         if (sessionToPlayer.contains(sessionId))
@@ -289,7 +292,7 @@ namespace TownServer::Domain
         const SectorCoordinate sector = GetSector(defaultMapId, spawn);
 
         PlayerEntry entry{
-            Player(playerId, std::move(inPlayerName), spawn),
+            Player(playerId, std::move(inPlayerName), inCharacterId, spawn),
             std::move(inSession),
             defaultMapId,
             sector,
@@ -305,7 +308,11 @@ namespace TownServer::Domain
 
         PlayerEntry& playerEntry = players.at(playerId);
         playerEntry.session->SetPlayerId(playerId);
-        playerEntry.session->Send(TownProtocol::Encode(TownProtocol::EnterTownResponse{ playerId, mapInfo }));
+        playerEntry.session->Send(TownProtocol::Encode(TownProtocol::EnterTownResponse{
+            playerId,
+            playerEntry.player.GetCharacterId(),
+            mapInfo
+        }));
         RefreshVisibility(playerId);
     }
 
@@ -533,6 +540,7 @@ namespace TownServer::Domain
         inReceiver.session->Send(TownProtocol::Encode(TownProtocol::PlayerAppear{
             inSubject.player.GetId(),
             inSubject.player.GetName(),
+            inSubject.player.GetCharacterId(),
             inSubject.player.GetPosition(),
             inSubject.player.GetVelocity()
         }));

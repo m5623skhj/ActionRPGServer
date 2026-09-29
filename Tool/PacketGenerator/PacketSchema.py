@@ -86,10 +86,19 @@ def ValidateSchema(data):
     data = copy.deepcopy(data)
     structs = data.get("Structs", [])
     packets = data.get("Packet", [])
+    externalTypes = data.get("ExternalTypes", [])
     structs = [] if structs is None else structs
     packets = [] if packets is None else packets
-    if not isinstance(structs, list) or not isinstance(packets, list):
-        raise ValueError("Structs and Packet must be lists")
+    externalTypes = [] if externalTypes is None else externalTypes
+    if (not isinstance(structs, list) or not isinstance(packets, list)
+            or not isinstance(externalTypes, list)):
+        raise ValueError("Structs, Packet, and ExternalTypes must be lists")
+    normalizedExternalTypes = set()
+    for externalType in externalTypes:
+        ValidateName(externalType, "ExternalTypes")
+        if externalType in RESERVED_TYPES or externalType in normalizedExternalTypes:
+            raise ValueError(f"ExternalTypes: duplicate or reserved type name {externalType}")
+        normalizedExternalTypes.add(externalType)
     names = {}
     packetNames = set()
     enumNames = {"INVALID_PACKET_ID"}
@@ -123,6 +132,10 @@ def ValidateSchema(data):
         if name in SCALARS | STRINGS:
             if args:
                 raise ValueError(f"{location}: {name} cannot have template arguments")
+            return []
+        if name in normalizedExternalTypes:
+            if args:
+                raise ValueError(f"{location}: external type {name} cannot have template arguments")
             return []
         if name in packetNames:
             raise ValueError(f"{location}: packet type {name} cannot be used as a data field")

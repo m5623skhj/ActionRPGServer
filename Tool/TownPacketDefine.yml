@@ -1,0 +1,127 @@
+Protocol:
+  Format: PlainHeader
+  Namespace: TownProtocol
+  PacketIdEnum: PacketType
+  Targets:
+    - Root: .
+      Header: ActionRPGServer/TownServer/TownPacket.generated.h
+    - Root: ../ActionRPGClient
+      Header: ActionRPGClient/ActionRPGClient/Network/TownPacket.generated.h
+
+ExternalTypes:
+  - MapInfo
+  - Vector2
+  - DungeonOption
+
+Packet:
+  - Type: RequestPacket
+    PacketName: EnterTownRequest
+    Items:
+      - Type: std::string
+        Name: playerName
+      - Type: std::uint32_t
+        Name: characterId
+
+  - Type: ReplyPacket
+    PacketName: EnterTownResponse
+    Items:
+      - Type: std::uint64_t
+        Name: playerId
+      - Type: std::uint32_t
+        Name: characterId
+      - Type: MapInfo
+        Name: map
+
+  - Type: RequestPacket
+    PacketName: MoveInput
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::int8_t
+        Name: directionX
+      - Type: std::int8_t
+        Name: directionY
+      - Type: bool
+        Name: running
+
+  - Type: ReplyPacket
+    PacketName: PlayerAppear
+    Items:
+      - Type: std::uint64_t
+        Name: playerId
+      - Type: std::string
+        Name: playerName
+      - Type: std::uint32_t
+        Name: characterId
+      - Type: Vector2
+        Name: position
+      - Type: Vector2
+        Name: velocity
+
+  - Type: ReplyPacket
+    PacketName: PlayerMove
+    Items:
+      - Type: std::uint64_t
+        Name: playerId
+      - Type: std::uint32_t
+        Name: serverTick
+      - Type: std::uint32_t
+        Name: lastProcessedInput
+      - Type: Vector2
+        Name: position
+      - Type: Vector2
+        Name: velocity
+
+  - Type: ReplyPacket
+    PacketName: PlayerDisappear
+    Items:
+      - Type: std::uint64_t
+        Name: playerId
+
+  - Type: RequestPacket
+    PacketName: ConfirmDungeonJoin
+    Items:
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: std::uint64_t
+        Name: challenge
+
+  - Type: RequestPacket
+    PacketName: EnterDungeonRequest
+    Items:
+      - Type: std::string
+        Name: zoneId
+      - Type: std::uint32_t
+        Name: dungeonId
+
+  - Type: ReplyPacket
+    PacketName: EnterDungeonResponse
+    Items:
+      - Type: bool
+        Name: succeeded
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: std::uint64_t
+        Name: combatSeed
+      - Type: std::string
+        Name: sessionBrokerAddress
+      - Type: std::uint16_t
+        Name: sessionBrokerPort
+
+  - Type: ReplyPacket
+    PacketName: MapChanged
+    Items:
+      - Type: MapInfo
+        Name: map
+      - Type: Vector2
+        Name: position
+
+  - Type: ReplyPacket
+    PacketName: DungeonSelectionOpen
+    Items:
+      - Type: std::string
+        Name: zoneId
+      - Type: std::string
+        Name: dungeonGroupId
+      - Type: std::vector<DungeonOption>
+        Name: dungeons

@@ -369,6 +369,7 @@ namespace TownProtocol
     {
         PacketWriter writer(PacketType::EnterTownRequest);
         writer.WriteString(inPacket.playerName);
+        writer.WriteUInt32(inPacket.characterId);
         return writer.Finish();
     }
 
@@ -376,6 +377,7 @@ namespace TownProtocol
     {
         PacketWriter writer(PacketType::EnterTownResponse);
         writer.WriteUInt64(inPacket.playerId);
+        writer.WriteUInt32(inPacket.characterId);
         WriteMapInfo(writer, inPacket.map);
         return writer.Finish();
     }
@@ -395,6 +397,7 @@ namespace TownProtocol
         PacketWriter writer(PacketType::PlayerAppear);
         writer.WriteUInt64(inPacket.playerId);
         writer.WriteString(inPacket.playerName);
+        writer.WriteUInt32(inPacket.characterId);
         writer.WriteFloat(inPacket.position.x);
         writer.WriteFloat(inPacket.position.y);
         writer.WriteFloat(inPacket.velocity.x);
@@ -480,6 +483,7 @@ namespace TownProtocol
         EnterTownRequest packet;
         if (!ReadExpectedType(reader, PacketType::EnterTownRequest)
             || !reader.ReadString(packet.playerName)
+            || !reader.ReadUInt32(packet.characterId)
             || !reader.Finished())
         {
             return std::nullopt;
@@ -493,6 +497,7 @@ namespace TownProtocol
         EnterTownResponse packet;
         if (!ReadExpectedType(reader, PacketType::EnterTownResponse)
             || !reader.ReadUInt64(packet.playerId)
+            || !reader.ReadUInt32(packet.characterId)
             || !ReadMapInfo(reader, packet.map)
             || !reader.Finished())
         {
@@ -527,6 +532,7 @@ namespace TownProtocol
         if (!ReadExpectedType(reader, PacketType::PlayerAppear)
             || !reader.ReadUInt64(packet.playerId)
             || !reader.ReadString(packet.playerName)
+            || !reader.ReadUInt32(packet.characterId)
             || !reader.ReadFloat(packet.position.x)
             || !reader.ReadFloat(packet.position.y)
             || !reader.ReadFloat(packet.velocity.x)

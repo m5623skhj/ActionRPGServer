@@ -5,9 +5,11 @@
 
 namespace TownServer::Domain
 {
-    Player::Player(const PlayerId inPlayerId, std::string inName, const TownProtocol::Vector2 inPosition)
+    Player::Player(const PlayerId inPlayerId, std::string inName, const std::uint32_t inCharacterId,
+        const TownProtocol::Vector2 inPosition)
         : playerId(inPlayerId),
           name(std::move(inName)),
+          characterId(inCharacterId),
           position(inPosition),
           lastInputTime(std::chrono::steady_clock::now())
     {
@@ -21,6 +23,11 @@ namespace TownServer::Domain
     const std::string& Player::GetName() const noexcept
     {
         return name;
+    }
+
+    std::uint32_t Player::GetCharacterId() const noexcept
+    {
+        return characterId;
     }
 
     TownProtocol::Vector2 Player::GetPosition() const noexcept

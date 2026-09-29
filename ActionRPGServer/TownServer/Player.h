@@ -14,10 +14,12 @@ namespace TownServer::Domain
     class Player final
     {
     public:
-        Player(PlayerId inPlayerId, std::string inName, TownProtocol::Vector2 inPosition);
+        Player(PlayerId inPlayerId, std::string inName, std::uint32_t inCharacterId,
+            TownProtocol::Vector2 inPosition);
 
         [[nodiscard]] PlayerId GetId() const noexcept;
         [[nodiscard]] const std::string& GetName() const noexcept;
+        [[nodiscard]] std::uint32_t GetCharacterId() const noexcept;
         [[nodiscard]] TownProtocol::Vector2 GetPosition() const noexcept;
         [[nodiscard]] TownProtocol::Vector2 GetVelocity() const noexcept;
         [[nodiscard]] std::uint32_t GetLastProcessedInput() const noexcept;
@@ -32,6 +34,7 @@ namespace TownServer::Domain
     private:
         PlayerId playerId;
         std::string name;
+        std::uint32_t characterId{};
         TownProtocol::Vector2 position;
         TownProtocol::Vector2 velocity;
         std::int8_t directionX{};

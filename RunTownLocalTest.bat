@@ -1,8 +1,8 @@
 @echo off
 setlocal
 
-set "SERVER_EXE=%~dp0ActionRPGServer\TownServer\x64\Debug\TownServer.exe"
-set "SERVER_DIR=%~dp0ActionRPGServer\TownServer\x64\Debug"
+set "SERVER_EXE=%~dp0ActionRPGServer\x64\Debug\TownServer.exe"
+set "SERVER_DIR=%~dp0ActionRPGServer\x64\Debug"
 set "CLIENT_EXE=%~dp0..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug\ActionRPGClient.exe"
 set "CLIENT_DIR=%~dp0..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug"
 set "TOWN_PORT=7777"

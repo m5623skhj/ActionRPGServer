@@ -82,6 +82,42 @@ class PacketGeneratorTest(unittest.TestCase):
                 output = PacketGenerator.ResolveOutput("../Client", "Generated/Protocol.h")
             self.assertEqual(output, clientRoot / "Generated" / "Protocol.h")
 
+    def test_plain_header_supports_external_packet_field_types(self):
+        with tempfile.TemporaryDirectory() as directory:
+            projectRoot = Path(directory)
+            schema = projectRoot / "TownPacketDefine.yml"
+            schema.write_text(
+                yaml.safe_dump(
+                    {
+                        "Protocol": {
+                            "Format": "PlainHeader",
+                            "Namespace": "TownProtocol",
+                            "PacketIdEnum": "PacketType",
+                            "Targets": [{"Header": "Generated/TownPacket.generated.h"}],
+                        },
+                        "ExternalTypes": ["Vector2"],
+                        "Packet": [
+                            {
+                                "Type": "ReplyPacket",
+                                "PacketName": "PlayerAppear",
+                                "Items": [
+                                    {"Type": "std::uint32_t", "Name": "characterId"},
+                                    {"Type": "Vector2", "Name": "position"},
+                                ],
+                            }
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(PacketGenerator, "PROJECT_ROOT", projectRoot):
+                self.assertTrue(PacketGenerator.Generate(schema))
+                header = (projectRoot / "Generated" / "TownPacket.generated.h").read_text()
+                self.assertIn("PlayerAppear = 1", header)
+                self.assertIn("std::uint32_t characterId", header)
+                self.assertIn("Vector2 position", header)
+
     def test_explicit_packet_id_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             schema = Path(directory) / "PacketDefine.yml"

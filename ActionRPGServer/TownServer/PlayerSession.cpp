@@ -82,13 +82,14 @@ namespace TownServer::Network
             const std::optional<TownProtocol::EnterTownRequest> request =
                 TownProtocol::DecodeEnterTownRequest(inPacket);
             if (!request.has_value() || enterRequested || request->playerName.empty()
+                || request->characterId == 0
                 || request->playerName.size() > 32)
             {
                 tcpSession->Stop();
                 return;
             }
             enterRequested = true;
-            town->Enter(shared_from_this(), request->playerName);
+            town->Enter(shared_from_this(), request->playerName, request->characterId);
             return;
         }
         case TownProtocol::PacketType::MoveInput:

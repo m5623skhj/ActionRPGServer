@@ -7,21 +7,6 @@
 
 namespace TownProtocol
 {
-    enum class PacketType : std::uint16_t
-    {
-        EnterTownRequest = 1,
-        EnterTownResponse = 2,
-        MoveInput = 3,
-        PlayerAppear = 4,
-        PlayerMove = 5,
-        PlayerDisappear = 6,
-        ConfirmDungeonJoin = 7,
-        EnterDungeonRequest = 8,
-        EnterDungeonResponse = 9,
-        MapChanged = 10,
-        DungeonSelectionOpen = 11
-    };
-
     struct Vector2
     {
         float x{};
@@ -81,74 +66,6 @@ namespace TownProtocol
         float runSpeed{};
     };
 
-    struct EnterTownRequest
-    {
-        std::string playerName;
-    };
-
-    struct EnterTownResponse
-    {
-        std::uint64_t playerId{};
-        MapInfo map;
-    };
-
-    struct MoveInput
-    {
-        std::uint32_t sequence{};
-        std::int8_t directionX{};
-        std::int8_t directionY{};
-        bool running{};
-    };
-
-    struct PlayerAppear
-    {
-        std::uint64_t playerId{};
-        std::string playerName;
-        Vector2 position;
-        Vector2 velocity;
-    };
-
-    struct PlayerMove
-    {
-        std::uint64_t playerId{};
-        std::uint32_t serverTick{};
-        std::uint32_t lastProcessedInput{};
-        Vector2 position;
-        Vector2 velocity;
-    };
-
-    struct PlayerDisappear
-    {
-        std::uint64_t playerId{};
-    };
-
-    struct ConfirmDungeonJoin
-    {
-        std::uint64_t roomId{};
-        std::uint64_t challenge{};
-    };
-
-    struct EnterDungeonRequest
-    {
-        std::string zoneId;
-        std::uint32_t dungeonId{};
-    };
-
-    struct EnterDungeonResponse
-    {
-        bool succeeded{};
-        std::uint64_t roomId{};
-        std::uint64_t combatSeed{};
-        std::string sessionBrokerAddress;
-        std::uint16_t sessionBrokerPort{};
-    };
-
-    struct MapChanged
-    {
-        MapInfo map;
-        Vector2 position;
-    };
-
     struct DungeonOption
     {
         std::uint32_t dungeonId{};
@@ -157,13 +74,12 @@ namespace TownProtocol
         std::string description;
     };
 
-    struct DungeonSelectionOpen
-    {
-        std::string zoneId;
-        std::string dungeonGroupId;
-        std::vector<DungeonOption> dungeons;
-    };
+}
 
+#include "TownPacket.generated.h"
+
+namespace TownProtocol
+{
     [[nodiscard]] std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket);
 
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterTownRequest& inPacket);

@@ -33,7 +33,8 @@ namespace TownServer::Domain
 
         void Start();
         void Stop();
-        void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName);
+        void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
+            std::uint32_t inCharacterId);
         void Leave(std::uint64_t inSessionId);
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
         void ValidateDungeonRequest(std::uint64_t inSessionId, std::string inZoneId,
@@ -72,7 +73,8 @@ namespace TownServer::Domain
 
         void ScheduleTick();
         void Tick();
-        void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName);
+        void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
+            std::uint32_t inCharacterId);
         void LeaveOnStrand(std::uint64_t inSessionId);
         void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
         void ProcessTransition(PlayerId inPlayerId, PlayerEntry& inEntry);
