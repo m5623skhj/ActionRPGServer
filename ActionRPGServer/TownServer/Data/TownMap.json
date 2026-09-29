@@ -152,7 +152,31 @@
     "x": 908.35791015625,
     "y": 1366.0780029296875
   },
-  "version": 2,
+  "version": 3,
+  "entryPoints": [
+    {
+      "id": "default",
+      "position": {
+        "x": 908.35791015625,
+        "y": 1366.0780029296875
+      }
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "dungeon_gate_01",
+      "polygon": [
+        { "x": 4879.0, "y": 1480.0 },
+        { "x": 5059.0, "y": 1480.0 },
+        { "x": 5059.0, "y": 1650.0 },
+        { "x": 4879.0, "y": 1650.0 }
+      ],
+      "action": {
+        "type": "DungeonSelection",
+        "dungeonGroupId": "west_coast_dungeons"
+      }
+    }
+  ],
   "walkSpeed": 280.0,
   "walkablePolygons": [
     [

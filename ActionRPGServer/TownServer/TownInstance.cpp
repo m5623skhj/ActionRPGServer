@@ -16,11 +16,46 @@ namespace
 
 namespace TownServer::Domain
 {
-    TownInstance::TownInstance(asio::io_context& inIoContext, TownMap inMap)
+    TownInstance::TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
+        DungeonCatalog inDungeonCatalog)
         : strand(asio::make_strand(inIoContext)),
           tickTimer(strand),
-          map(std::move(inMap))
+          dungeonCatalog(std::move(inDungeonCatalog))
     {
+        if (inMaps.empty())
+        {
+            throw std::invalid_argument("TownInstance requires at least one map.");
+        }
+        defaultMapId = inMaps.front().GetInfo().mapId;
+        for (TownMap& map : inMaps)
+        {
+            const std::string mapId = map.GetInfo().mapId;
+            if (!maps.emplace(mapId, std::move(map)).second)
+            {
+                throw std::invalid_argument("Duplicate town map id: " + mapId);
+            }
+        }
+        for (const auto& [mapId, map] : maps)
+        {
+            for (const TownProtocol::TransitionZone& zone : map.GetInfo().transitionZones)
+            {
+                if (zone.actionType == TownProtocol::TransitionActionType::DungeonSelection)
+                {
+                    if (dungeonCatalog.FindGroup(zone.dungeonGroupId) == nullptr)
+                    {
+                        throw std::invalid_argument(
+                            "Unresolved dungeon group: " + mapId + "/" + zone.id);
+                    }
+                    continue;
+                }
+                const auto targetMap = maps.find(zone.targetMapId);
+                if (targetMap == maps.end()
+                    || targetMap->second.FindEntryPoint(zone.targetEntryPointId) == nullptr)
+                {
+                    throw std::invalid_argument("Unresolved map transition: " + mapId + "/" + zone.id);
+                }
+            }
+        }
     }
 
     void TownInstance::Start()
@@ -85,6 +120,33 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::ValidateDungeonRequest(const std::uint64_t inSessionId, std::string inZoneId,
+        const std::uint32_t inDungeonId, DungeonRequestHandler inHandler)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, zoneId = std::move(inZoneId), inDungeonId,
+            handler = std::move(inHandler)]() mutable
+        {
+            bool valid = false;
+            const auto sessionIterator = self->sessionToPlayer.find(inSessionId);
+            if (sessionIterator != self->sessionToPlayer.end())
+            {
+                const auto playerIterator = self->players.find(sessionIterator->second);
+                if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0)
+                {
+                    const PlayerEntry& entry = playerIterator->second;
+                    const TownMap& map = self->maps.at(entry.mapId);
+                    const TownProtocol::TransitionZone* zone = map.FindTransitionZone(
+                        entry.player.GetPosition());
+                    valid = zone != nullptr && zone->id == zoneId
+                        && zone->actionType == TownProtocol::TransitionActionType::DungeonSelection
+                        && self->dungeonCatalog.Contains(zone->dungeonGroupId, inDungeonId);
+                }
+            }
+            handler(valid);
+        });
+    }
+
     void TownInstance::EnterDungeon(
         const PlayerId inPlayerId,
         const ActionRPG::RoomControlProtocol::RoomId inRoomId)
@@ -116,7 +178,8 @@ namespace TownServer::Domain
                 return;
             }
             iterator->second.dungeonRoomId = 0;
-            iterator->second.sector = self->GetSector(iterator->second.player.GetPosition());
+            iterator->second.sector = self->GetSector(
+                iterator->second.mapId, iterator->second.player.GetPosition());
             self->AddToSector(inPlayerId, iterator->second.sector);
             self->RefreshVisibility(inPlayerId);
         });
@@ -147,7 +210,9 @@ namespace TownServer::Domain
     {
         const std::uint64_t x = static_cast<std::uint32_t>(inCoordinate.x);
         const std::uint64_t y = static_cast<std::uint32_t>(inCoordinate.y);
-        return static_cast<std::size_t>((x << 32) ^ y);
+        const std::size_t coordinateHash = static_cast<std::size_t>((x << 32) ^ y);
+        return std::hash<std::string>{}(inCoordinate.mapId)
+            ^ (coordinateHash + 0x9e3779b9U + (coordinateHash << 6) + (coordinateHash >> 2));
     }
 
     void TownInstance::ScheduleTick()
@@ -169,18 +234,18 @@ namespace TownServer::Domain
         ++serverTick;
         const auto now = std::chrono::steady_clock::now();
         std::vector<PlayerId> changedSectorPlayers;
-        const TownProtocol::MapInfo& mapInfo = map.GetInfo();
-
         for (auto& [playerId, entry] : players)
         {
             if (entry.dungeonRoomId != 0)
             {
                 continue;
             }
+            TownMap& currentMap = maps.at(entry.mapId);
+            const TownProtocol::MapInfo& mapInfo = currentMap.GetInfo();
             const TownProtocol::Vector2 previousPosition = entry.player.GetPosition();
             entry.player.Simulate(TICK_SECONDS, mapInfo.walkSpeed, now);
             const TownProtocol::Vector2 proposedPosition = entry.player.GetPosition();
-            const TownProtocol::Vector2 constrainedPosition = map.ConstrainMovement(
+            const TownProtocol::Vector2 constrainedPosition = currentMap.ConstrainMovement(
                 previousPosition, proposedPosition);
             entry.player.SetPosition(constrainedPosition);
             if (constrainedPosition.x != proposedPosition.x || constrainedPosition.y != proposedPosition.y)
@@ -188,7 +253,7 @@ namespace TownServer::Domain
                 entry.player.StopMovement();
             }
 
-            const SectorCoordinate newSector = GetSector(entry.player.GetPosition());
+            const SectorCoordinate newSector = GetSector(entry.mapId, entry.player.GetPosition());
             if (newSector != entry.sector)
             {
                 RemoveFromSector(playerId, entry.sector);
@@ -196,6 +261,7 @@ namespace TownServer::Domain
                 AddToSector(playerId, entry.sector);
                 changedSectorPlayers.push_back(playerId);
             }
+            ProcessTransition(playerId, entry);
         }
 
         for (const PlayerId playerId : changedSectorPlayers)
@@ -218,18 +284,20 @@ namespace TownServer::Domain
         }
 
         const PlayerId playerId = nextPlayerId++;
-        const TownProtocol::MapInfo& mapInfo = map.GetInfo();
+        const TownProtocol::MapInfo& mapInfo = maps.at(defaultMapId).GetInfo();
         const TownProtocol::Vector2 spawn{ mapInfo.spawnX, mapInfo.spawnY };
-        const SectorCoordinate sector = GetSector(spawn);
+        const SectorCoordinate sector = GetSector(defaultMapId, spawn);
 
         PlayerEntry entry{
             Player(playerId, std::move(inPlayerName), spawn),
             std::move(inSession),
+            defaultMapId,
             sector,
             {},
             spawn,
             false,
-            0
+            0,
+            {}
         };
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
@@ -280,6 +348,76 @@ namespace TownServer::Domain
         }
         inEntry.visiblePlayers.clear();
         RemoveFromSector(inPlayerId, inEntry.sector);
+    }
+
+    void TownInstance::ProcessTransition(const PlayerId inPlayerId, PlayerEntry& inEntry)
+    {
+        const TownMap& currentMap = maps.at(inEntry.mapId);
+        const TownProtocol::TransitionZone* zone = currentMap.FindTransitionZone(
+            inEntry.player.GetPosition());
+        if (zone == nullptr)
+        {
+            inEntry.activeTransitionZoneId.clear();
+            return;
+        }
+        if (inEntry.activeTransitionZoneId == zone->id)
+        {
+            return;
+        }
+
+        inEntry.activeTransitionZoneId = zone->id;
+        inEntry.player.StopMovement();
+        if (zone->actionType == TownProtocol::TransitionActionType::MapTransfer)
+        {
+            static_cast<void>(TransferMap(inPlayerId, inEntry, *zone));
+            return;
+        }
+
+        const std::vector<TownProtocol::DungeonOption>* dungeons = dungeonCatalog.FindGroup(
+            zone->dungeonGroupId);
+        if (dungeons != nullptr)
+        {
+            inEntry.session->Send(TownProtocol::Encode(TownProtocol::DungeonSelectionOpen{
+                zone->id,
+                zone->dungeonGroupId,
+                *dungeons
+            }));
+        }
+    }
+
+    bool TownInstance::TransferMap(const PlayerId inPlayerId, PlayerEntry& inEntry,
+        const TownProtocol::TransitionZone& inZone)
+    {
+        const auto targetMapIterator = maps.find(inZone.targetMapId);
+        if (targetMapIterator == maps.end())
+        {
+            return false;
+        }
+        const TownProtocol::EntryPoint* entryPoint = targetMapIterator->second.FindEntryPoint(
+            inZone.targetEntryPointId);
+        if (entryPoint == nullptr)
+        {
+            return false;
+        }
+
+        HideFromTown(inPlayerId, inEntry);
+        inEntry.mapId = inZone.targetMapId;
+        inEntry.player.SetPosition(entryPoint->position);
+        inEntry.player.StopMovement();
+        inEntry.sector = GetSector(inEntry.mapId, entryPoint->position);
+        inEntry.lastBroadcastPosition = entryPoint->position;
+        inEntry.wasMovingOnLastBroadcast = false;
+        AddToSector(inPlayerId, inEntry.sector);
+
+        const TownProtocol::TransitionZone* arrivalZone = targetMapIterator->second.FindTransitionZone(
+            entryPoint->position);
+        inEntry.activeTransitionZoneId = arrivalZone == nullptr ? std::string{} : arrivalZone->id;
+        inEntry.session->Send(TownProtocol::Encode(TownProtocol::MapChanged{
+            targetMapIterator->second.GetInfo(),
+            entryPoint->position
+        }));
+        RefreshVisibility(inPlayerId);
+        return true;
     }
 
     void TownInstance::RefreshVisibility(const PlayerId inPlayerId)
@@ -405,10 +543,12 @@ namespace TownServer::Domain
         inReceiver.session->Send(TownProtocol::Encode(TownProtocol::PlayerDisappear{ inSubjectId }));
     }
 
-    TownInstance::SectorCoordinate TownInstance::GetSector(const TownProtocol::Vector2 inPosition) const noexcept
+    TownInstance::SectorCoordinate TownInstance::GetSector(const std::string_view inMapId,
+        const TownProtocol::Vector2 inPosition) const
     {
-        const TownProtocol::MapInfo& mapInfo = map.GetInfo();
+        const TownProtocol::MapInfo& mapInfo = maps.at(std::string(inMapId)).GetInfo();
         return SectorCoordinate{
+            std::string(inMapId),
             static_cast<int>(std::floor((inPosition.x - mapInfo.worldLeft) / mapInfo.sectorWidth)),
             static_cast<int>(std::floor((inPosition.y - mapInfo.worldTop) / mapInfo.sectorHeight))
         };
@@ -428,7 +568,7 @@ namespace TownServer::Domain
         {
             for (int x = center.x - 1; x <= center.x + 1; ++x)
             {
-                const auto sectorIterator = sectors.find(SectorCoordinate{ x, y });
+                const auto sectorIterator = sectors.find(SectorCoordinate{ center.mapId, x, y });
                 if (sectorIterator == sectors.end())
                 {
                     continue;

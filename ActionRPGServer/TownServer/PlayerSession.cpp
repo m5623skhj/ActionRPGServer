@@ -130,19 +130,34 @@ namespace TownServer::Network
                 return;
             }
             const std::weak_ptr<PlayerSession> weakSelf = weak_from_this();
-            roomControl->CreateRoom(request->dungeonId, { authenticatedPlayerId },
-                [weakSelf](ActionRPG::RoomControlProtocol::CreateRoomResult inResult)
+            town->ValidateDungeonRequest(GetSessionId(), request->zoneId, request->dungeonId,
+                [weakSelf, roomControl, authenticatedPlayerId,
+                    dungeonId = request->dungeonId](const bool inValid)
                 {
-                    if (const std::shared_ptr<PlayerSession> self = weakSelf.lock())
+                    const std::shared_ptr<PlayerSession> self = weakSelf.lock();
+                    if (!self)
                     {
-                        self->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{
-                            inResult.succeeded,
-                            inResult.roomId,
-                            inResult.combatSeed,
-                            std::move(inResult.sessionBrokerAddress),
-                            inResult.sessionBrokerPort
-                        }));
+                        return;
                     }
+                    if (!inValid)
+                    {
+                        self->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{}));
+                        return;
+                    }
+                    roomControl->CreateRoom(dungeonId, { authenticatedPlayerId },
+                        [weakSelf](ActionRPG::RoomControlProtocol::CreateRoomResult inResult)
+                        {
+                            if (const std::shared_ptr<PlayerSession> activeSelf = weakSelf.lock())
+                            {
+                                activeSelf->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{
+                                    inResult.succeeded,
+                                    inResult.roomId,
+                                    inResult.combatSeed,
+                                    std::move(inResult.sessionBrokerAddress),
+                                    inResult.sessionBrokerPort
+                                }));
+                            }
+                        });
                 });
             return;
         }

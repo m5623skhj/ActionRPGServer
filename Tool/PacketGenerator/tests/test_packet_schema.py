@@ -71,6 +71,17 @@ class PacketGeneratorTest(unittest.TestCase):
                 self.assertIn("DUNGEON_CHALLENGE", header)
                 self.assertIn("std::uint64_t challenge", header)
 
+    def test_target_root_can_reference_a_sibling_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            projectRoot = workspace / "Server"
+            clientRoot = workspace / "Client"
+            projectRoot.mkdir()
+            clientRoot.mkdir()
+            with patch.object(PacketGenerator, "PROJECT_ROOT", projectRoot):
+                output = PacketGenerator.ResolveOutput("../Client", "Generated/Protocol.h")
+            self.assertEqual(output, clientRoot / "Generated" / "Protocol.h")
+
     def test_explicit_packet_id_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             schema = Path(directory) / "PacketDefine.yml"

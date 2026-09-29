@@ -13,6 +13,7 @@ TCP 패킷을 클라이언트까지 연결하는 방법을 설명한다.
 | `TownInstance` | 플레이어·마을 공유 상태와 authoritative 처리 | 콘텐츠 진입점에 적합 |
 | 별도 도메인 클래스 | 거래, 파티 등 독립 규칙과 상태 | 복잡한 콘텐츠에 권장 |
 | `TownMap` | 불변 맵 데이터와 이동 판정 | 맵 관련 규칙만 |
+| `DungeonCatalog` | 던전 그룹과 클라이언트 표시용 메타데이터 | 던전 목록만 |
 | `Protocol` | 바이트 직렬화·역직렬화 | 콘텐츠 규칙 금지 |
 
 `PlayerSession`이 `Player`를 상속하지 않는 현재 has-a 구조를 유지한다. 네트워크 연결의
@@ -118,6 +119,15 @@ packet body = [uint16 packetType, big-endian][payload]
 | 4 | `PlayerAppear` | Server → Client |
 | 5 | `PlayerMove` | Server → Client |
 | 6 | `PlayerDisappear` | Server → Client |
+| 7 | `ConfirmDungeonJoin` | Client → Server |
+| 8 | `EnterDungeonRequest` | Client → Server |
+| 9 | `EnterDungeonResponse` | Server → Client |
+| 10 | `MapChanged` | Server → Client |
+| 11 | `DungeonSelectionOpen` | Server → Client |
+
+`TownMap*.json` 버전 3은 `entryPoints`와 `transitionZones`를 포함한다. `MapTransfer`는
+대상 `mapId`/`entryPointId`로 이동하고, `DungeonSelection`은 `DungeonCatalog.json`의
+`groupId`를 열어 준다. 영역 진입 판정과 맵 이동은 `TownInstance` strand에서 직렬화한다.
 
 패킷 body 상한은 1MiB다. 서버 송신 대기열 상한은 4MiB이며, 상한을 초과하는 세션은
 정상적인 서비스가 불가능한 상태로 취급한다.
@@ -279,6 +289,10 @@ S2C 결과는 다음 세 곳에 등록한다.
 - `Protocol.h/.cpp`: 서버 패킷 정의와 직렬화
 - `PlayerSession.h/.cpp`: C2S 검증과 라우팅
 - `TownInstance.h/.cpp`: authoritative 콘텐츠 처리와 공유 상태
+- `TownMap.h/.cpp`: 맵 데이터, 이동 판정, 진입 영역 검색
+- `DungeonCatalog.h/.cpp`: 던전 그룹과 선택창 메타데이터
+- `Data/TownMap*.json`: 맵·도착 지점·전환 영역
+- `Data/DungeonCatalog.json`: 던전 그룹과 표시 정보
 - `Player.h/.cpp`: 네트워크 비종속 플레이어 상태
 - `TcpSession.h/.cpp`: TCP framing과 비동기 송수신
 - `NetworkConstants.h`: body 및 송신 큐 상한

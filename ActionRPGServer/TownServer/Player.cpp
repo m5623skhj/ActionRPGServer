@@ -84,6 +84,8 @@ namespace TownServer::Domain
 
     void Player::StopMovement() noexcept
     {
+        directionX = 0;
+        directionY = 0;
         velocity = {};
     }
 }

@@ -39,6 +39,9 @@
     <ClCompile Include="TownMap.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="DungeonCatalog.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetworkConstants.h">
@@ -65,9 +68,15 @@
     <ClInclude Include="TownMap.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="DungeonCatalog.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\TownMap.json">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="Data\DungeonCatalog.json">
       <Filter>리소스 파일</Filter>
     </None>
     <None Include="DEVELOPMENT.md">

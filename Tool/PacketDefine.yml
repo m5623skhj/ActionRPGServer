@@ -3,8 +3,13 @@ Protocol:
   PacketIdEnum: PacketType
   RegisterFunction: RegisterPackets
   Targets:
-    - Header: ActionRPGServer/GameRoomServer/DungeonProtocol.h
+    - Root: .
+      Header: ActionRPGServer/GameRoomServer/DungeonProtocol.h
       Source: ActionRPGServer/GameRoomServer/DungeonProtocol.cpp
+      PrerequisiteHeader: RudpPrerequisites.h
+    - Root: ../ActionRPGClient
+      Header: ActionRPGClient/ActionRPGClient/Network/DungeonProtocol.h
+      Source: ActionRPGClient/ActionRPGClient/Network/DungeonProtocol.cpp
       PrerequisiteHeader: RudpPrerequisites.h
 
 Packet:

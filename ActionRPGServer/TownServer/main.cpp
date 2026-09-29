@@ -1,6 +1,7 @@
 #include "NetworkConstants.h"
 #include "RoomControlTcpServer.h"
 #include "TownClientTcpServer.h"
+#include "DungeonCatalog.h"
 #include "TownInstance.h"
 #include "TownMap.h"
 
@@ -8,6 +9,7 @@
 #include <Windows.h>
 
 #include <array>
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <exception>
@@ -35,6 +37,41 @@ namespace
     {
         const auto [end, error] = std::from_chars(inText.data(), inText.data() + inText.size(), outValue);
         return error == std::errc{} && end == inText.data() + inText.size();
+    }
+
+    std::vector<TownServer::Domain::TownMap> LoadTownMaps(const std::filesystem::path& inDataDirectory)
+    {
+        std::vector<std::filesystem::path> mapPaths;
+        const std::filesystem::path defaultMapPath = inDataDirectory / "TownMap.json";
+        if (std::filesystem::is_regular_file(defaultMapPath))
+        {
+            mapPaths.push_back(defaultMapPath);
+        }
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(inDataDirectory))
+        {
+            const std::filesystem::path& path = entry.path();
+            if (!entry.is_regular_file() || path == defaultMapPath || path.extension() != ".json")
+            {
+                continue;
+            }
+            const std::string stem = path.stem().string();
+            if (stem.starts_with("TownMap"))
+            {
+                mapPaths.push_back(path);
+            }
+        }
+        if (mapPaths.size() > 1)
+        {
+            std::sort(mapPaths.begin() + 1, mapPaths.end());
+        }
+
+        std::vector<TownServer::Domain::TownMap> maps;
+        maps.reserve(mapPaths.size());
+        for (const std::filesystem::path& path : mapPaths)
+        {
+            maps.push_back(TownServer::Domain::TownMap::Load(path));
+        }
+        return maps;
     }
 }
 
@@ -71,10 +108,13 @@ int main(const int inArgumentCount, char* inArguments[])
     try
     {
         asio::io_context ioContext;
-        TownServer::Domain::TownMap townMap = TownServer::Domain::TownMap::Load(
-            GetExecutableDirectory() / "Data" / "TownMap.json");
+        const std::filesystem::path dataDirectory = GetExecutableDirectory() / "Data";
+        std::vector<TownServer::Domain::TownMap> townMaps = LoadTownMaps(dataDirectory);
+        TownServer::Domain::DungeonCatalog dungeonCatalog = TownServer::Domain::DungeonCatalog::Load(
+            dataDirectory / "DungeonCatalog.json");
         std::shared_ptr<TownServer::Domain::TownInstance> townInstance =
-            std::make_shared<TownServer::Domain::TownInstance>(ioContext, std::move(townMap));
+            std::make_shared<TownServer::Domain::TownInstance>(
+                ioContext, std::move(townMaps), std::move(dungeonCatalog));
         std::shared_ptr<RoomControlTcpServer> roomControlServer = std::make_shared<RoomControlTcpServer>(
             ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), roomControlPort), townInstance);
         TownClientTcpServer server(

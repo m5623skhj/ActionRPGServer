@@ -9,6 +9,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace
@@ -20,6 +21,9 @@ namespace
     constexpr std::size_t MAX_POLYGON_COUNT = 256;
     constexpr std::size_t MAX_VERTICES_PER_POLYGON = 2048;
     constexpr std::size_t MAX_TOTAL_VERTEX_COUNT = 32768;
+    constexpr std::size_t MAX_ENTRY_POINT_COUNT = 256;
+    constexpr std::size_t MAX_TRANSITION_ZONE_COUNT = 256;
+    constexpr std::size_t MAX_IDENTIFIER_LENGTH = 64;
     constexpr std::size_t PLAYER_FOOTPRINT_SAMPLE_COUNT = 16;
 
     void ValidateFinite(const float inValue, const char* inField)
@@ -158,7 +162,8 @@ namespace TownServer::Domain
 
         nlohmann::json document;
         stream >> document;
-        if (document.at("version").get<int>() != 2)
+        const int version = document.at("version").get<int>();
+        if (version != 2 && version != 3)
         {
             throw std::runtime_error("Unsupported town map version.");
         }
@@ -193,7 +198,8 @@ namespace TownServer::Domain
         {
             ValidateFinite(value, "map scalar");
         }
-        if (info.mapId.empty() || info.worldRight <= info.worldLeft || info.worldBottom <= info.worldTop
+        if (info.mapId.empty() || info.mapId.size() > MAX_IDENTIFIER_LENGTH
+            || info.worldRight <= info.worldLeft || info.worldBottom <= info.worldTop
             || info.sectorWidth <= 0.0f || info.sectorHeight <= 0.0f
             || info.walkSpeed <= 0.0f || info.runSpeed < info.walkSpeed)
         {
@@ -227,6 +233,83 @@ namespace TownServer::Domain
 
         info.walkablePolygons = ReadPolygons(document, "walkablePolygons");
         info.blockedPolygons = ReadPolygons(document, "blockedPolygons");
+        if (version >= 3)
+        {
+            const nlohmann::json& entryPoints = document.at("entryPoints");
+            const nlohmann::json& transitionZones = document.at("transitionZones");
+            if (!entryPoints.is_array() || entryPoints.size() > MAX_ENTRY_POINT_COUNT
+                || !transitionZones.is_array() || transitionZones.size() > MAX_TRANSITION_ZONE_COUNT)
+            {
+                throw std::runtime_error("Invalid map transition collection.");
+            }
+
+            std::unordered_set<std::string> entryPointIds;
+            for (const nlohmann::json& inputEntryPoint : entryPoints)
+            {
+                TownProtocol::EntryPoint entryPoint{
+                    inputEntryPoint.at("id").get<std::string>(),
+                    ReadPoint(inputEntryPoint.at("position"))
+                };
+                if (entryPoint.id.empty() || entryPoint.id.size() > MAX_IDENTIFIER_LENGTH
+                    || !entryPointIds.insert(entryPoint.id).second)
+                {
+                    throw std::runtime_error("Invalid or duplicate entry point id.");
+                }
+                info.entryPoints.push_back(std::move(entryPoint));
+            }
+
+            std::unordered_set<std::string> transitionZoneIds;
+            for (const nlohmann::json& inputZone : transitionZones)
+            {
+                TownProtocol::TransitionZone zone;
+                zone.id = inputZone.at("id").get<std::string>();
+                const nlohmann::json& inputPolygon = inputZone.at("polygon");
+                if (!inputPolygon.is_array() || inputPolygon.size() < 3
+                    || inputPolygon.size() > MAX_VERTICES_PER_POLYGON)
+                {
+                    throw std::runtime_error("Invalid transition zone polygon.");
+                }
+                zone.polygon.reserve(inputPolygon.size());
+                for (const nlohmann::json& point : inputPolygon)
+                {
+                    zone.polygon.push_back(ReadPoint(point));
+                }
+                const nlohmann::json& action = inputZone.at("action");
+                const std::string type = action.at("type").get<std::string>();
+                if (type == "MapTransfer")
+                {
+                    zone.actionType = TownProtocol::TransitionActionType::MapTransfer;
+                    zone.targetMapId = action.at("targetMapId").get<std::string>();
+                    zone.targetEntryPointId = action.at("targetEntryPointId").get<std::string>();
+                    if (zone.targetMapId.empty() || zone.targetMapId.size() > MAX_IDENTIFIER_LENGTH
+                        || zone.targetEntryPointId.empty()
+                        || zone.targetEntryPointId.size() > MAX_IDENTIFIER_LENGTH)
+                    {
+                        throw std::runtime_error("Map transfer requires a target map and entry point.");
+                    }
+                }
+                else if (type == "DungeonSelection")
+                {
+                    zone.actionType = TownProtocol::TransitionActionType::DungeonSelection;
+                    zone.dungeonGroupId = action.at("dungeonGroupId").get<std::string>();
+                    if (zone.dungeonGroupId.empty()
+                        || zone.dungeonGroupId.size() > MAX_IDENTIFIER_LENGTH)
+                    {
+                        throw std::runtime_error("Dungeon transition requires a dungeon group.");
+                    }
+                }
+                else
+                {
+                    throw std::runtime_error("Unknown transition action type.");
+                }
+                if (zone.id.empty() || zone.id.size() > MAX_IDENTIFIER_LENGTH
+                    || !transitionZoneIds.insert(zone.id).second)
+                {
+                    throw std::runtime_error("Invalid or duplicate transition zone id.");
+                }
+                info.transitionZones.push_back(std::move(zone));
+            }
+        }
         if (info.walkablePolygons.empty())
         {
             throw std::runtime_error("Town map requires at least one walkable polygon.");
@@ -234,6 +317,8 @@ namespace TownServer::Domain
         std::size_t totalVertexCount{};
         for (const auto* polygons : { &info.walkablePolygons, &info.blockedPolygons })
             for (const TownProtocol::Polygon& polygon : *polygons) totalVertexCount += polygon.size();
+        for (const TownProtocol::TransitionZone& zone : info.transitionZones)
+            totalVertexCount += zone.polygon.size();
         if (totalVertexCount > MAX_TOTAL_VERTEX_COUNT)
         {
             throw std::runtime_error("Town map contains too many polygon vertices.");
@@ -257,6 +342,24 @@ namespace TownServer::Domain
         if (!result.IsPositionValid({ result.info.spawnX, result.info.spawnY }))
         {
             throw std::runtime_error("Town spawn is not valid for the player footprint.");
+        }
+        for (const TownProtocol::EntryPoint& entryPoint : result.info.entryPoints)
+        {
+            if (!result.IsPositionValid(entryPoint.position))
+            {
+                throw std::runtime_error("Map entry point is not valid for the player footprint.");
+            }
+        }
+        for (const TownProtocol::TransitionZone& zone : result.info.transitionZones)
+        {
+            for (const TownProtocol::Vector2 point : zone.polygon)
+            {
+                if (point.x < result.info.worldLeft || point.x > result.info.worldRight
+                    || point.y < result.info.worldTop || point.y > result.info.worldBottom)
+                {
+                    throw std::runtime_error("Transition zone lies outside the world bounds.");
+                }
+            }
         }
         return result;
     }
@@ -342,6 +445,29 @@ namespace TownServer::Domain
             return low;
         }
         return lastValid;
+    }
+
+    const TownProtocol::TransitionZone* TownMap::FindTransitionZone(
+        const TownProtocol::Vector2 inPosition) const noexcept
+    {
+        for (const TownProtocol::TransitionZone& zone : info.transitionZones)
+        {
+            if (IsPointInPolygon(inPosition, zone.polygon))
+            {
+                return &zone;
+            }
+        }
+        return nullptr;
+    }
+
+    const TownProtocol::EntryPoint* TownMap::FindEntryPoint(const std::string_view inId) const noexcept
+    {
+        const auto iterator = std::ranges::find_if(info.entryPoints,
+            [inId](const TownProtocol::EntryPoint& inEntryPoint)
+            {
+                return inEntryPoint.id == inId;
+            });
+        return iterator == info.entryPoints.end() ? nullptr : &*iterator;
     }
 
     const TownProtocol::MapInfo& TownMap::GetInfo() const noexcept

@@ -150,6 +150,7 @@
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
     <ClCompile Include="..\Shared\TcpAcceptServer.cpp" />
     <ClCompile Include="..\Shared\TcpSession.cpp" />
+    <ClCompile Include="DungeonCatalog.cpp" />
     <ClCompile Include="Player.cpp" />
     <ClCompile Include="PlayerSession.cpp" />
     <ClCompile Include="Protocol.cpp" />
@@ -164,6 +165,7 @@
     <ClInclude Include="..\Shared\RoomControlProtocol.h" />
     <ClInclude Include="..\Shared\TcpAcceptServer.h" />
     <ClInclude Include="..\Shared\TcpSession.h" />
+    <ClInclude Include="DungeonCatalog.h" />
     <ClInclude Include="Player.h" />
     <ClInclude Include="PlayerSession.h" />
     <ClInclude Include="Protocol.h" />
@@ -173,6 +175,7 @@
     <ClInclude Include="TownMap.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Data\DungeonCatalog.json" />
     <None Include="Data\TownMap.json" />
     <None Include="DEVELOPMENT.md" />
   </ItemGroup>

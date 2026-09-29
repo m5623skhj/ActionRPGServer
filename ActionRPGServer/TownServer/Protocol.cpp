@@ -203,6 +203,23 @@ namespace
         };
         writePolygons(inMap.walkablePolygons);
         writePolygons(inMap.blockedPolygons);
+        inWriter.WriteUInt16(static_cast<std::uint16_t>(inMap.entryPoints.size()));
+        for (const TownProtocol::EntryPoint& entryPoint : inMap.entryPoints)
+        {
+            inWriter.WriteString(entryPoint.id);
+            inWriter.WriteFloat(entryPoint.position.x);
+            inWriter.WriteFloat(entryPoint.position.y);
+        }
+        inWriter.WriteUInt16(static_cast<std::uint16_t>(inMap.transitionZones.size()));
+        for (const TownProtocol::TransitionZone& zone : inMap.transitionZones)
+        {
+            inWriter.WriteString(zone.id);
+            inWriter.WriteUInt8(static_cast<std::uint8_t>(zone.actionType));
+            inWriter.WriteString(zone.targetMapId);
+            inWriter.WriteString(zone.targetEntryPointId);
+            inWriter.WriteString(zone.dungeonGroupId);
+            writePolygons({ zone.polygon });
+        }
         inWriter.WriteFloat(inMap.spawnX);
         inWriter.WriteFloat(inMap.spawnY);
         inWriter.WriteFloat(inMap.sectorWidth);
@@ -216,6 +233,8 @@ namespace
         constexpr std::uint16_t MAX_IMAGES = 2048;
         constexpr std::uint16_t MAX_POLYGONS = 256;
         constexpr std::uint16_t MAX_VERTICES = 2048;
+        constexpr std::uint16_t MAX_ENTRY_POINTS = 256;
+        constexpr std::uint16_t MAX_TRANSITION_ZONES = 256;
         constexpr std::size_t MAX_TOTAL_VERTICES = 32768;
         if (!inReader.ReadString(outMap.mapId)
             || !inReader.ReadFloat(outMap.worldLeft)
@@ -275,9 +294,50 @@ namespace
             return true;
         };
 
-        return readPolygons(outMap.walkablePolygons)
-            && readPolygons(outMap.blockedPolygons)
-            && inReader.ReadFloat(outMap.spawnX)
+        if (!readPolygons(outMap.walkablePolygons) || !readPolygons(outMap.blockedPolygons))
+        {
+            return false;
+        }
+        std::uint16_t entryPointCount{};
+        if (!inReader.ReadUInt16(entryPointCount) || entryPointCount > MAX_ENTRY_POINTS)
+        {
+            return false;
+        }
+        outMap.entryPoints.resize(entryPointCount);
+        for (TownProtocol::EntryPoint& entryPoint : outMap.entryPoints)
+        {
+            if (!inReader.ReadString(entryPoint.id) || entryPoint.id.empty() || entryPoint.id.size() > 64
+                || !inReader.ReadFloat(entryPoint.position.x)
+                || !inReader.ReadFloat(entryPoint.position.y))
+            {
+                return false;
+            }
+        }
+        std::uint16_t transitionZoneCount{};
+        if (!inReader.ReadUInt16(transitionZoneCount) || transitionZoneCount > MAX_TRANSITION_ZONES)
+        {
+            return false;
+        }
+        outMap.transitionZones.resize(transitionZoneCount);
+        for (TownProtocol::TransitionZone& zone : outMap.transitionZones)
+        {
+            std::uint8_t actionType{};
+            std::vector<TownProtocol::Polygon> polygons;
+            if (!inReader.ReadString(zone.id) || zone.id.empty() || zone.id.size() > 64
+                || !inReader.ReadUInt8(actionType)
+                || actionType < static_cast<std::uint8_t>(TownProtocol::TransitionActionType::MapTransfer)
+                || actionType > static_cast<std::uint8_t>(TownProtocol::TransitionActionType::DungeonSelection)
+                || !inReader.ReadString(zone.targetMapId)
+                || !inReader.ReadString(zone.targetEntryPointId)
+                || !inReader.ReadString(zone.dungeonGroupId)
+                || !readPolygons(polygons) || polygons.size() != 1)
+            {
+                return false;
+            }
+            zone.actionType = static_cast<TownProtocol::TransitionActionType>(actionType);
+            zone.polygon = std::move(polygons.front());
+        }
+        return inReader.ReadFloat(outMap.spawnX)
             && inReader.ReadFloat(outMap.spawnY)
             && inReader.ReadFloat(outMap.sectorWidth)
             && inReader.ReadFloat(outMap.sectorHeight)
@@ -373,6 +433,7 @@ namespace TownProtocol
     std::vector<std::uint8_t> Encode(const EnterDungeonRequest& inPacket)
     {
         PacketWriter writer(PacketType::EnterDungeonRequest);
+        writer.WriteString(inPacket.zoneId);
         writer.WriteUInt32(inPacket.dungeonId);
         return writer.Finish();
     }
@@ -385,6 +446,31 @@ namespace TownProtocol
         writer.WriteUInt64(inPacket.combatSeed);
         writer.WriteString(inPacket.sessionBrokerAddress);
         writer.WriteUInt16(inPacket.sessionBrokerPort);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const MapChanged& inPacket)
+    {
+        PacketWriter writer(PacketType::MapChanged);
+        WriteMapInfo(writer, inPacket.map);
+        writer.WriteFloat(inPacket.position.x);
+        writer.WriteFloat(inPacket.position.y);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const DungeonSelectionOpen& inPacket)
+    {
+        PacketWriter writer(PacketType::DungeonSelectionOpen);
+        writer.WriteString(inPacket.zoneId);
+        writer.WriteString(inPacket.dungeonGroupId);
+        writer.WriteUInt16(static_cast<std::uint16_t>(inPacket.dungeons.size()));
+        for (const DungeonOption& dungeon : inPacket.dungeons)
+        {
+            writer.WriteUInt32(dungeon.dungeonId);
+            writer.WriteString(dungeon.name);
+            writer.WriteString(dungeon.levelRange);
+            writer.WriteString(dungeon.description);
+        }
         return writer.Finish();
     }
 
@@ -505,8 +591,9 @@ namespace TownProtocol
         PacketReader reader(inPacket);
         EnterDungeonRequest packet;
         if (!ReadExpectedType(reader, PacketType::EnterDungeonRequest)
+            || !reader.ReadString(packet.zoneId)
             || !reader.ReadUInt32(packet.dungeonId)
-            || packet.dungeonId == 0
+            || packet.zoneId.empty() || packet.zoneId.size() > 64 || packet.dungeonId == 0
             || !reader.Finished())
         {
             return std::nullopt;
@@ -538,5 +625,49 @@ namespace TownProtocol
             return std::nullopt;
         }
         return packet;
+    }
+
+    std::optional<MapChanged> DecodeMapChanged(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        MapChanged packet;
+        if (!ReadExpectedType(reader, PacketType::MapChanged)
+            || !ReadMapInfo(reader, packet.map)
+            || !reader.ReadFloat(packet.position.x)
+            || !reader.ReadFloat(packet.position.y)
+            || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<DungeonSelectionOpen> DecodeDungeonSelectionOpen(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        constexpr std::uint16_t MAX_DUNGEONS = 64;
+        PacketReader reader(inPacket);
+        DungeonSelectionOpen packet;
+        std::uint16_t dungeonCount{};
+        if (!ReadExpectedType(reader, PacketType::DungeonSelectionOpen)
+            || !reader.ReadString(packet.zoneId) || packet.zoneId.empty() || packet.zoneId.size() > 64
+            || !reader.ReadString(packet.dungeonGroupId) || packet.dungeonGroupId.empty()
+            || packet.dungeonGroupId.size() > 64
+            || !reader.ReadUInt16(dungeonCount) || dungeonCount == 0 || dungeonCount > MAX_DUNGEONS)
+        {
+            return std::nullopt;
+        }
+        packet.dungeons.resize(dungeonCount);
+        for (DungeonOption& dungeon : packet.dungeons)
+        {
+            if (!reader.ReadUInt32(dungeon.dungeonId) || dungeon.dungeonId == 0
+                || !reader.ReadString(dungeon.name) || dungeon.name.empty() || dungeon.name.size() > 96
+                || !reader.ReadString(dungeon.levelRange) || dungeon.levelRange.size() > 48
+                || !reader.ReadString(dungeon.description) || dungeon.description.size() > 256)
+            {
+                return std::nullopt;
+            }
+        }
+        return reader.Finished() ? std::optional<DungeonSelectionOpen>(std::move(packet)) : std::nullopt;
     }
 }

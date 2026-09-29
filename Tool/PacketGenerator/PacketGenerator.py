@@ -69,10 +69,14 @@ def LoadDefinition(inSchemaPath: Path) -> tuple[dict, list[dict]]:
         header = target.get("Header")
         source = target.get("Source")
         prerequisite = target.get("PrerequisiteHeader")
+        root = target.get("Root", ".")
         if not all(isinstance(value, str) and value for value in (header, source, prerequisite)):
             raise ValueError("Each target requires Header, Source, and PrerequisiteHeader")
+        if not isinstance(root, str) or not root:
+            raise ValueError("Each target Root must be a nonempty path")
         normalizedTargets.append(
             {
+                "Root": root,
                 "Header": header,
                 "Source": source,
                 "PrerequisiteHeader": prerequisite,
@@ -180,20 +184,20 @@ def RenderSource(inProtocol: dict, inPackets: list[dict], inHeaderName: str) -> 
     return "\n".join(lines)
 
 
-def ResolveOutput(inRelativePath: str) -> Path:
-    projectRoot = Path(os.path.abspath(PROJECT_ROOT))
-    output = Path(os.path.abspath(projectRoot / inRelativePath))
-    commonPath = os.path.commonpath((projectRoot, output))
-    if os.path.normcase(commonPath) != os.path.normcase(str(projectRoot)):
-        raise ValueError(f"Output path escapes the project: {inRelativePath}")
+def ResolveOutput(inRootPath: str, inRelativePath: str) -> Path:
+    targetRoot = Path(os.path.abspath(PROJECT_ROOT / inRootPath))
+    output = Path(os.path.abspath(targetRoot / inRelativePath))
+    commonPath = os.path.commonpath((targetRoot, output))
+    if os.path.normcase(commonPath) != os.path.normcase(str(targetRoot)):
+        raise ValueError(f"Output path escapes its target root: {inRelativePath}")
     return output
 
 
 def BuildOutputs(inProtocol: dict, inPackets: list[dict]) -> dict[Path, str]:
     outputs = {}
     for target in inProtocol["Targets"]:
-        headerPath = ResolveOutput(target["Header"])
-        sourcePath = ResolveOutput(target["Source"])
+        headerPath = ResolveOutput(target["Root"], target["Header"])
+        sourcePath = ResolveOutput(target["Root"], target["Source"])
         outputs[headerPath] = RenderHeader(inProtocol, inPackets, target["PrerequisiteHeader"])
         outputs[sourcePath] = RenderSource(inProtocol, inPackets, headerPath.name)
     return outputs
@@ -207,7 +211,7 @@ def WriteOutputs(inOutputs: dict[Path, str], inCheck: bool) -> bool:
     }
     if inCheck:
         for path in changed:
-            print(f"Out of date: {path.relative_to(PROJECT_ROOT).as_posix()}")
+            print(f"Out of date: {path}")
         return not changed
 
     temporaryFiles = {}
