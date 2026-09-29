@@ -74,6 +74,35 @@ namespace TownProtocol
         std::string description;
     };
 
+    enum class PartyOperationType : std::uint8_t
+    {
+        Invite = 1,
+        AnswerInvitation = 2,
+        Leave = 3,
+        Kick = 4
+    };
+
+    enum class PartyResultCode : std::uint8_t
+    {
+        Succeeded = 0,
+        PlayerNotFound = 1,
+        AlreadyInParty = 2,
+        NotInParty = 3,
+        NotLeader = 4,
+        PartyFull = 5,
+        AlreadyInvited = 6,
+        InvitationNotFound = 7,
+        InvalidTarget = 8,
+        Busy = 9
+    };
+
+    struct PartyMemberInfo
+    {
+        std::uint64_t playerId{};
+        std::string playerName;
+        std::uint8_t slot{};
+    };
+
 }
 
 #include "TownPacket.generated.h"
@@ -93,6 +122,13 @@ namespace TownProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterDungeonResponse& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const MapChanged& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const DungeonSelectionOpen& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyInviteRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyInviteAnswer& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyLeaveRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyKickRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyInvitation& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartySnapshot& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyOperationResult& inPacket);
 
     [[nodiscard]] std::optional<EnterTownRequest> DecodeEnterTownRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<EnterTownResponse> DecodeEnterTownResponse(const std::vector<std::uint8_t>& inPacket);
@@ -105,4 +141,11 @@ namespace TownProtocol
     [[nodiscard]] std::optional<EnterDungeonResponse> DecodeEnterDungeonResponse(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<MapChanged> DecodeMapChanged(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<DungeonSelectionOpen> DecodeDungeonSelectionOpen(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyInviteRequest> DecodePartyInviteRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyInviteAnswer> DecodePartyInviteAnswer(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyLeaveRequest> DecodePartyLeaveRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyKickRequest> DecodePartyKickRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyInvitation> DecodePartyInvitation(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartySnapshot> DecodePartySnapshot(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyOperationResult> DecodePartyOperationResult(const std::vector<std::uint8_t>& inPacket);
 }

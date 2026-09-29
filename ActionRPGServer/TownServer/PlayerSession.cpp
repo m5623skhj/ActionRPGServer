@@ -131,35 +131,81 @@ namespace TownServer::Network
                 return;
             }
             const std::weak_ptr<PlayerSession> weakSelf = weak_from_this();
+            const std::weak_ptr<Domain::TownInstance> weakTown = town;
             town->ValidateDungeonRequest(GetSessionId(), request->zoneId, request->dungeonId,
-                [weakSelf, roomControl, authenticatedPlayerId,
-                    dungeonId = request->dungeonId](const bool inValid)
+                [weakSelf, weakTown, roomControl,
+                    dungeonId = request->dungeonId](const bool inValid,
+                        std::vector<Domain::PlayerId> inParticipantPlayerIds)
                 {
-                    const std::shared_ptr<PlayerSession> self = weakSelf.lock();
-                    if (!self)
-                    {
-                        return;
-                    }
                     if (!inValid)
                     {
-                        self->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{}));
+                        if (const std::shared_ptr<PlayerSession> self = weakSelf.lock())
+                        {
+                            self->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{}));
+                        }
                         return;
                     }
-                    roomControl->CreateRoom(dungeonId, { authenticatedPlayerId },
-                        [weakSelf](ActionRPG::RoomControlProtocol::CreateRoomResult inResult)
+                    std::vector<Domain::PlayerId> responseParticipantPlayerIds =
+                        inParticipantPlayerIds;
+                    roomControl->CreateRoom(dungeonId, std::move(inParticipantPlayerIds),
+                        [weakTown, participantPlayerIds = std::move(responseParticipantPlayerIds)](
+                            ActionRPG::RoomControlProtocol::CreateRoomResult inResult) mutable
                         {
-                            if (const std::shared_ptr<PlayerSession> activeSelf = weakSelf.lock())
+                            if (const std::shared_ptr<Domain::TownInstance> activeTown = weakTown.lock())
                             {
-                                activeSelf->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{
-                                    inResult.succeeded,
-                                    inResult.roomId,
-                                    inResult.combatSeed,
-                                    std::move(inResult.sessionBrokerAddress),
-                                    inResult.sessionBrokerPort
-                                }));
+                                activeTown->CompleteDungeonRequest(
+                                    std::move(participantPlayerIds), std::move(inResult));
                             }
                         });
                 });
+            return;
+        }
+        case TownProtocol::PacketType::PartyInviteRequest:
+        {
+            const std::optional<TownProtocol::PartyInviteRequest> request =
+                TownProtocol::DecodePartyInviteRequest(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->InviteToParty(GetSessionId(), request->targetPlayerId);
+            return;
+        }
+        case TownProtocol::PacketType::PartyInviteAnswer:
+        {
+            const std::optional<TownProtocol::PartyInviteAnswer> request =
+                TownProtocol::DecodePartyInviteAnswer(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->AnswerPartyInvitation(
+                GetSessionId(), request->invitationId, request->accepted);
+            return;
+        }
+        case TownProtocol::PacketType::PartyLeaveRequest:
+        {
+            if (!TownProtocol::DecodePartyLeaveRequest(inPacket).has_value()
+                || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->LeaveParty(GetSessionId());
+            return;
+        }
+        case TownProtocol::PacketType::PartyKickRequest:
+        {
+            const std::optional<TownProtocol::PartyKickRequest> request =
+                TownProtocol::DecodePartyKickRequest(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->KickPartyMember(GetSessionId(), request->targetPlayerId);
             return;
         }
         default:

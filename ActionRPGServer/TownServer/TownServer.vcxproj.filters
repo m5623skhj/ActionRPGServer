@@ -42,6 +42,9 @@
     <ClCompile Include="DungeonCatalog.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="PartyManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetworkConstants.h">
@@ -69,6 +72,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="DungeonCatalog.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="PartyManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

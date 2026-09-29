@@ -20,6 +20,13 @@ namespace TownProtocol
         EnterDungeonResponse = 9,
         MapChanged = 10,
         DungeonSelectionOpen = 11,
+        PartyInviteRequest = 12,
+        PartyInviteAnswer = 13,
+        PartyLeaveRequest = 14,
+        PartyKickRequest = 15,
+        PartyInvitation = 16,
+        PartySnapshot = 17,
+        PartyOperationResult = 18,
     };
 
     struct EnterTownRequest
@@ -98,6 +105,46 @@ namespace TownProtocol
         std::string zoneId{};
         std::string dungeonGroupId{};
         std::vector<DungeonOption> dungeons{};
+    };
+
+    struct PartyInviteRequest
+    {
+        std::uint64_t targetPlayerId{};
+    };
+
+    struct PartyInviteAnswer
+    {
+        std::uint64_t invitationId{};
+        bool accepted{};
+    };
+
+    struct PartyLeaveRequest
+    {
+    };
+
+    struct PartyKickRequest
+    {
+        std::uint64_t targetPlayerId{};
+    };
+
+    struct PartyInvitation
+    {
+        std::uint64_t invitationId{};
+        std::uint64_t inviterPlayerId{};
+        std::string inviterName{};
+    };
+
+    struct PartySnapshot
+    {
+        std::uint64_t partyId{};
+        std::uint64_t leaderPlayerId{};
+        std::vector<PartyMemberInfo> members{};
+    };
+
+    struct PartyOperationResult
+    {
+        PartyOperationType operation{};
+        PartyResultCode result{};
     };
 
 }

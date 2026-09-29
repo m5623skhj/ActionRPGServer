@@ -151,6 +151,7 @@
     <ClCompile Include="..\Shared\TcpAcceptServer.cpp" />
     <ClCompile Include="..\Shared\TcpSession.cpp" />
     <ClCompile Include="DungeonCatalog.cpp" />
+    <ClCompile Include="PartyManager.cpp" />
     <ClCompile Include="Player.cpp" />
     <ClCompile Include="PlayerSession.cpp" />
     <ClCompile Include="Protocol.cpp" />
@@ -166,6 +167,7 @@
     <ClInclude Include="..\Shared\TcpAcceptServer.h" />
     <ClInclude Include="..\Shared\TcpSession.h" />
     <ClInclude Include="DungeonCatalog.h" />
+    <ClInclude Include="PartyManager.h" />
     <ClInclude Include="Player.h" />
     <ClInclude Include="PlayerSession.h" />
     <ClInclude Include="Protocol.h" />

@@ -12,6 +12,9 @@ ExternalTypes:
   - MapInfo
   - Vector2
   - DungeonOption
+  - PartyMemberInfo
+  - PartyOperationType
+  - PartyResultCode
 
 Packet:
   - Type: RequestPacket
@@ -125,3 +128,55 @@ Packet:
         Name: dungeonGroupId
       - Type: std::vector<DungeonOption>
         Name: dungeons
+
+  - Type: RequestPacket
+    PacketName: PartyInviteRequest
+    Items:
+      - Type: std::uint64_t
+        Name: targetPlayerId
+
+  - Type: RequestPacket
+    PacketName: PartyInviteAnswer
+    Items:
+      - Type: std::uint64_t
+        Name: invitationId
+      - Type: bool
+        Name: accepted
+
+  - Type: RequestPacket
+    PacketName: PartyLeaveRequest
+    Items: []
+
+  - Type: RequestPacket
+    PacketName: PartyKickRequest
+    Items:
+      - Type: std::uint64_t
+        Name: targetPlayerId
+
+  - Type: ReplyPacket
+    PacketName: PartyInvitation
+    Items:
+      - Type: std::uint64_t
+        Name: invitationId
+      - Type: std::uint64_t
+        Name: inviterPlayerId
+      - Type: std::string
+        Name: inviterName
+
+  - Type: ReplyPacket
+    PacketName: PartySnapshot
+    Items:
+      - Type: std::uint64_t
+        Name: partyId
+      - Type: std::uint64_t
+        Name: leaderPlayerId
+      - Type: std::vector<PartyMemberInfo>
+        Name: members
+
+  - Type: ReplyPacket
+    PacketName: PartyOperationResult
+    Items:
+      - Type: PartyOperationType
+        Name: operation
+      - Type: PartyResultCode
+        Name: result

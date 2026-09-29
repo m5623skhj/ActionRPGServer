@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Player.h"
+#include "PartyManager.h"
 #include "../Shared/RoomControlProtocol.h"
 #include "DungeonCatalog.h"
 #include "TownMap.h"
@@ -26,7 +27,7 @@ namespace TownServer::Domain
     class TownInstance final : public std::enable_shared_from_this<TownInstance>
     {
     public:
-        using DungeonRequestHandler = std::function<void(bool)>;
+        using DungeonRequestHandler = std::function<void(bool, std::vector<PlayerId>)>;
 
         TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
             DungeonCatalog inDungeonCatalog);
@@ -39,6 +40,13 @@ namespace TownServer::Domain
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
         void ValidateDungeonRequest(std::uint64_t inSessionId, std::string inZoneId,
             std::uint32_t inDungeonId, DungeonRequestHandler inHandler);
+        void CompleteDungeonRequest(std::vector<PlayerId> inParticipantPlayerIds,
+            ActionRPG::RoomControlProtocol::CreateRoomResult inResult);
+        void InviteToParty(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
+        void AnswerPartyInvitation(std::uint64_t inSessionId, std::uint64_t inInvitationId,
+            bool inAccepted);
+        void LeaveParty(std::uint64_t inSessionId);
+        void KickPartyMember(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
         void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void LeaveDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded);
@@ -86,6 +94,11 @@ namespace TownServer::Domain
         void RemoveFromSector(PlayerId inPlayerId, SectorCoordinate inSector);
         void SendAppear(PlayerEntry& inReceiver, const PlayerEntry& inSubject);
         void SendDisappear(PlayerEntry& inReceiver, PlayerId inSubjectId);
+        void SendPartyResult(PlayerId inPlayerId, TownProtocol::PartyOperationType inOperation,
+            TownProtocol::PartyResultCode inResult);
+        void SendEmptyPartySnapshot(PlayerId inPlayerId);
+        void BroadcastPartySnapshot(PartyManager::PartyId inPartyId);
+        [[nodiscard]] bool IsPartyBusy(PartyManager::PartyId inPartyId) const;
         [[nodiscard]] SectorCoordinate GetSector(std::string_view inMapId,
             TownProtocol::Vector2 inPosition) const;
         [[nodiscard]] std::unordered_set<PlayerId> FindVisiblePlayers(PlayerId inPlayerId) const;
@@ -98,6 +111,8 @@ namespace TownServer::Domain
         std::unordered_map<PlayerId, PlayerEntry> players;
         std::unordered_map<std::uint64_t, PlayerId> sessionToPlayer;
         std::unordered_map<SectorCoordinate, std::unordered_set<PlayerId>, SectorHash> sectors;
+        PartyManager partyManager;
+        std::unordered_set<PlayerId> pendingDungeonPlayers;
         PlayerId nextPlayerId = 1;
         std::uint32_t serverTick = 0;
         bool running = false;
