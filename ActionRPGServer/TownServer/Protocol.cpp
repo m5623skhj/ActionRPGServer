@@ -526,6 +526,8 @@ namespace TownProtocol
             writer.WriteString(member.playerName);
             writer.WriteUInt8(member.slot);
         }
+        writer.WriteString(inPacket.title);
+        writer.WriteUInt8(inPacket.isPublic ? 1 : 0);
         return writer.Finish();
     }
 
@@ -534,6 +536,65 @@ namespace TownProtocol
         PacketWriter writer(PacketType::PartyOperationResult);
         writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.operation));
         writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.result));
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartySettingsRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::PartySettingsRequest);
+        writer.WriteString(inPacket.title);
+        writer.WriteUInt8(inPacket.isPublic ? 1 : 0);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDirectoryPageRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyDirectoryPageRequest);
+        writer.WriteUInt32(inPacket.page);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDirectoryUnsubscribe&)
+    {
+        return PacketWriter(PacketType::PartyDirectoryUnsubscribe).Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDirectoryPage& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyDirectoryPage);
+        writer.WriteUInt32(inPacket.page);
+        writer.WriteUInt32(inPacket.totalPages);
+        writer.WriteUInt32(inPacket.totalCount);
+        writer.WriteUInt64(inPacket.revision);
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.parties.size()));
+        for (const PartyDirectoryEntry& party : inPacket.parties)
+        {
+            writer.WriteUInt64(party.partyId);
+            writer.WriteString(party.title);
+            writer.WriteString(party.leaderName);
+            writer.WriteUInt8(static_cast<std::uint8_t>(party.members.size()));
+            for (const PartyMemberInfo& member : party.members)
+            {
+                writer.WriteUInt64(member.playerId);
+                writer.WriteString(member.playerName);
+                writer.WriteUInt8(member.slot);
+            }
+        }
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDirectoryChanged& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyDirectoryChanged);
+        writer.WriteUInt64(inPacket.revision);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyCreateRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyCreateRequest);
+        writer.WriteString(inPacket.title);
+        writer.WriteUInt8(inPacket.isPublic ? 1 : 0);
         return writer.Finish();
     }
 
@@ -814,6 +875,7 @@ namespace TownProtocol
         PacketReader reader(inPacket);
         PartySnapshot packet;
         std::uint8_t memberCount{};
+        std::uint8_t isPublic{};
         if (!ReadExpectedType(reader, PacketType::PartySnapshot)
             || !reader.ReadUInt64(packet.partyId)
             || !reader.ReadUInt64(packet.leaderPlayerId)
@@ -845,6 +907,14 @@ namespace TownProtocol
             }
             leaderFound = leaderFound || member.playerId == packet.leaderPlayerId;
         }
+        if (!reader.ReadString(packet.title) || packet.title.size() > 96
+            || !reader.ReadUInt8(isPublic) || isPublic > 1
+            || (packet.partyId == 0 && (!packet.title.empty() || isPublic != 0))
+            || (packet.partyId != 0 && packet.title.empty()))
+        {
+            return std::nullopt;
+        }
+        packet.isPublic = isPublic != 0;
         return leaderFound && reader.Finished()
             ? std::optional<PartySnapshot>(std::move(packet)) : std::nullopt;
     }
@@ -859,15 +929,130 @@ namespace TownProtocol
         if (!ReadExpectedType(reader, PacketType::PartyOperationResult)
             || !reader.ReadUInt8(operation)
             || operation < static_cast<std::uint8_t>(PartyOperationType::Invite)
-            || operation > static_cast<std::uint8_t>(PartyOperationType::Kick)
+            || operation > static_cast<std::uint8_t>(PartyOperationType::Create)
             || !reader.ReadUInt8(result)
-            || result > static_cast<std::uint8_t>(PartyResultCode::Busy)
+            || result > static_cast<std::uint8_t>(PartyResultCode::InvalidTitle)
             || !reader.Finished())
         {
             return std::nullopt;
         }
         packet.operation = static_cast<PartyOperationType>(operation);
         packet.result = static_cast<PartyResultCode>(result);
+        return packet;
+    }
+
+    std::optional<PartySettingsRequest> DecodePartySettingsRequest(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartySettingsRequest packet;
+        std::uint8_t isPublic{};
+        if (!ReadExpectedType(reader, PacketType::PartySettingsRequest)
+            || !reader.ReadString(packet.title) || packet.title.empty() || packet.title.size() > 96
+            || !reader.ReadUInt8(isPublic) || isPublic > 1 || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        packet.isPublic = isPublic != 0;
+        return packet;
+    }
+
+    std::optional<PartyDirectoryPageRequest> DecodePartyDirectoryPageRequest(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyDirectoryPageRequest packet;
+        if (!ReadExpectedType(reader, PacketType::PartyDirectoryPageRequest)
+            || !reader.ReadUInt32(packet.page) || packet.page == 0 || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<PartyDirectoryUnsubscribe> DecodePartyDirectoryUnsubscribe(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        if (!ReadExpectedType(reader, PacketType::PartyDirectoryUnsubscribe) || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return PartyDirectoryUnsubscribe{};
+    }
+
+    std::optional<PartyDirectoryPage> DecodePartyDirectoryPage(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyDirectoryPage packet;
+        std::uint8_t partyCount{};
+        if (!ReadExpectedType(reader, PacketType::PartyDirectoryPage)
+            || !reader.ReadUInt32(packet.page) || packet.page == 0
+            || !reader.ReadUInt32(packet.totalPages) || packet.totalPages == 0
+            || packet.page > packet.totalPages
+            || !reader.ReadUInt32(packet.totalCount)
+            || !reader.ReadUInt64(packet.revision)
+            || !reader.ReadUInt8(partyCount) || partyCount > 8)
+        {
+            return std::nullopt;
+        }
+        packet.parties.resize(partyCount);
+        for (PartyDirectoryEntry& party : packet.parties)
+        {
+            std::uint8_t memberCount{};
+            if (!reader.ReadUInt64(party.partyId) || party.partyId == 0
+                || !reader.ReadString(party.title) || party.title.empty() || party.title.size() > 96
+                || !reader.ReadString(party.leaderName) || party.leaderName.empty()
+                || party.leaderName.size() > 32
+                || !reader.ReadUInt8(memberCount) || memberCount == 0 || memberCount > 8)
+            {
+                return std::nullopt;
+            }
+            party.members.resize(memberCount);
+            std::unordered_set<std::uint8_t> slots;
+            for (PartyMemberInfo& member : party.members)
+            {
+                if (!reader.ReadUInt64(member.playerId) || member.playerId == 0
+                    || !reader.ReadString(member.playerName) || member.playerName.empty()
+                    || member.playerName.size() > 32
+                    || !reader.ReadUInt8(member.slot) || member.slot >= 8
+                    || !slots.emplace(member.slot).second)
+                {
+                    return std::nullopt;
+                }
+            }
+        }
+        return reader.Finished() ? std::optional<PartyDirectoryPage>(std::move(packet)) : std::nullopt;
+    }
+
+    std::optional<PartyDirectoryChanged> DecodePartyDirectoryChanged(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyDirectoryChanged packet;
+        if (!ReadExpectedType(reader, PacketType::PartyDirectoryChanged)
+            || !reader.ReadUInt64(packet.revision) || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        return packet;
+    }
+
+    std::optional<PartyCreateRequest> DecodePartyCreateRequest(
+        const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyCreateRequest packet;
+        std::uint8_t isPublic{};
+        if (!ReadExpectedType(reader, PacketType::PartyCreateRequest)
+            || !reader.ReadString(packet.title) || packet.title.size() > 96
+            || !reader.ReadUInt8(isPublic) || isPublic > 1
+            || !reader.Finished())
+        {
+            return std::nullopt;
+        }
+        packet.isPublic = isPublic != 0;
         return packet;
     }
 }

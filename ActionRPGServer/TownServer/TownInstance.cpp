@@ -36,6 +36,8 @@ namespace
             return TownProtocol::PartyResultCode::InvitationNotFound;
         case ManagerResult::InvalidTarget:
             return TownProtocol::PartyResultCode::InvalidTarget;
+        case ManagerResult::InvalidTitle:
+            return TownProtocol::PartyResultCode::InvalidTitle;
         }
         return TownProtocol::PartyResultCode::InvalidTarget;
     }
@@ -236,6 +238,41 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::CreateParty(const std::uint64_t inSessionId,
+        std::string inTitle, const bool inIsPublic)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, title = std::move(inTitle), inIsPublic]() mutable
+        {
+            const auto sessionIterator = self->sessionToPlayer.find(inSessionId);
+            if (sessionIterator == self->sessionToPlayer.end())
+            {
+                return;
+            }
+            const PlayerId playerId = sessionIterator->second;
+            if (self->pendingDungeonPlayers.contains(playerId)
+                || self->players.at(playerId).dungeonRoomId != 0)
+            {
+                self->SendPartyResult(playerId, TownProtocol::PartyOperationType::Create,
+                    TownProtocol::PartyResultCode::Busy);
+                return;
+            }
+            PartyManager::PartyId partyId{};
+            const PartyManager::Result result = self->partyManager.Create(
+                playerId, std::move(title), inIsPublic, partyId);
+            self->SendPartyResult(playerId, TownProtocol::PartyOperationType::Create,
+                ToProtocolResult(result));
+            if (result == PartyManager::Result::Succeeded)
+            {
+                self->BroadcastPartySnapshot(partyId);
+                if (inIsPublic)
+                {
+                    self->NotifyPartyDirectoryChanged();
+                }
+            }
+        });
+    }
+
     void TownInstance::InviteToParty(const std::uint64_t inSessionId,
         const PlayerId inTargetPlayerId)
     {
@@ -321,6 +358,11 @@ namespace TownServer::Domain
             if (result == PartyManager::Result::Succeeded && inAccepted)
             {
                 self->BroadcastPartySnapshot(partyId);
+                if (const auto party = self->partyManager.GetParty(partyId);
+                    party.has_value() && party->isPublic)
+                {
+                    self->NotifyPartyDirectoryChanged();
+                }
             }
         });
     }
@@ -357,6 +399,10 @@ namespace TownServer::Domain
             {
                 self->BroadcastPartySnapshot(result.partyId);
             }
+            if (party.has_value() && party->isPublic)
+            {
+                self->NotifyPartyDirectoryChanged();
+            }
         });
     }
 
@@ -392,6 +438,84 @@ namespace TownServer::Domain
             }
             self->SendEmptyPartySnapshot(inTargetPlayerId);
             self->BroadcastPartySnapshot(partyId);
+            if (party.has_value() && party->isPublic)
+            {
+                self->NotifyPartyDirectoryChanged();
+            }
+        });
+    }
+
+    void TownInstance::UpdatePartySettings(const std::uint64_t inSessionId,
+        std::string inTitle, const bool inIsPublic)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, title = std::move(inTitle), inIsPublic]() mutable
+        {
+            const auto sessionIterator = self->sessionToPlayer.find(inSessionId);
+            if (sessionIterator == self->sessionToPlayer.end())
+            {
+                return;
+            }
+            const PlayerId playerId = sessionIterator->second;
+            const auto before = self->partyManager.GetPartyForPlayer(playerId);
+            if (before.has_value() && self->IsPartyBusy(before->partyId))
+            {
+                self->SendPartyResult(playerId, TownProtocol::PartyOperationType::Settings,
+                    TownProtocol::PartyResultCode::Busy);
+                return;
+            }
+            const PartyManager::Result result = self->partyManager.SetSettings(
+                playerId, std::move(title), inIsPublic);
+            self->SendPartyResult(playerId, TownProtocol::PartyOperationType::Settings,
+                ToProtocolResult(result));
+            if (result != PartyManager::Result::Succeeded)
+            {
+                return;
+            }
+            const auto after = self->partyManager.GetPartyForPlayer(playerId);
+            self->BroadcastPartySnapshot(after->partyId);
+            if ((before.has_value() && before->isPublic) || after->isPublic)
+            {
+                if (!before.has_value() || before->title != after->title
+                    || before->isPublic != after->isPublic)
+                {
+                    self->NotifyPartyDirectoryChanged();
+                }
+            }
+        });
+    }
+
+    void TownInstance::RequestPartyDirectoryPage(const std::uint64_t inSessionId,
+        const std::uint32_t inPage)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, inPage]()
+        {
+            const auto sessionIterator = self->sessionToPlayer.find(inSessionId);
+            if (sessionIterator == self->sessionToPlayer.end())
+            {
+                return;
+            }
+            const PlayerId playerId = sessionIterator->second;
+            if (self->players.at(playerId).dungeonRoomId != 0)
+            {
+                return;
+            }
+            self->partyDirectorySubscribers.insert(playerId);
+            self->SendPartyDirectoryPage(playerId, inPage);
+        });
+    }
+
+    void TownInstance::UnsubscribePartyDirectory(const std::uint64_t inSessionId)
+    {
+        const std::shared_ptr<TownInstance> self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId]()
+        {
+            const auto sessionIterator = self->sessionToPlayer.find(inSessionId);
+            if (sessionIterator != self->sessionToPlayer.end())
+            {
+                self->partyDirectorySubscribers.erase(sessionIterator->second);
+            }
         });
     }
 
@@ -408,6 +532,7 @@ namespace TownServer::Domain
                 return;
             }
             self->HideFromTown(inPlayerId, iterator->second);
+            self->partyDirectorySubscribers.erase(inPlayerId);
             iterator->second.dungeonRoomId = inRoomId;
             iterator->second.player.StopMovement();
         });
@@ -571,6 +696,7 @@ namespace TownServer::Domain
         }
 
         const PlayerId playerId = sessionIterator->second;
+        partyDirectorySubscribers.erase(playerId);
         auto playerIterator = players.find(playerId);
         if (playerIterator == players.end())
         {
@@ -579,10 +705,16 @@ namespace TownServer::Domain
         }
 
         pendingDungeonPlayers.erase(playerId);
+        const auto currentParty = partyManager.GetPartyForPlayer(playerId);
         const PartyManager::LeaveResult partyResult = partyManager.RemovePlayer(playerId);
         if (partyResult.result == PartyManager::Result::Succeeded && !partyResult.disbanded)
         {
             BroadcastPartySnapshot(partyResult.partyId);
+        }
+        if (partyResult.result == PartyManager::Result::Succeeded
+            && currentParty.has_value() && currentParty->isPublic)
+        {
+            NotifyPartyDirectoryChanged();
         }
 
         if (playerIterator->second.dungeonRoomId == 0)
@@ -836,6 +968,8 @@ namespace TownServer::Domain
         TownProtocol::PartySnapshot snapshot;
         snapshot.partyId = party->partyId;
         snapshot.leaderPlayerId = party->leaderPlayerId;
+        snapshot.title = party->title;
+        snapshot.isPublic = party->isPublic;
         snapshot.members.reserve(party->members.size());
         for (const PartyManager::MemberSlot& member : party->members)
         {
@@ -858,6 +992,68 @@ namespace TownServer::Domain
             if (playerIterator != players.end())
             {
                 playerIterator->second.session->Send(encoded);
+            }
+        }
+    }
+
+    void TownInstance::SendPartyDirectoryPage(const PlayerId inPlayerId,
+        const std::uint32_t inPage)
+    {
+        constexpr std::uint32_t PAGE_SIZE = 8;
+        const auto playerIterator = players.find(inPlayerId);
+        if (playerIterator == players.end())
+        {
+            return;
+        }
+        const std::vector<PartyManager::PartyView> publicParties = partyManager.GetPublicParties();
+        const std::uint32_t totalCount = static_cast<std::uint32_t>(publicParties.size());
+        const std::uint32_t totalPages = std::max(1U,
+            (totalCount + PAGE_SIZE - 1) / PAGE_SIZE);
+        const std::uint32_t page = std::clamp(inPage, 1U, totalPages);
+        TownProtocol::PartyDirectoryPage response;
+        response.page = page;
+        response.totalPages = totalPages;
+        response.totalCount = totalCount;
+        response.revision = partyDirectoryRevision;
+        const std::size_t first = static_cast<std::size_t>(page - 1) * PAGE_SIZE;
+        const std::size_t last = std::min(first + PAGE_SIZE, publicParties.size());
+        for (std::size_t index = first; index < last; ++index)
+        {
+            const PartyManager::PartyView& party = publicParties[index];
+            const auto leaderIterator = players.find(party.leaderPlayerId);
+            if (leaderIterator == players.end())
+            {
+                continue;
+            }
+            TownProtocol::PartyDirectoryEntry entry;
+            entry.partyId = party.partyId;
+            entry.title = party.title;
+            entry.leaderName = leaderIterator->second.player.GetName();
+            for (const PartyManager::MemberSlot& member : party.members)
+            {
+                const auto memberIterator = players.find(member.playerId);
+                if (memberIterator != players.end())
+                {
+                    entry.members.push_back(TownProtocol::PartyMemberInfo{
+                        member.playerId, memberIterator->second.player.GetName(), member.slot
+                    });
+                }
+            }
+            response.parties.push_back(std::move(entry));
+        }
+        playerIterator->second.session->Send(TownProtocol::Encode(response));
+    }
+
+    void TownInstance::NotifyPartyDirectoryChanged()
+    {
+        const std::vector<std::uint8_t> packet = TownProtocol::Encode(
+            TownProtocol::PartyDirectoryChanged{ ++partyDirectoryRevision });
+        for (const PlayerId playerId : partyDirectorySubscribers)
+        {
+            const auto iterator = players.find(playerId);
+            if (iterator != players.end())
+            {
+                iterator->second.session->Send(packet);
             }
         }
     }

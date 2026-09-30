@@ -27,6 +27,12 @@ namespace TownProtocol
         PartyInvitation = 16,
         PartySnapshot = 17,
         PartyOperationResult = 18,
+        PartySettingsRequest = 19,
+        PartyDirectoryPageRequest = 20,
+        PartyDirectoryUnsubscribe = 21,
+        PartyDirectoryPage = 22,
+        PartyDirectoryChanged = 23,
+        PartyCreateRequest = 24,
     };
 
     struct EnterTownRequest
@@ -139,12 +145,49 @@ namespace TownProtocol
         std::uint64_t partyId{};
         std::uint64_t leaderPlayerId{};
         std::vector<PartyMemberInfo> members{};
+        std::string title{};
+        bool isPublic{};
     };
 
     struct PartyOperationResult
     {
         PartyOperationType operation{};
         PartyResultCode result{};
+    };
+
+    struct PartySettingsRequest
+    {
+        std::string title{};
+        bool isPublic{};
+    };
+
+    struct PartyDirectoryPageRequest
+    {
+        std::uint32_t page{};
+    };
+
+    struct PartyDirectoryUnsubscribe
+    {
+    };
+
+    struct PartyDirectoryPage
+    {
+        std::uint32_t page{};
+        std::uint32_t totalPages{};
+        std::uint32_t totalCount{};
+        std::uint64_t revision{};
+        std::vector<PartyDirectoryEntry> parties{};
+    };
+
+    struct PartyDirectoryChanged
+    {
+        std::uint64_t revision{};
+    };
+
+    struct PartyCreateRequest
+    {
+        std::string title{};
+        bool isPublic{};
     };
 
 }

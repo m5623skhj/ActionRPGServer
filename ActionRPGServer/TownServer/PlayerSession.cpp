@@ -208,6 +208,50 @@ namespace TownServer::Network
             town->KickPartyMember(GetSessionId(), request->targetPlayerId);
             return;
         }
+        case TownProtocol::PacketType::PartySettingsRequest:
+        {
+            const auto request = TownProtocol::DecodePartySettingsRequest(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->UpdatePartySettings(GetSessionId(), request->title, request->isPublic);
+            return;
+        }
+        case TownProtocol::PacketType::PartyCreateRequest:
+        {
+            const auto request = TownProtocol::DecodePartyCreateRequest(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->CreateParty(GetSessionId(), request->title, request->isPublic);
+            return;
+        }
+        case TownProtocol::PacketType::PartyDirectoryPageRequest:
+        {
+            const auto request = TownProtocol::DecodePartyDirectoryPageRequest(inPacket);
+            if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->RequestPartyDirectoryPage(GetSessionId(), request->page);
+            return;
+        }
+        case TownProtocol::PacketType::PartyDirectoryUnsubscribe:
+        {
+            if (!TownProtocol::DecodePartyDirectoryUnsubscribe(inPacket).has_value()
+                || !enterRequested || GetPlayerId() == 0)
+            {
+                tcpSession->Stop();
+                return;
+            }
+            town->UnsubscribePartyDirectory(GetSessionId());
+            return;
+        }
         default:
             tcpSession->Stop();
             return;

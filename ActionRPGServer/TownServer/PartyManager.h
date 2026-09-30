@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -28,7 +29,8 @@ namespace TownServer::Domain
             PartyFull,
             AlreadyInvited,
             InvitationNotFound,
-            InvalidTarget
+            InvalidTarget,
+            InvalidTitle
         };
 
         struct MemberSlot
@@ -41,6 +43,8 @@ namespace TownServer::Domain
         {
             PartyId partyId{};
             PlayerId leaderPlayerId{};
+            std::string title;
+            bool isPublic{};
             std::vector<MemberSlot> members;
         };
 
@@ -61,24 +65,31 @@ namespace TownServer::Domain
 
         [[nodiscard]] Result Invite(PlayerId inInviterPlayerId, PlayerId inTargetPlayerId,
             Invitation& outInvitation);
+        [[nodiscard]] Result Create(PlayerId inPlayerId, std::string inTitle,
+            bool inIsPublic, PartyId& outPartyId);
         [[nodiscard]] Result AnswerInvitation(PlayerId inTargetPlayerId,
             InvitationId inInvitationId, bool inAccepted, PartyId& outPartyId);
         [[nodiscard]] LeaveResult Leave(PlayerId inPlayerId);
         [[nodiscard]] Result Kick(PlayerId inLeaderPlayerId, PlayerId inTargetPlayerId,
             PartyId& outPartyId);
         [[nodiscard]] LeaveResult RemovePlayer(PlayerId inPlayerId);
+        [[nodiscard]] Result SetSettings(PlayerId inLeaderPlayerId, std::string inTitle,
+            bool inIsPublic);
 
         [[nodiscard]] std::optional<PartyView> GetPartyForPlayer(PlayerId inPlayerId) const;
         [[nodiscard]] std::optional<PartyView> GetParty(PartyId inPartyId) const;
         [[nodiscard]] std::optional<Invitation> GetInvitation(PlayerId inTargetPlayerId,
             InvitationId inInvitationId) const;
         [[nodiscard]] bool IsLeader(PlayerId inPlayerId) const;
+        [[nodiscard]] std::vector<PartyView> GetPublicParties() const;
 
     private:
         struct Party
         {
             PartyId partyId{};
             PlayerId leaderPlayerId{};
+            std::string title;
+            bool isPublic{};
             std::array<std::optional<PlayerId>, MAX_PARTY_MEMBERS> slots;
         };
 

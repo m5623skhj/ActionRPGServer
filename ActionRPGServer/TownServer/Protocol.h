@@ -79,7 +79,9 @@ namespace TownProtocol
         Invite = 1,
         AnswerInvitation = 2,
         Leave = 3,
-        Kick = 4
+        Kick = 4,
+        Settings = 5,
+        Create = 6
     };
 
     enum class PartyResultCode : std::uint8_t
@@ -93,7 +95,8 @@ namespace TownProtocol
         AlreadyInvited = 6,
         InvitationNotFound = 7,
         InvalidTarget = 8,
-        Busy = 9
+        Busy = 9,
+        InvalidTitle = 10
     };
 
     struct PartyMemberInfo
@@ -101,6 +104,14 @@ namespace TownProtocol
         std::uint64_t playerId{};
         std::string playerName;
         std::uint8_t slot{};
+    };
+
+    struct PartyDirectoryEntry
+    {
+        std::uint64_t partyId{};
+        std::string title;
+        std::string leaderName;
+        std::vector<PartyMemberInfo> members;
     };
 
 }
@@ -129,6 +140,12 @@ namespace TownProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyInvitation& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PartySnapshot& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyOperationResult& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartySettingsRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDirectoryPageRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDirectoryUnsubscribe& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDirectoryPage& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDirectoryChanged& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyCreateRequest& inPacket);
 
     [[nodiscard]] std::optional<EnterTownRequest> DecodeEnterTownRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<EnterTownResponse> DecodeEnterTownResponse(const std::vector<std::uint8_t>& inPacket);
@@ -148,4 +165,10 @@ namespace TownProtocol
     [[nodiscard]] std::optional<PartyInvitation> DecodePartyInvitation(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<PartySnapshot> DecodePartySnapshot(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<PartyOperationResult> DecodePartyOperationResult(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartySettingsRequest> DecodePartySettingsRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyDirectoryPageRequest> DecodePartyDirectoryPageRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyDirectoryUnsubscribe> DecodePartyDirectoryUnsubscribe(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyDirectoryPage> DecodePartyDirectoryPage(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyDirectoryChanged> DecodePartyDirectoryChanged(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyCreateRequest> DecodePartyCreateRequest(const std::vector<std::uint8_t>& inPacket);
 }

@@ -43,10 +43,14 @@ namespace TownServer::Domain
         void CompleteDungeonRequest(std::vector<PlayerId> inParticipantPlayerIds,
             ActionRPG::RoomControlProtocol::CreateRoomResult inResult);
         void InviteToParty(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
+        void CreateParty(std::uint64_t inSessionId, std::string inTitle, bool inIsPublic);
         void AnswerPartyInvitation(std::uint64_t inSessionId, std::uint64_t inInvitationId,
             bool inAccepted);
         void LeaveParty(std::uint64_t inSessionId);
         void KickPartyMember(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
+        void UpdatePartySettings(std::uint64_t inSessionId, std::string inTitle, bool inIsPublic);
+        void RequestPartyDirectoryPage(std::uint64_t inSessionId, std::uint32_t inPage);
+        void UnsubscribePartyDirectory(std::uint64_t inSessionId);
         void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void LeaveDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded);
@@ -98,6 +102,8 @@ namespace TownServer::Domain
             TownProtocol::PartyResultCode inResult);
         void SendEmptyPartySnapshot(PlayerId inPlayerId);
         void BroadcastPartySnapshot(PartyManager::PartyId inPartyId);
+        void SendPartyDirectoryPage(PlayerId inPlayerId, std::uint32_t inPage);
+        void NotifyPartyDirectoryChanged();
         [[nodiscard]] bool IsPartyBusy(PartyManager::PartyId inPartyId) const;
         [[nodiscard]] SectorCoordinate GetSector(std::string_view inMapId,
             TownProtocol::Vector2 inPosition) const;
@@ -113,6 +119,8 @@ namespace TownServer::Domain
         std::unordered_map<SectorCoordinate, std::unordered_set<PlayerId>, SectorHash> sectors;
         PartyManager partyManager;
         std::unordered_set<PlayerId> pendingDungeonPlayers;
+        std::unordered_set<PlayerId> partyDirectorySubscribers;
+        std::uint64_t partyDirectoryRevision{};
         PlayerId nextPlayerId = 1;
         std::uint32_t serverTick = 0;
         bool running = false;

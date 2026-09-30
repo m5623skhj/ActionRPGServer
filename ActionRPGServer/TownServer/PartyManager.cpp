@@ -1,9 +1,85 @@
 #include "PartyManager.h"
 
 #include <algorithm>
+#include <string_view>
+
+namespace
+{
+    bool IsValidPartyTitle(const std::string_view inTitle)
+    {
+        if (inTitle.empty() || inTitle.size() > 96)
+        {
+            return false;
+        }
+        bool hasVisibleCharacter = false;
+        for (std::size_t index = 0; index < inTitle.size();)
+        {
+            const auto first = static_cast<unsigned char>(inTitle[index]);
+            if (first < 0x80)
+            {
+                if (first < 0x20 || first == 0x7F)
+                {
+                    return false;
+                }
+                hasVisibleCharacter = hasVisibleCharacter || first != ' ';
+                ++index;
+                continue;
+            }
+            const std::size_t length = first >= 0xC2 && first <= 0xDF ? 2
+                : first >= 0xE0 && first <= 0xEF ? 3
+                : first >= 0xF0 && first <= 0xF4 ? 4 : 0;
+            if (length == 0 || index + length > inTitle.size())
+            {
+                return false;
+            }
+            const auto second = static_cast<unsigned char>(inTitle[index + 1]);
+            if (second < 0x80 || second > 0xBF
+                || (first == 0xE0 && second < 0xA0)
+                || (first == 0xED && second > 0x9F)
+                || (first == 0xF0 && second < 0x90)
+                || (first == 0xF4 && second > 0x8F))
+            {
+                return false;
+            }
+            for (std::size_t offset = 2; offset < length; ++offset)
+            {
+                const auto continuation = static_cast<unsigned char>(inTitle[index + offset]);
+                if (continuation < 0x80 || continuation > 0xBF)
+                {
+                    return false;
+                }
+            }
+            hasVisibleCharacter = true;
+            index += length;
+        }
+        return hasVisibleCharacter;
+    }
+}
 
 namespace TownServer::Domain
 {
+    PartyManager::Result PartyManager::Create(const PlayerId inPlayerId,
+        std::string inTitle, const bool inIsPublic, PartyId& outPartyId)
+    {
+        if (inPlayerId == 0)
+        {
+            return Result::InvalidTarget;
+        }
+        if (playerParties.contains(inPlayerId))
+        {
+            return Result::AlreadyInParty;
+        }
+        if (!IsValidPartyTitle(inTitle))
+        {
+            return Result::InvalidTitle;
+        }
+        Party& party = CreateParty(inPlayerId);
+        party.title = std::move(inTitle);
+        party.isPublic = inIsPublic;
+        outPartyId = party.partyId;
+        return Result::Succeeded;
+    }
+
     PartyManager::Result PartyManager::Invite(const PlayerId inInviterPlayerId,
         const PlayerId inTargetPlayerId, Invitation& outInvitation)
     {
@@ -173,6 +249,28 @@ namespace TownServer::Domain
         return Leave(inPlayerId);
     }
 
+    PartyManager::Result PartyManager::SetSettings(const PlayerId inLeaderPlayerId,
+        std::string inTitle, const bool inIsPublic)
+    {
+        const auto partyIterator = playerParties.find(inLeaderPlayerId);
+        if (partyIterator == playerParties.end())
+        {
+            return Result::NotInParty;
+        }
+        Party& party = parties.at(partyIterator->second);
+        if (party.leaderPlayerId != inLeaderPlayerId)
+        {
+            return Result::NotLeader;
+        }
+        if (!IsValidPartyTitle(inTitle))
+        {
+            return Result::InvalidTitle;
+        }
+        party.title = std::move(inTitle);
+        party.isPublic = inIsPublic;
+        return Result::Succeeded;
+    }
+
     std::optional<PartyManager::PartyView> PartyManager::GetPartyForPlayer(
         const PlayerId inPlayerId) const
     {
@@ -205,12 +303,27 @@ namespace TownServer::Domain
         return party.has_value() && party->leaderPlayerId == inPlayerId;
     }
 
+    std::vector<PartyManager::PartyView> PartyManager::GetPublicParties() const
+    {
+        std::vector<PartyView> result;
+        for (const auto& [partyId, party] : parties)
+        {
+            if (party.isPublic)
+            {
+                result.push_back(MakeView(party));
+            }
+        }
+        std::ranges::sort(result, {}, &PartyView::partyId);
+        return result;
+    }
+
     PartyManager::Party& PartyManager::CreateParty(const PlayerId inLeaderPlayerId)
     {
         const PartyId partyId = nextPartyId++;
         Party party;
         party.partyId = partyId;
         party.leaderPlayerId = inLeaderPlayerId;
+        party.title = "Party #" + std::to_string(partyId);
         party.slots[0] = inLeaderPlayerId;
         playerParties.emplace(inLeaderPlayerId, partyId);
         return parties.emplace(partyId, std::move(party)).first->second;
@@ -230,7 +343,8 @@ namespace TownServer::Domain
 
     PartyManager::PartyView PartyManager::MakeView(const Party& inParty) const
     {
-        PartyView view{ inParty.partyId, inParty.leaderPlayerId, {} };
+        PartyView view{ inParty.partyId, inParty.leaderPlayerId,
+            inParty.title, inParty.isPublic, {} };
         view.members.reserve(MAX_PARTY_MEMBERS);
         for (std::size_t index = 0; index < inParty.slots.size(); ++index)
         {

@@ -15,6 +15,7 @@ ExternalTypes:
   - PartyMemberInfo
   - PartyOperationType
   - PartyResultCode
+  - PartyDirectoryEntry
 
 Packet:
   - Type: RequestPacket
@@ -172,6 +173,10 @@ Packet:
         Name: leaderPlayerId
       - Type: std::vector<PartyMemberInfo>
         Name: members
+      - Type: std::string
+        Name: title
+      - Type: bool
+        Name: isPublic
 
   - Type: ReplyPacket
     PacketName: PartyOperationResult
@@ -180,3 +185,49 @@ Packet:
         Name: operation
       - Type: PartyResultCode
         Name: result
+
+  - Type: RequestPacket
+    PacketName: PartySettingsRequest
+    Items:
+      - Type: std::string
+        Name: title
+      - Type: bool
+        Name: isPublic
+
+  - Type: RequestPacket
+    PacketName: PartyDirectoryPageRequest
+    Items:
+      - Type: std::uint32_t
+        Name: page
+
+  - Type: RequestPacket
+    PacketName: PartyDirectoryUnsubscribe
+    Items: []
+
+  - Type: ReplyPacket
+    PacketName: PartyDirectoryPage
+    Items:
+      - Type: std::uint32_t
+        Name: page
+      - Type: std::uint32_t
+        Name: totalPages
+      - Type: std::uint32_t
+        Name: totalCount
+      - Type: std::uint64_t
+        Name: revision
+      - Type: std::vector<PartyDirectoryEntry>
+        Name: parties
+
+  - Type: ReplyPacket
+    PacketName: PartyDirectoryChanged
+    Items:
+      - Type: std::uint64_t
+        Name: revision
+
+  - Type: RequestPacket
+    PacketName: PartyCreateRequest
+    Items:
+      - Type: std::string
+        Name: title
+      - Type: bool
+        Name: isPublic
