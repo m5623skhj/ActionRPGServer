@@ -14,6 +14,10 @@ namespace ActionRPG::DungeonProtocol
         INVALID_PACKET_ID = 0,
         DUNGEON_CHALLENGE,
         DUNGEON_AUTH_RESULT,
+        DUNGEON_WORLD_REQUEST,
+        DUNGEON_WORLD_CHUNK,
+        DUNGEON_MOVE_INPUT,
+        DUNGEON_PLAYER_STATE,
     };
 
     class DungeonChallenge final : public IPacket
@@ -34,6 +38,54 @@ namespace ActionRPG::DungeonProtocol
         void PacketToBuffer(NetBuffer& outBuffer) override;
 
         std::uint8_t succeeded{};
+    };
+
+    class DungeonWorldRequest final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t offset{};
+    };
+
+    class DungeonWorldChunk final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t totalBytes{};
+        std::uint32_t offset{};
+        std::string payload{};
+    };
+
+    class DungeonMoveInput final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t sequence{};
+        std::int8_t directionX{};
+        std::int8_t directionY{};
+        std::uint8_t running{};
+    };
+
+    class DungeonPlayerState final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t sequence{};
+        std::string mapId{};
+        float x{};
+        float y{};
     };
 
     void RegisterPackets();

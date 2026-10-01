@@ -78,6 +78,15 @@ GameRoomServer는 다음 기능을 포함합니다.
 - RUDP 연결 직후 challenge 발급 및 TownServer TCP 세션을 통한 유저 확인
 - GameRoomServer ID가 포함된 전역 고유 룸 ID와 공유 전투 시드
 - 클리어 순간 남아 있는 유저를 기준으로 한 보상 대상 전달
+- 던전 편집기에서 출력한 방·지형·게이트·몬스터 배치 로딩
+- 던전별 몬스터 instance ID 생성 및 인증된 클라이언트에 월드 데이터 분할 전달
+- 서버 플레이어 이동과 워프 판정, 방별 몬스터 표시를 위한 상태 전달
+
+던전 편집기의 서버 던전 Data ID는 TownServer의 `Data/DungeonCatalog.json` 숫자 ID와
+일치해야 합니다. ZIP은 `ActionRPGServer/GameRoomServer/Data/Dungeons/<던전폴더>/`에 풀고,
+ZIP 안 `Assets`는 클라이언트 Assets에 복사합니다. 빌드 시 서버 Data 폴더도 실행 폴더로
+복사되며, 서버 재시작 후 적용됩니다. 아직 설치하지 않은 던전의 입장은 실패합니다.
+자세한 형식과 설치 경로는 [던전 데이터 안내](ActionRPGServer/GameRoomServer/Data/Dungeons/README.md)를 참고하세요.
 
 RUDP 서버를 시작하려면 `MY/DevServerCert` 개발 인증서가 로컬 인증서 저장소에 설치되어 있어야 합니다. 빌드 시 기본 옵션 파일이 실행 폴더의 `ServerOptionFile`로 복사됩니다.
 

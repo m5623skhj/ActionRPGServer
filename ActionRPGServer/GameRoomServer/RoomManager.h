@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Shared/RoomControlProtocol.h"
+#include "DungeonDefinition.h"
 
 #include <asio.hpp>
 
@@ -28,7 +29,8 @@ namespace GameRoomServer
         RoomManager(asio::io_context& inIoContext, Protocol::RoomServerId inRoomServerId,
             std::uint32_t inMaxRoomCount,
             std::string inSessionBrokerAddress, std::uint16_t inSessionBrokerPort,
-            std::chrono::milliseconds inEnterTimeout);
+            std::chrono::milliseconds inEnterTimeout,
+            std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> inDefinitions);
 
         void SetSendHandler(SendHandler inSendHandler);
         void CreateRoom(Protocol::CreateRoom inRequest, CreateResultHandler inResultHandler);
@@ -57,6 +59,7 @@ namespace GameRoomServer
         asio::strand<asio::io_context::executor_type> strand;
         asio::io_context& ioContext;
         std::unordered_map<Protocol::RoomId, std::shared_ptr<GameRoom>> rooms;
+        const std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> definitions;
         std::unordered_set<Protocol::RoomId> endedRooms;
         std::unordered_map<std::uint64_t, PendingSession> pendingSessions;
         std::uint32_t maxRoomCount;

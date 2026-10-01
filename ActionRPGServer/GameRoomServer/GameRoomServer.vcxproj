@@ -156,6 +156,7 @@
     <ClCompile Include="..\Shared\TcpSession.cpp" />
     <ClCompile Include="DungeonProtocol.cpp" />
     <ClCompile Include="DungeonSession.cpp" />
+    <ClCompile Include="DungeonDefinition.cpp" />
     <ClCompile Include="GameRoom.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RoomManager.cpp" />
@@ -167,6 +168,7 @@
     <ClInclude Include="..\Shared\TcpSession.h" />
     <ClInclude Include="DungeonProtocol.h" />
     <ClInclude Include="DungeonSession.h" />
+    <ClInclude Include="DungeonDefinition.h" />
     <ClInclude Include="GameRoom.h" />
     <ClInclude Include="RoomManager.h" />
     <ClInclude Include="RudpPrerequisites.h" />
@@ -182,6 +184,14 @@
     </ItemGroup>
     <Copy SourceFiles="@(GameRoomServerOptionFiles)"
           DestinationFiles="@(GameRoomServerOptionFiles-&gt;'$(OutDir)ServerOptionFile\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyDungeonDefinitions" AfterTargets="Build">
+    <ItemGroup>
+      <DungeonDataFiles Include="$(ProjectDir)Data\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DungeonDataFiles)"
+          DestinationFiles="@(DungeonDataFiles-&gt;'$(OutDir)Data\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
   </Target>
   <ItemGroup>

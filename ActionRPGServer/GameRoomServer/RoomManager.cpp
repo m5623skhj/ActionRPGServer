@@ -14,9 +14,11 @@ namespace GameRoomServer
         const std::uint32_t inMaxRoomCount,
         std::string inSessionBrokerAddress,
         const std::uint16_t inSessionBrokerPort,
-        const std::chrono::milliseconds inEnterTimeout)
+        const std::chrono::milliseconds inEnterTimeout,
+        std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> inDefinitions)
         : strand(asio::make_strand(inIoContext)),
           ioContext(inIoContext),
+          definitions(std::move(inDefinitions)),
           maxRoomCount(inMaxRoomCount),
           roomServerId(inRoomServerId),
           sessionBrokerAddress(std::move(inSessionBrokerAddress)),
@@ -47,7 +49,13 @@ namespace GameRoomServer
             {
                 Protocol::CreateRoomResult result;
                 result.requestId = request.requestId;
-                if (self->rooms.size() >= self->maxRoomCount)
+                const auto definition = self->definitions.find(request.dungeonId);
+                const std::unordered_set<Protocol::PlayerId> participantIds(
+                    request.participantPlayerIds.begin(), request.participantPlayerIds.end());
+                if (self->rooms.size() >= self->maxRoomCount || definition == self->definitions.end()
+                    || request.participantPlayerIds.empty()
+                    || participantIds.contains(0) || participantIds.size() != request.participantPlayerIds.size()
+                    || request.participantPlayerIds.size() > definition->second->maxPlayers)
                 {
                     if (resultHandler)
                     {
@@ -72,7 +80,7 @@ namespace GameRoomServer
                         {
                             manager->RemoveRoom(inRoomId, true);
                         }
-                    });
+                    }, definition->second);
                 self->rooms.emplace(roomId, room);
                 room->Start();
 
@@ -241,7 +249,7 @@ namespace GameRoomServer
                 const auto roomIterator = self->rooms.find(inRoomId);
                 if (!inRoomAccepted || roomIterator == self->rooms.end()
                     || !inSession->ConfirmAuthentication(
-                        inRoomId, inPlayerId, inChallenge, inGeneration))
+                        inRoomId, inPlayerId, inChallenge, inGeneration, roomIterator->second))
                 {
                     if (roomIterator != self->rooms.end() && inRoomAccepted)
                     {

@@ -24,3 +24,43 @@ Packet:
     Items:
       - Type: std::uint8_t
         Name: succeeded
+
+  - Type: RequestPacket
+    PacketName: DungeonWorldRequest
+    Items:
+      - Type: std::uint32_t
+        Name: offset
+
+  - Type: ReplyPacket
+    PacketName: DungeonWorldChunk
+    Items:
+      - Type: std::uint32_t
+        Name: totalBytes
+      - Type: std::uint32_t
+        Name: offset
+      - Type: std::string
+        Name: payload
+
+  - Type: RequestPacket
+    PacketName: DungeonMoveInput
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::int8_t
+        Name: directionX
+      - Type: std::int8_t
+        Name: directionY
+      - Type: std::uint8_t
+        Name: running
+
+  - Type: ReplyPacket
+    PacketName: DungeonPlayerState
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::string
+        Name: mapId
+      - Type: float
+        Name: x
+      - Type: float
+        Name: y

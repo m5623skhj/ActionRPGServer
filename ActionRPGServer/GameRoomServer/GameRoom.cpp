@@ -1,5 +1,7 @@
 #include "GameRoom.h"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace GameRoomServer
@@ -11,7 +13,8 @@ namespace GameRoomServer
         const std::uint64_t inCombatSeed,
         std::vector<PlayerId> inExpectedPlayerIds,
         const std::chrono::milliseconds inEnterTimeout,
-        EmptyHandler inEmptyHandler)
+        EmptyHandler inEmptyHandler,
+        std::shared_ptr<const DungeonDefinition> inDefinition)
         : strand(asio::make_strand(inIoContext)),
           enterTimer(strand),
           tickTimer(strand),
@@ -22,6 +25,107 @@ namespace GameRoomServer
           enterTimeout(inEnterTimeout),
           emptyHandler(std::move(inEmptyHandler))
     {
+        dungeonWorld = inDefinition->world;
+        dungeonWorld["roomId"] = roomId;
+        // IDs are scoped to this dungeon instance and stay stable when changing rooms.
+        std::uint64_t nextMonsterId = 1;
+        for (auto& map : dungeonWorld["maps"])
+            for (auto& monster : map["monsters"])
+            {
+                monster["instanceId"] = nextMonsterId++;
+                monster["hp"] = 100;
+                monster["maxHp"] = 100;
+            }
+        std::size_t slot = 0;
+        dungeonWorld["players"] = nlohmann::json::object();
+        for (const PlayerId id : inExpectedPlayerIds)
+        {
+            const auto& spawn = dungeonWorld.at("playerSpawns").at(slot++);
+            players.emplace(id, PlayerState{ dungeonWorld.at("entryMapId").get<std::string>(),
+                DungeonDefinition::Point(spawn) });
+            dungeonWorld["players"][std::to_string(id)] = spawn;
+        }
+        const auto snapshot = std::make_shared<const std::string>(dungeonWorld.dump());
+        for (const PlayerId id : inExpectedPlayerIds) initialWorlds.emplace(id, snapshot);
+    }
+
+    std::shared_ptr<const std::string> GameRoom::GetWorldFor(const PlayerId inPlayerId) const
+    {
+        const auto iterator = initialWorlds.find(inPlayerId);
+        return iterator == initialWorlds.end() ? nullptr : iterator->second;
+    }
+
+    void GameRoom::UpdateInput(const PlayerId inPlayerId,
+        ActionRPG::DungeonProtocol::DungeonMoveInput inInput,
+        std::function<void(ActionRPG::DungeonProtocol::DungeonPlayerState)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, inInput, handler = std::move(inHandler)]()
+        {
+            const auto iterator = self->players.find(inPlayerId);
+            if (iterator == self->players.end() || !self->enteredPlayers.contains(inPlayerId)
+                || self->state == State::Stopped || self->state == State::Cleared) return;
+            auto& player = iterator->second;
+            if (inInput.sequence <= player.sequence) return;
+            player.sequence = inInput.sequence;
+            player.directionX = inInput.directionX;
+            player.directionY = inInput.directionY;
+            player.running = inInput.running != 0;
+            player.lastInput = std::chrono::steady_clock::now();
+            ActionRPG::DungeonProtocol::DungeonPlayerState packet;
+            packet.sequence = player.sequence;
+            packet.mapId = player.mapId;
+            packet.x = player.position.x;
+            packet.y = player.position.y;
+            handler(std::move(packet));
+        });
+    }
+
+    // Room state is owned by its strand; small movement steps cannot tunnel through walls/gates.
+    void GameRoom::UpdatePlayers(const float inDeltaSeconds)
+    {
+        for (auto& [id, player] : players)
+        {
+            if (!enteredPlayers.contains(id)) continue;
+            const auto& map = dungeonWorld.at("maps").at(player.mapId);
+            float dx = static_cast<float>(player.directionX), dy = static_cast<float>(player.directionY);
+            if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
+            const float length = std::hypot(dx, dy);
+            const float distance = (player.running ? player.runSpeed : player.walkSpeed) * inDeltaSeconds;
+            const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
+            if (length > 0)
+            {
+                dx *= distance / length / steps; dy *= distance / length / steps;
+                for (int step = 0; step < steps; ++step)
+                {
+                    const DungeonPoint next{ player.position.x + dx, player.position.y + dy };
+                    if (DungeonDefinition::Movable(map, next)) player.position = next;
+                    else
+                    {
+                        const DungeonPoint horizontal{ player.position.x + dx, player.position.y };
+                        if (DungeonDefinition::Movable(map, horizontal)) player.position = horizontal;
+                        const DungeonPoint vertical{ player.position.x, player.position.y + dy };
+                        if (DungeonDefinition::Movable(map, vertical)) player.position = vertical;
+                    }
+                    const auto& zones = map.at("transitionZones");
+                    const auto zone = std::find_if(zones.begin(), zones.end(), [&player](const auto& value)
+                        { return DungeonDefinition::Contains(value.at("polygon"), player.position); });
+                    if (zone == zones.end()) player.warpArmed = true;
+                    else if (player.warpArmed)
+                    {
+                        const auto& action = zone->at("action");
+                        const std::string targetMapId = action.at("targetMapId");
+                        const auto& entries = dungeonWorld.at("maps").at(targetMapId).at("entryPoints");
+                        const auto entry = std::find_if(entries.begin(), entries.end(), [&action](const auto& value)
+                            { return value.at("id") == action.at("targetEntryPointId"); });
+                        player.mapId = targetMapId;
+                        player.position = DungeonDefinition::Point(entry->at("position"));
+                        player.warpArmed = false;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     void GameRoom::Start()
@@ -174,6 +278,7 @@ namespace GameRoomServer
             if (!inError && self->state == State::Running)
             {
                 ++self->serverTick;
+                self->UpdatePlayers(0.05f);
                 self->ScheduleTick();
             }
         });

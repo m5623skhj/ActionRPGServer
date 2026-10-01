@@ -35,9 +35,89 @@ namespace ActionRPG::DungeonProtocol
         outBuffer << succeeded;
     }
 
+    ::PacketId DungeonWorldRequest::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_WORLD_REQUEST);
+    }
+
+    void DungeonWorldRequest::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> offset;
+    }
+
+    void DungeonWorldRequest::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << offset;
+    }
+
+    ::PacketId DungeonWorldChunk::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_WORLD_CHUNK);
+    }
+
+    void DungeonWorldChunk::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> totalBytes;
+        inBuffer >> offset;
+        inBuffer >> payload;
+    }
+
+    void DungeonWorldChunk::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << totalBytes;
+        outBuffer << offset;
+        outBuffer << payload;
+    }
+
+    ::PacketId DungeonMoveInput::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_MOVE_INPUT);
+    }
+
+    void DungeonMoveInput::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> sequence;
+        inBuffer >> directionX;
+        inBuffer >> directionY;
+        inBuffer >> running;
+    }
+
+    void DungeonMoveInput::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << sequence;
+        outBuffer << directionX;
+        outBuffer << directionY;
+        outBuffer << running;
+    }
+
+    ::PacketId DungeonPlayerState::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_PLAYER_STATE);
+    }
+
+    void DungeonPlayerState::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> sequence;
+        inBuffer >> mapId;
+        inBuffer >> x;
+        inBuffer >> y;
+    }
+
+    void DungeonPlayerState::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << sequence;
+        outBuffer << mapId;
+        outBuffer << x;
+        outBuffer << y;
+    }
+
     void RegisterPackets()
     {
         PacketManager::GetInst().RegisterPacket<DungeonChallenge>();
         PacketManager::GetInst().RegisterPacket<DungeonAuthResult>();
+        PacketManager::GetInst().RegisterPacket<DungeonWorldRequest>();
+        PacketManager::GetInst().RegisterPacket<DungeonWorldChunk>();
+        PacketManager::GetInst().RegisterPacket<DungeonMoveInput>();
+        PacketManager::GetInst().RegisterPacket<DungeonPlayerState>();
     }
 }

@@ -218,7 +218,8 @@ int main(const int inArgumentCount, char* inArguments[])
         const SessionBrokerEndpoint brokerEndpoint = LoadSessionBrokerEndpoint(brokerOptionPath);
         std::shared_ptr<GameRoomServer::RoomManager> roomManager =
             std::make_shared<GameRoomServer::RoomManager>(ioContext, roomServerId, maxRoomCount,
-                brokerEndpoint.address, brokerEndpoint.port, ENTER_TIMEOUT);
+                brokerEndpoint.address, brokerEndpoint.port, ENTER_TIMEOUT,
+                GameRoomServer::DungeonDefinition::LoadDirectory(executableDirectory / "Data" / "Dungeons"));
         std::shared_ptr<GameRoomServer::TownControlClient> townControlClient =
             std::make_shared<GameRoomServer::TownControlClient>(
                 ioContext, roomManager, roomServerId, maxRoomCount);
