@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "monsters": [
+    {
+      "dataId": 1,
+      "definitionFile": "Dummy.ai.json",
+      "monsterId": "Dummy"
+    }
+  ]
+}

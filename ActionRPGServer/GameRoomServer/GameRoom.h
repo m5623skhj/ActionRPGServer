@@ -43,6 +43,7 @@ namespace GameRoomServer
 
         [[nodiscard]] RoomId GetRoomId() const noexcept;
         [[nodiscard]] std::uint64_t GetCombatSeed() const noexcept;
+        [[nodiscard]] const DungeonDefinition& GetDefinition() const noexcept { return *definition; }
 
     private:
         enum class State
@@ -72,13 +73,28 @@ namespace GameRoomServer
             std::chrono::steady_clock::time_point lastInput{};
         };
 
+        // Definitions are shared read-only; each room owns HP and the current AI node.
+        // Future updates to these instances must run on this room's strand.
+        struct MonsterState
+        {
+            std::shared_ptr<const MonsterDefinition> definition;
+            std::string mapId;
+            std::string placementId;
+            std::string aiNodeId;
+            DungeonPoint position;
+            bool facingLeft{};
+            std::uint32_t hp{};
+        };
+
         asio::strand<asio::io_context::executor_type> strand;
         asio::steady_timer enterTimer;
         asio::steady_timer tickTimer;
         RoomId roomId;
         std::uint32_t dungeonId;
         std::uint64_t combatSeed;
+        const std::shared_ptr<const DungeonDefinition> definition;
         nlohmann::json dungeonWorld;
+        std::unordered_map<std::uint64_t, MonsterState> monsters;
         std::unordered_map<PlayerId, PlayerState> players;
         std::unordered_map<PlayerId, std::shared_ptr<const std::string>> initialWorlds;
         std::unordered_set<PlayerId> expectedPlayers;

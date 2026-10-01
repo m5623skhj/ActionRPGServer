@@ -158,6 +158,7 @@
     <ClCompile Include="DungeonSession.cpp" />
     <ClCompile Include="DungeonDefinition.cpp" />
     <ClCompile Include="GameRoom.cpp" />
+    <ClCompile Include="MonsterDefinition.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RoomManager.cpp" />
     <ClCompile Include="TownControlClient.cpp" />
@@ -170,6 +171,7 @@
     <ClInclude Include="DungeonSession.h" />
     <ClInclude Include="DungeonDefinition.h" />
     <ClInclude Include="GameRoom.h" />
+    <ClInclude Include="MonsterDefinition.h" />
     <ClInclude Include="RoomManager.h" />
     <ClInclude Include="RudpPrerequisites.h" />
     <ClInclude Include="TownControlClient.h" />
@@ -177,6 +179,10 @@
   <ItemGroup>
     <None Include="ServerOptionFile\CoreOption.txt" />
     <None Include="ServerOptionFile\SessionBrokerOption.txt" />
+    <None Include="Data\Dungeons\README.md" />
+    <None Include="Data\Monsters\MonsterCatalog.json" />
+    <None Include="Data\Monsters\Dummy.ai.json" />
+    <None Include="Data\Monsters\README.md" />
   </ItemGroup>
   <Target Name="CopyGameRoomServerOptions" AfterTargets="Build">
     <ItemGroup>
@@ -186,7 +192,7 @@
           DestinationFiles="@(GameRoomServerOptionFiles-&gt;'$(OutDir)ServerOptionFile\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="CopyDungeonDefinitions" AfterTargets="Build">
+  <Target Name="CopyGameRoomData" AfterTargets="Build">
     <ItemGroup>
       <DungeonDataFiles Include="$(ProjectDir)Data\**\*.*" />
     </ItemGroup>

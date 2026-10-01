@@ -21,20 +21,27 @@ namespace GameRoomServer
           roomId(inRoomId),
           dungeonId(inDungeonId),
           combatSeed(inCombatSeed),
+          definition(std::move(inDefinition)),
           expectedPlayers(inExpectedPlayerIds.begin(), inExpectedPlayerIds.end()),
           enterTimeout(inEnterTimeout),
           emptyHandler(std::move(inEmptyHandler))
     {
-        dungeonWorld = inDefinition->world;
+        dungeonWorld = definition->world;
         dungeonWorld["roomId"] = roomId;
         // IDs are scoped to this dungeon instance and stay stable when changing rooms.
         std::uint64_t nextMonsterId = 1;
-        for (auto& map : dungeonWorld["maps"])
+        for (auto& [mapId, map] : dungeonWorld["maps"].items())
             for (auto& monster : map["monsters"])
             {
-                monster["instanceId"] = nextMonsterId++;
-                monster["hp"] = 100;
-                monster["maxHp"] = 100;
+                const auto monsterDefinition = definition->monsterDefinitions.at(monster.at("dataId").get<std::uint32_t>());
+                const auto instanceId = nextMonsterId++;
+                monsters.emplace(instanceId, MonsterState{ monsterDefinition, mapId, monster.at("id").get<std::string>(),
+                    monsterDefinition->GetAi().at("initialNodeId").get<std::string>(),
+                    DungeonDefinition::Point(monster.at("position")), monster.at("facingLeft").get<bool>(),
+                    monsterDefinition->maxHp });
+                monster["instanceId"] = instanceId;
+                monster["hp"] = monsterDefinition->maxHp;
+                monster["maxHp"] = monsterDefinition->maxHp;
             }
         std::size_t slot = 0;
         dungeonWorld["players"] = nlohmann::json::object();

@@ -79,6 +79,8 @@ GameRoomServer는 다음 기능을 포함합니다.
 - GameRoomServer ID가 포함된 전역 고유 룸 ID와 공유 전투 시드
 - 클리어 순간 남아 있는 유저를 기준으로 한 보상 대상 전달
 - 던전 편집기에서 출력한 방·지형·게이트·몬스터 배치 로딩
+- 방 종류·미니맵 배치·연결 정보 보관 및 실제 게이트 방향·도착점 검증
+- 몬스터 편집기 JSON 로딩·그래프 검증 및 숫자 Data ID 카탈로그 연결
 - 던전별 몬스터 instance ID 생성 및 인증된 클라이언트에 월드 데이터 분할 전달
 - 서버 플레이어 이동과 워프 판정, 방별 몬스터 표시를 위한 상태 전달
 
@@ -87,6 +89,11 @@ GameRoomServer는 다음 기능을 포함합니다.
 ZIP 안 `Assets`는 클라이언트 Assets에 복사합니다. 빌드 시 서버 Data 폴더도 실행 폴더로
 복사되며, 서버 재시작 후 적용됩니다. 아직 설치하지 않은 던전의 입장은 실패합니다.
 자세한 형식과 설치 경로는 [던전 데이터 안내](ActionRPGServer/GameRoomServer/Data/Dungeons/README.md)를 참고하세요.
+
+몬스터 정의는 `Data/Monsters/MonsterCatalog.json`을 통해 등록합니다.
+기본 Dummy는 Data ID 1이며, 던전 개체의 최대 HP와 초기 AI 상태는 정의 JSON에서 가져옵니다.
+AI 그래프 실행과 공격·드랍 처리는 아직 구현하지 않았습니다.
+설치와 검증 규칙은 [몬스터 정의 안내](ActionRPGServer/GameRoomServer/Data/Monsters/README.md)를 참고하세요.
 
 RUDP 서버를 시작하려면 `MY/DevServerCert` 개발 인증서가 로컬 인증서 저장소에 설치되어 있어야 합니다. 빌드 시 기본 옵션 파일이 실행 폴더의 `ServerOptionFile`로 복사됩니다.
 

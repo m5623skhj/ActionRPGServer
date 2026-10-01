@@ -1,5 +1,6 @@
 #include "DungeonProtocol.h"
 #include "DungeonSession.h"
+#include "MonsterDefinition.h"
 #include "RoomManager.h"
 #include "TownControlClient.h"
 
@@ -216,10 +217,12 @@ int main(const int inArgumentCount, char* inArguments[])
             brokerOptionPath = executableDirectory / "ServerOptionFile" / "SessionBrokerOption.txt";
         }
         const SessionBrokerEndpoint brokerEndpoint = LoadSessionBrokerEndpoint(brokerOptionPath);
+        const auto monsterDefinitions = GameRoomServer::MonsterDefinition::LoadCatalog(
+            executableDirectory / "Data" / "Monsters" / "MonsterCatalog.json");
         std::shared_ptr<GameRoomServer::RoomManager> roomManager =
             std::make_shared<GameRoomServer::RoomManager>(ioContext, roomServerId, maxRoomCount,
                 brokerEndpoint.address, brokerEndpoint.port, ENTER_TIMEOUT,
-                GameRoomServer::DungeonDefinition::LoadDirectory(executableDirectory / "Data" / "Dungeons"));
+                GameRoomServer::DungeonDefinition::LoadDirectory(executableDirectory / "Data" / "Dungeons", monsterDefinitions));
         std::shared_ptr<GameRoomServer::TownControlClient> townControlClient =
             std::make_shared<GameRoomServer::TownControlClient>(
                 ioContext, roomManager, roomServerId, maxRoomCount);
