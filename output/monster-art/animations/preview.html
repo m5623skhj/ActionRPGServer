@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>몬스터 모션 미리보기</title>
+<style>
+:root { color-scheme: light dark; font-family: "Segoe UI", sans-serif; }
+body { margin: 24px; background: Canvas; color: CanvasText; }
+main { max-width: 1280px; margin: auto; }
+h1 { font-size: 22px; font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+button, select { font: inherit; padding: 8px 12px; }
+label { display: inline-flex; gap: 8px; align-items: center; }
+input[type=range] { width: min(260px, 60vw); }
+.panels { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+h2 { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
+canvas { width: 100%; height: auto; image-rendering: pixelated; display: block;
+ background: repeating-conic-gradient(color-mix(in srgb, CanvasText 5%, Canvas) 0% 25%, Canvas 0% 50%) 0 0 / 24px 24px; }
+.frame-label { font-variant-numeric: tabular-nums; margin: 8px 0; }
+#load-status { min-height: 20px; }
+@media (max-width: 760px) { .panels { grid-template-columns: 1fr; } body { margin: 12px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>몬스터 모션</h1>
+<div class="controls">
+<label for="motion">동작
+<select id="motion">
+<option value="move">이동</option>
+<option value="hit">피격</option>
+<option value="airborne">에어본</option>
+<option value="attack">공격</option>
+<option value="death">사망</option>
+</select></label>
+<button id="play" type="button">일시정지</button>
+<button id="replay" type="button">처음부터</button>
+<label><input id="guides" type="checkbox" checked>중심·바닥 기준선</label>
+<label for="frame">프레임 <input id="frame" type="range" min="1" max="8" value="1"><span id="frame-value">1 / 8</span></label>
+</div>
+<div class="panels">
+<section><h2>녹슨 갑옷병 · 일반</h2><canvas id="normal" width="640" height="500" role="img" aria-label="일반 몬스터 애니메이션">일반 몬스터 동작 미리보기</canvas><p id="normal-frame" class="frame-label"></p></section>
+<section><h2>몰락한 성채 수호자 · 보스</h2><canvas id="boss" width="640" height="500" role="img" aria-label="보스 몬스터 애니메이션">보스 몬스터 동작 미리보기</canvas><p id="boss-frame" class="frame-label"></p></section>
+</div>
+<p id="load-status" role="status"></p>
+</main>
+<script id="animation-data" type="application/json">{"version":1,"coordinates":"sourceRect in original PNG pixels; pivot relative to sourceRect; frame indexes are zero-based","layout":"Use per-frame sourceRect, not equal atlas subdivisions. Suggested pivots are visually annotated.","characters":{"rusted_armor_soldier":{"name":"녹슨 갑옷병","referenceStandingHeight":449,"motions":{"move":{"image":"rusted_armor_soldier_move.png","width":1586,"height":992,"frameCount":8,"fps":10,"loop":true,"holdLastFrame":false,"standingHeight":449,"scaleToMovement":1,"frames":[{"index":0,"sourceRect":{"x":68,"y":31,"width":269,"height":455},"pivot":{"x":141,"y":451}},{"index":1,"sourceRect":{"x":475,"y":29,"width":235,"height":457},"pivot":{"x":143,"y":453}},{"index":2,"sourceRect":{"x":865,"y":29,"width":236,"height":457},"pivot":{"x":139,"y":453}},{"index":3,"sourceRect":{"x":1254,"y":29,"width":285,"height":456},"pivot":{"x":169,"y":452}},{"index":4,"sourceRect":{"x":73,"y":518,"width":252,"height":456},"pivot":{"x":132,"y":452}},{"index":5,"sourceRect":{"x":475,"y":518,"width":237,"height":455},"pivot":{"x":134,"y":451}},{"index":6,"sourceRect":{"x":861,"y":518,"width":255,"height":456},"pivot":{"x":139,"y":452}},{"index":7,"sourceRect":{"x":1258,"y":518,"width":282,"height":452},"pivot":{"x":159,"y":448}}]},"hit":{"image":"rusted_armor_soldier_hit.png","width":1254,"height":1254,"frameCount":4,"fps":14,"loop":false,"holdLastFrame":true,"standingHeight":550,"scaleToMovement":0.816364,"frames":[{"index":0,"sourceRect":{"x":195,"y":103,"width":374,"height":525},"pivot":{"x":200,"y":521}},{"index":1,"sourceRect":{"x":681,"y":120,"width":440,"height":508},"pivot":{"x":227,"y":504}},{"index":2,"sourceRect":{"x":241,"y":654,"width":376,"height":556},"pivot":{"x":192,"y":552}},{"index":3,"sourceRect":{"x":737,"y":656,"width":331,"height":554},"pivot":{"x":192,"y":550}}]},"airborne":{"image":"rusted_armor_soldier_airborne.png","width":1774,"height":887,"frameCount":8,"fps":10,"loop":false,"holdLastFrame":true,"standingHeight":364,"scaleToMovement":1.233516,"frames":[{"index":0,"sourceRect":{"x":100,"y":119,"width":312,"height":335},"pivot":{"x":160,"y":331}},{"index":1,"sourceRect":{"x":535,"y":73,"width":307,"height":341},"pivot":{"x":155,"y":337}},{"index":2,"sourceRect":{"x":980,"y":75,"width":266,"height":317},"pivot":{"x":130,"y":313}},{"index":3,"sourceRect":{"x":1443,"y":104,"width":258,"height":361},"pivot":{"x":127,"y":357}},{"index":4,"sourceRect":{"x":74,"y":618,"width":328,"height":225},"pivot":{"x":151,"y":221}},{"index":5,"sourceRect":{"x":455,"y":713,"width":475,"height":122},"pivot":{"x":195,"y":118}},{"index":6,"sourceRect":{"x":977,"y":614,"width":297,"height":221},"pivot":{"x":153,"y":217}},{"index":7,"sourceRect":{"x":1435,"y":482,"width":251,"height":370},"pivot":{"x":125,"y":366}}],"phases":{"launch":[0,1],"airHold":[2,2],"fall":[3,3],"knockdown":[4,5],"getUp":[6,7]},"heightDrivenByGamePhysics":true},"attack":{"image":"rusted_armor_soldier_attack.png","width":1586,"height":992,"frameCount":8,"fps":14,"loop":false,"holdLastFrame":true,"standingHeight":381,"scaleToMovement":1.178478,"frames":[{"index":0,"sourceRect":{"x":88,"y":104,"width":234,"height":387},"pivot":{"x":116,"y":383}},{"index":1,"sourceRect":{"x":446,"y":22,"width":281,"height":469},"pivot":{"x":161,"y":465}},{"index":2,"sourceRect":{"x":856,"y":88,"width":268,"height":403},"pivot":{"x":152,"y":399}},{"index":3,"sourceRect":{"x":1255,"y":109,"width":271,"height":382},"pivot":{"x":155,"y":378}},{"index":4,"sourceRect":{"x":61,"y":569,"width":356,"height":383},"pivot":{"x":147,"y":379}},{"index":5,"sourceRect":{"x":447,"y":575,"width":381,"height":377},"pivot":{"x":179,"y":373}},{"index":6,"sourceRect":{"x":866,"y":569,"width":289,"height":383},"pivot":{"x":145,"y":379}},{"index":7,"sourceRect":{"x":1279,"y":569,"width":249,"height":384},"pivot":{"x":131,"y":380}}],"phases":{"start":[0,3],"active":[4,5],"end":[6,7]},"suggestedImpactFrame":4},"death":{"image":"rusted_armor_soldier_death.png","width":1774,"height":887,"frameCount":8,"fps":10,"loop":false,"holdLastFrame":true,"standingHeight":401,"scaleToMovement":1.119701,"frames":[{"index":0,"sourceRect":{"x":99,"y":76,"width":220,"height":407},"pivot":{"x":108,"y":403}},{"index":1,"sourceRect":{"x":561,"y":102,"width":215,"height":381},"pivot":{"x":109,"y":377}},{"index":2,"sourceRect":{"x":949,"y":183,"width":287,"height":298},"pivot":{"x":161,"y":294}},{"index":3,"sourceRect":{"x":1368,"y":261,"width":375,"height":237},"pivot":{"x":232,"y":233}},{"index":4,"sourceRect":{"x":25,"y":645,"width":406,"height":189},"pivot":{"x":159,"y":185}},{"index":5,"sourceRect":{"x":454,"y":683,"width":417,"height":147},"pivot":{"x":162,"y":143}},{"index":6,"sourceRect":{"x":891,"y":686,"width":413,"height":143},"pivot":{"x":157,"y":139}},{"index":7,"sourceRect":{"x":1333,"y":686,"width":414,"height":143},"pivot":{"x":162,"y":139}}]}}},"fallen_citadel_warden":{"name":"몰락한 성채 수호자","referenceStandingHeight":423,"motions":{"move":{"image":"fallen_citadel_warden_move.png","width":1586,"height":992,"frameCount":8,"fps":8,"loop":true,"holdLastFrame":false,"standingHeight":423,"scaleToMovement":1,"frames":[{"index":0,"sourceRect":{"x":31,"y":54,"width":372,"height":429},"pivot":{"x":212,"y":425}},{"index":1,"sourceRect":{"x":427,"y":55,"width":372,"height":427},"pivot":{"x":215,"y":423}},{"index":2,"sourceRect":{"x":828,"y":54,"width":372,"height":428},"pivot":{"x":204,"y":424}},{"index":3,"sourceRect":{"x":1238,"y":54,"width":341,"height":422},"pivot":{"x":207,"y":418}},{"index":4,"sourceRect":{"x":34,"y":512,"width":368,"height":436},"pivot":{"x":200,"y":432}},{"index":5,"sourceRect":{"x":430,"y":525,"width":387,"height":423},"pivot":{"x":206,"y":419}},{"index":6,"sourceRect":{"x":830,"y":519,"width":372,"height":434},"pivot":{"x":197,"y":430}},{"index":7,"sourceRect":{"x":1229,"y":520,"width":351,"height":430},"pivot":{"x":208,"y":426}}]},"hit":{"image":"fallen_citadel_warden_hit.png","width":1254,"height":1254,"frameCount":4,"fps":12,"loop":false,"holdLastFrame":true,"standingHeight":547,"scaleToMovement":0.773309,"frames":[{"index":0,"sourceRect":{"x":129,"y":89,"width":479,"height":541},"pivot":{"x":251,"y":537}},{"index":1,"sourceRect":{"x":650,"y":79,"width":534,"height":551},"pivot":{"x":258,"y":547}},{"index":2,"sourceRect":{"x":129,"y":683,"width":514,"height":528},"pivot":{"x":264,"y":524}},{"index":3,"sourceRect":{"x":703,"y":658,"width":489,"height":553},"pivot":{"x":226,"y":549}}]},"airborne":{"image":"fallen_citadel_warden_airborne.png","width":1774,"height":887,"frameCount":8,"fps":8,"loop":false,"holdLastFrame":true,"standingHeight":394,"scaleToMovement":1.073604,"frames":[{"index":0,"sourceRect":{"x":11,"y":63,"width":438,"height":380},"pivot":{"x":256,"y":376}},{"index":1,"sourceRect":{"x":500,"y":26,"width":390,"height":377},"pivot":{"x":205,"y":373}},{"index":2,"sourceRect":{"x":905,"y":57,"width":414,"height":349},"pivot":{"x":225,"y":345}},{"index":3,"sourceRect":{"x":1333,"y":78,"width":424,"height":362},"pivot":{"x":247,"y":358}},{"index":4,"sourceRect":{"x":21,"y":573,"width":402,"height":265},"pivot":{"x":195,"y":261}},{"index":5,"sourceRect":{"x":454,"y":675,"width":462,"height":179},"pivot":{"x":191,"y":175}},{"index":6,"sourceRect":{"x":941,"y":573,"width":386,"height":269},"pivot":{"x":189,"y":265}},{"index":7,"sourceRect":{"x":1395,"y":454,"width":358,"height":400},"pivot":{"x":180,"y":396}}],"phases":{"launch":[0,1],"airHold":[2,2],"fall":[3,3],"knockdown":[4,5],"getUp":[6,7]},"heightDrivenByGamePhysics":true},"attack":{"image":"fallen_citadel_warden_attack.png","width":1584,"height":993,"frameCount":8,"fps":10,"loop":false,"holdLastFrame":true,"standingHeight":270,"scaleToMovement":1.566667,"frames":[{"index":0,"sourceRect":{"x":45,"y":183,"width":311,"height":274},"pivot":{"x":166,"y":270}},{"index":1,"sourceRect":{"x":469,"y":84,"width":258,"height":373},"pivot":{"x":156,"y":369}},{"index":2,"sourceRect":{"x":861,"y":163,"width":281,"height":294},"pivot":{"x":170,"y":290}},{"index":3,"sourceRect":{"x":1271,"y":130,"width":250,"height":327},"pivot":{"x":174,"y":323}},{"index":4,"sourceRect":{"x":20,"y":624,"width":435,"height":266},"pivot":{"x":185,"y":262}},{"index":5,"sourceRect":{"x":458,"y":620,"width":358,"height":270},"pivot":{"x":161,"y":266}},{"index":6,"sourceRect":{"x":837,"y":615,"width":324,"height":275},"pivot":{"x":193,"y":271}},{"index":7,"sourceRect":{"x":1238,"y":621,"width":303,"height":269},"pivot":{"x":177,"y":265}}],"phases":{"start":[0,3],"active":[4,5],"end":[6,7]},"suggestedImpactFrame":4},"death":{"image":"fallen_citadel_warden_death.png","width":1774,"height":887,"frameCount":8,"fps":8,"loop":false,"holdLastFrame":true,"standingHeight":418,"scaleToMovement":1.011962,"frames":[{"index":0,"sourceRect":{"x":44,"y":49,"width":333,"height":424},"pivot":{"x":188,"y":420}},{"index":1,"sourceRect":{"x":512,"y":96,"width":329,"height":384},"pivot":{"x":180,"y":380}},{"index":2,"sourceRect":{"x":944,"y":165,"width":347,"height":318},"pivot":{"x":181,"y":314}},{"index":3,"sourceRect":{"x":1365,"y":249,"width":398,"height":231},"pivot":{"x":225,"y":227}},{"index":4,"sourceRect":{"x":20,"y":657,"width":404,"height":194},"pivot":{"x":190,"y":190}},{"index":5,"sourceRect":{"x":460,"y":683,"width":414,"height":162},"pivot":{"x":180,"y":158}},{"index":6,"sourceRect":{"x":904,"y":698,"width":416,"height":151},"pivot":{"x":176,"y":147}},{"index":7,"sourceRect":{"x":1348,"y":698,"width":416,"height":151},"pivot":{"x":172,"y":147}}]}}}}}</script>
+<script>
+(() => {
+  const metadata = JSON.parse(document.getElementById("animation-data").textContent);
+  const motionSelect = document.getElementById("motion");
+  const playButton = document.getElementById("play");
+  const replayButton = document.getElementById("replay");
+  const guides = document.getElementById("guides");
+  const slider = document.getElementById("frame");
+  const sliderValue = document.getElementById("frame-value");
+  const loadStatus = document.getElementById("load-status");
+  const characters = [
+    { id: "rusted_armor_soldier", canvas: document.getElementById("normal"), label: document.getElementById("normal-frame"), height: 200 },
+    { id: "fallen_citadel_warden", canvas: document.getElementById("boss"), label: document.getElementById("boss-frame"), height: 330 }
+  ];
+  const imageCache = new Map();
+  const currentFrames = new Map();
+  let playing = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let startedAt = 0;
+  let requestId = 0;
+  let loadError = false;
+
+  function getMotion(character) {
+    return metadata.characters[character.id].motions[motionSelect.value];
+  }
+  function getImage(file) {
+    if (imageCache.has(file)) return imageCache.get(file);
+    const image = new Image();
+    imageCache.set(file, image);
+    image.onload = () => { updateLoading(); drawCurrent(); };
+    image.onerror = () => {
+      loadError = true;
+      loadStatus.textContent = "PNG를 읽을 수 없습니다. 미리보기와 이미지들을 같은 폴더에 두세요.";
+    };
+    image.src = file;
+    return image;
+  }
+  function updateLoading() {
+    if (loadError) return;
+    const ready = characters.every(character => {
+      const image = getImage(getMotion(character).image);
+      return image.complete && image.naturalWidth > 0;
+    });
+    loadStatus.textContent = ready ? "" : "이미지 불러오는 중…";
+  }
+  function updatePlayButton() {
+    playButton.textContent = playing ? "일시정지" : "재생";
+  }
+  function drawCurrent() {
+    for (const character of characters) {
+      const motion = getMotion(character);
+      const index = currentFrames.get(character.id) || 0;
+      const frame = motion.frames[index];
+      const image = getImage(motion.image);
+      const canvas = character.canvas;
+      const context = canvas.getContext("2d");
+      const originX = canvas.width / 2;
+      const groundY = 460;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.imageSmoothingEnabled = false;
+      if (guides.checked) {
+        context.save();
+        context.strokeStyle = matchMedia("(prefers-color-scheme: dark)").matches ? "#777" : "#999";
+        context.setLineDash([4, 6]);
+        context.beginPath();
+        context.moveTo(originX, 0); context.lineTo(originX, canvas.height);
+        context.moveTo(0, groundY); context.lineTo(canvas.width, groundY);
+        context.stroke(); context.restore();
+      }
+      if (image.complete && image.naturalWidth > 0) {
+        const rect = frame.sourceRect;
+        const scale = character.height / motion.standingHeight;
+        const airHeights = [0, 30, 55, 25, 0, 0, 0, 0];
+        const airHeight = motionSelect.value === "airborne" ? airHeights[index] : 0;
+        context.drawImage(image, rect.x, rect.y, rect.width, rect.height,
+          originX - frame.pivot.x * scale, groundY - airHeight - frame.pivot.y * scale,
+          rect.width * scale, rect.height * scale);
+      }
+      character.label.textContent = "프레임 " + (index + 1) + " / " + motion.frameCount +
+        " · " + motion.fps + " fps";
+    }
+    const mainMotion = getMotion(characters[0]);
+    const mainFrame = currentFrames.get(characters[0].id) || 0;
+    slider.max = String(mainMotion.frameCount);
+    slider.value = String(mainFrame + 1);
+    sliderValue.textContent = (mainFrame + 1) + " / " + mainMotion.frameCount;
+  }
+  function tick(now) {
+    if (!playing) return;
+    const elapsed = (now - startedAt) / 1000;
+    let finished = true;
+    for (const character of characters) {
+      const motion = getMotion(character);
+      const rawFrame = Math.floor(elapsed * motion.fps);
+      const index = motion.loop ? rawFrame % motion.frameCount : Math.min(rawFrame, motion.frameCount - 1);
+      currentFrames.set(character.id, index);
+      if (motion.loop || rawFrame < motion.frameCount) finished = false;
+    }
+    drawCurrent();
+    if (finished) {
+      playing = false;
+      updatePlayButton();
+    } else requestId = requestAnimationFrame(tick);
+  }
+  function startFromBeginning() {
+    cancelAnimationFrame(requestId);
+    for (const character of characters) currentFrames.set(character.id, 0);
+    startedAt = performance.now();
+    updateLoading(); drawCurrent(); updatePlayButton();
+    if (playing) requestId = requestAnimationFrame(tick);
+  }
+  motionSelect.addEventListener("change", () => {
+    loadError = false;
+    playing = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    startFromBeginning();
+  });
+  playButton.addEventListener("click", () => {
+    playing = !playing;
+    if (playing) startFromBeginning();
+    else { cancelAnimationFrame(requestId); updatePlayButton(); }
+  });
+  replayButton.addEventListener("click", () => { playing = true; startFromBeginning(); });
+  slider.addEventListener("input", () => {
+    playing = false;
+    cancelAnimationFrame(requestId);
+    const index = Number(slider.value) - 1;
+    for (const character of characters) currentFrames.set(character.id, index);
+    updatePlayButton(); drawCurrent();
+  });
+  guides.addEventListener("change", drawCurrent);
+  startFromBeginning();
+})();
+</script>
+</body>
+</html>
+
