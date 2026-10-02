@@ -5,6 +5,16 @@
       "dataId": 1,
       "definitionFile": "Dummy.ai.json",
       "monsterId": "Dummy"
+    },
+    {
+      "dataId": 2,
+      "definitionFile": "rusted_armor_soldier.ai.json",
+      "monsterId": "rusted_armor_soldier"
+    },
+    {
+      "dataId": 3,
+      "definitionFile": "fallen_citadel_warden.ai.json",
+      "monsterId": "fallen_citadel_warden"
     }
   ]
 }
