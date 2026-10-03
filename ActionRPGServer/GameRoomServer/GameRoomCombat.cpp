@@ -403,12 +403,21 @@ namespace GameRoomServer
                 projectile.position.y += projectile.directionY * stepDistance;
                 projectile.height += projectile.heightDirection * stepDistance;
                 projectile.remainingDistance = std::max(0.0f, projectile.remainingDistance - stepDistance);
-                if (projectile.height < 0 || !DungeonDefinition::Movable(map, projectile.position))
+                const bool hitGround = projectile.height < 0;
+                if (hitGround)
+                {
+                    const float ratio = startHeight / (startHeight - projectile.height);
+                    projectile.position.x = start.x + (projectile.position.x - start.x) * ratio;
+                    projectile.position.y = start.y + (projectile.position.y - start.y) * ratio;
+                    projectile.height = 0;
+                }
+                if (!DungeonDefinition::Movable(map, projectile.position))
                 { projectile.remainingDistance = 0; break; }
                 std::uint64_t nearestId{};
                 float nearest = std::numeric_limits<float>::max();
                 const auto mapMonsters = monsterIdsByMap.find(projectile.mapId);
-                if (mapMonsters == monsterIdsByMap.end()) continue;
+                if (mapMonsters == monsterIdsByMap.end())
+                { if (hitGround) projectile.remainingDistance = 0; continue; }
                 for (const auto id : mapMonsters->second)
                 {
                     const auto& monster = monsters.at(id);
@@ -417,15 +426,16 @@ namespace GameRoomServer
                     const float radius = profile.hitRadius + projectile.radius;
                     const float dx = projectile.position.x - start.x, dy = projectile.position.y - start.y;
                     const float ox = start.x - monster.position.x, oy = start.y - monster.position.y;
-                    const float a = dx * dx + dy * dy, b = 2 * (ox * dx + oy * dy);
-                    const float c = ox * ox + oy * oy - radius * radius;
-                    float first = 0, last = 1;
+                    const double a = static_cast<double>(dx) * dx + static_cast<double>(dy) * dy;
+                    const double b = 2 * (static_cast<double>(ox) * dx + static_cast<double>(oy) * dy);
+                    const double c = static_cast<double>(ox) * ox + static_cast<double>(oy) * oy - static_cast<double>(radius) * radius;
+                    double first = 0, last = 1;
                     if (a <= 0.000001f) { if (c > 0) continue; }
                     else
                     {
-                        const float discriminant = b * b - 4 * a * c;
+                        const double discriminant = b * b - 4 * a * c;
                         if (discriminant < 0) continue;
-                        const float root = std::sqrt(discriminant);
+                        const double root = std::sqrt(discriminant);
                         first = std::max(first, (-b - root) / (2 * a));
                         last = std::min(last, (-b + root) / (2 * a));
                     }
@@ -435,11 +445,12 @@ namespace GameRoomServer
                     if (std::abs(dz) <= 0.000001f) { if (startHeight < lower || startHeight > upper) continue; }
                     else
                     {
-                        const float t1 = (lower - startHeight) / dz, t2 = (upper - startHeight) / dz;
+                        const double t1 = (static_cast<double>(lower) - startHeight) / dz;
+                        const double t2 = (static_cast<double>(upper) - startHeight) / dz;
                         first = std::max(first, std::min(t1, t2)); last = std::min(last, std::max(t1, t2));
                     }
                     if (first > last) continue;
-                    const float along = first;
+                    const float along = static_cast<float>(first);
                     if (along < nearest || (along == nearest && id < nearestId)) { nearest = along; nearestId = id; }
                 }
                 if (nearestId != 0)
@@ -449,6 +460,7 @@ namespace GameRoomServer
                     victim.actionStarted = victim.actionComplete = false;
                     projectile.remainingDistance = 0;
                 }
+                if (hitGround) projectile.remainingDistance = 0;
             }
         }
         std::erase_if(projectiles, [](const auto& projectile) { return projectile.remainingDistance <= 0; });

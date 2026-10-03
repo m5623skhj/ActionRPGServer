@@ -51,6 +51,7 @@ namespace GameRoomServer
                             player.lastSkillId = input.skillId; player.lastSkillAirborne = airborne; player.lastSkillSeconds = 0;
                             player.skillCooldowns[input.skillId] = skill.at("cooldownSeconds").get<float>();
                             ++player.skillSequence; player.directionX = player.directionY = 0;
+                            self->UpdateSkills(inPlayerId, player, 0.0f);
                             result.accepted = 1;
                         }
                     }
