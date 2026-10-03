@@ -82,7 +82,7 @@ GameRoomServer는 다음 기능을 포함합니다.
 - 방 종류·미니맵 배치·연결 정보 보관 및 실제 게이트 방향·도착점 검증
 - 몬스터 편집기 JSON 로딩·그래프 검증 및 숫자 Data ID 카탈로그 연결
 - 던전별 몬스터 instance ID 생성 및 인증된 클라이언트에 월드 데이터 분할 전달
-- 서버 플레이어 이동과 워프 판정, 방별 몬스터 표시를 위한 상태 전달
+- 서버 플레이어 이동과 현재 방 몬스터 전부 처치 후 워프 허용, 방별 몬스터 표시를 위한 상태 전달
 
 던전 편집기의 서버 던전 Data ID는 TownServer의 `Data/DungeonCatalog.json` 숫자 ID와
 일치해야 합니다. ZIP은 `ActionRPGServer/GameRoomServer/Data/Dungeons/<던전폴더>/`에 풀고,

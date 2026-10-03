@@ -1,3 +1,13 @@
+# 2026-10-03 서버 출력 정리
+
+서버 실행에 사용하지 않는 PNG·SVG·제작 스크립트·미리보기 HTML·이전 준비 ZIP을 서버 output에서 제거했습니다. 제거 파일은 다음 백업에 원래 상대 경로와 SHA-256을 기록해 보존했습니다.
+
+`C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-editors/outputs/ServerOutputCleanup-20261003/removed-files.zip`
+
+백업 ZIP의 `server/` 접두사 이후가 서버 저장소 기준 기존 경로입니다. 클라이언트 원본·실행 Assets는 변경하지 않았습니다. 아래 내용은 최초 제작 당시 기록입니다.
+
+---
+
 # 몬스터 모션 이미지
 
 내장 image_gen으로 승인된 몬스터 외형을 기준으로 생성한 투명 PNG 시트입니다.

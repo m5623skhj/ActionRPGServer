@@ -1,0 +1,183 @@
+{
+  "tool": "built-in image_gen",
+  "normalization": "Original preserved. Explicit crop box (left,top,right,bottom), then Pillow NEAREST resize to final dimensions. All crops preserve 16:9 except ThroneRoom's original 1672:941 differs marginally. No compositing, painting, palette changes, blur or gameplay-data edits.",
+  "assets": [
+    {
+      "key": "Entrance",
+      "width": 1280,
+      "height": 720,
+      "description": "Party entrance safe room. Requested canvas 1280x720. North wall and ruined outer entry architecture entirely above y=300, muted navy banners. Entire rectangle x40..1240,y300..650 is uninterrupted flat stone floor; keep east exit center (1200,460) and route through right edge totally open. Bottom strip also floor, no foreground barrier. Quiet sheltered ruined entry hall, no central props.",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Party entrance safe room. Requested canvas 1280x720. North wall and ruined outer entry architecture entirely above y=300, muted navy banners. Entire rectangle x40..1240,y300..650 is uninterrupted flat stone floor; keep east exit center (1200,460) and route through right edge totally open. Bottom strip also floor, no foreground barrier. Quiet sheltered ruined entry hall, no central props.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-31ddb808-d5af-405b-baec-201cf686b75e.png",
+      "file": "FallenCitadel_Entrance.png",
+      "crop": [
+        76,
+        86,
+        1596,
+        941
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1280,
+        720
+      ],
+      "originalSHA256": "1845639e252f8fdaba6fb2d2949e36ddf5ca6cb0ba25697284010129850b5ffe",
+      "finalSHA256": "036c41777cfa99436b1e3e32c54af202787d46c7062a9b6d8596ef043942f94d",
+      "finalRelativePath": "final/FallenCitadel_Entrance.png"
+    },
+    {
+      "key": "Guardroom",
+      "width": 1280,
+      "height": 720,
+      "description": "Guardroom, requested 1280x720. North wall ends by y300. Broken guard equipment, wall-mounted rusty shields and small weapon remnants only against north wall above y290 or extreme edge outside playable area. Rectangle x40..1240,y300..650 uninterrupted flat stone floor, fully open side routes at west (80,460), east (1200,460) to both edges. No side wall, no stairs, no middle obstacles.",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Guardroom, requested 1280x720. North wall ends by y300. Broken guard equipment, wall-mounted rusty shields and small weapon remnants only against north wall above y290 or extreme edge outside playable area. Rectangle x40..1240,y300..650 uninterrupted flat stone floor, fully open side routes at west (80,460), east (1200,460) to both edges. No side wall, no stairs, no middle obstacles. Important composition: wall/floor boundary no lower than 38% canvas height; bottom 62% is open floor. Match Entrance's muted stone/navy palette visible in this conversation.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-30c72b80-7239-4c6d-8f66-55c0f8186c12.png",
+      "file": "FallenCitadel_Guardroom.png",
+      "crop": [
+        76,
+        86,
+        1596,
+        941
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1280,
+        720
+      ],
+      "originalSHA256": "584594b638707e16a343185c804870b63887c9a7b4953393fab2e4305d781bd7",
+      "finalSHA256": "ea6b6cf4c205b40385818bc2f639257b16abdbe420d59520b437d4e849f791ca",
+      "finalRelativePath": "final/FallenCitadel_Guardroom.png"
+    },
+    {
+      "key": "Courtyard",
+      "width": 1280,
+      "height": 720,
+      "description": "Open central courtyard, requested 1280x720. Broken battlements and cool open sky confined to northernmost strip above y230. Broad planar quiet empty stone courtyard rectangle x40..1240,y230..650, no central fountain or tree. West/east routes centered (80,460)/(1200,460) remain open to edges. Southern corridor x560..720,y600..700 centered (640,640) is contiguous flat floor through bottom edge, no railing or blocking debris. No foreground objects.",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Open central courtyard, requested 1280x720. Broken battlements and cool open sky confined to northernmost strip above y230. Broad planar quiet empty stone courtyard rectangle x40..1240,y230..650, no central fountain or tree. West/east routes centered (80,460)/(1200,460) remain open to edges. Southern corridor x560..720,y600..700 centered (640,640) is contiguous flat floor through bottom edge, no railing or blocking debris. No foreground objects. CRITICAL LAYOUT: sky plus battlements occupy ONLY top 25% of image. The remaining lower 75% MUST be empty flat courtyard stone paving, first floor row at quarter height, not mid-height. Very low ruined wall, no tall wall across image. No steps anywhere. Match existing muted Entrance/Guardroom palette.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-9eccad4e-45c8-486a-be57-4843a5db3059.png",
+      "file": "FallenCitadel_Courtyard.png",
+      "crop": [
+        100,
+        110,
+        1572,
+        938
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1280,
+        720
+      ],
+      "originalSHA256": "0a4ac58dd031ce1be02fe0983bfb64614fa88465d7fb45e2640759cada46bfac",
+      "finalSHA256": "2baed8113029971cf83f052d0fba148d194866331da24e00f92643d00c174903",
+      "finalRelativePath": "final/FallenCitadel_Courtyard.png"
+    },
+    {
+      "key": "Armory",
+      "width": 1280,
+      "height": 720,
+      "description": "Side-branch armory, requested 1280x720. Playable rectangle x40..1240,y300..650 uninterrupted quiet flat stone floor. Crucial northern corridor is a clear open recessed architectural passage x560..720,y30..400, directly connected to main floor without stairs; north exit centered (640,80), must show floor through this gap up to top edge. North wall split into left and right wings; no wall across central corridor. Weapon racks and broken equipment confined to north-left/north-right walls away from corridor and above y280; no objects on battle floor. No red carpet.",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Side-branch armory, requested 1280x720. Playable rectangle x40..1240,y300..650 uninterrupted quiet flat stone floor. Crucial northern corridor is a clear open recessed architectural passage x560..720,y30..400, directly connected to main floor without stairs; north exit centered (640,80), must show floor through this gap up to top edge. North wall split into left and right wings; no wall across central corridor. Weapon racks and broken equipment confined to north-left/north-right walls away from corridor and above y280; no objects on battle floor. No red carpet. CRITICAL: central vertical band x560..720 must be continuous walkable flat floor right up to TOP edge. Open ceiling passage, NOT a doorway with back wall or steps or window. North wall ONLY on left half and right half with wide central gap at least 20% of canvas width. Lower 65% of canvas is empty battle floor. No central props. Match previous stone/navy rooms.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-06c01304-32e5-4fc1-80b5-45d37404fd94.png",
+      "file": "FallenCitadel_Armory.png",
+      "crop": [
+        12,
+        0,
+        1644,
+        918
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1280,
+        720
+      ],
+      "originalSHA256": "04901d1ffecd0c0728b3882f7c1578d5329217a955568142c34f7b1871e72e15",
+      "finalSHA256": "a2e237fda36cb07a73bf1fb6eb7336c099dcbe97dbbe1b758e6cc3b94dcbf7ee",
+      "finalRelativePath": "final/FallenCitadel_Armory.png",
+      "correctedOriginalSize": [
+        1672,
+        941
+      ],
+      "edit": {
+        "source": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-0723abe0-8cc7-49fa-aafe-4ba46a3be905.png",
+        "prompt": "Use case: precise-object-edit. Edit only the CENTRAL NORTHERN PASSAGE in this existing pixel-art armory background. Preserve exact canvas, original art style, lighting, floor texture, wall equipment, palette and empty battle area everywhere else. Widen the central stone-floor passage by roughly 60 ORIGINAL pixels on EACH side along its entire top-to-bottom portion, especially at TOP edge. The passage must have PARALLEL vertical sides, no perspective taper, and continuous flat floor from the top edge through the main arena. Its clear floor band must include original x680..980 from y0..400; push adjacent wall pillars/equipment out of that band. This is walkable floor viewed shallow overhead, not vertical wall stones; no thresholds, stairs, objects or doors across it. Keep other elements unchanged, no new text, creatures, markers or UI."
+      },
+      "selectedOriginalRelativePath": "originals/FallenCitadel_Armory_passage-corrected.png"
+    },
+    {
+      "key": "RoyalCorridor",
+      "width": 1280,
+      "height": 720,
+      "description": "Royal approach corridor, requested 1280x720. North wall only above y300, faded navy royal banners and broken column details built INTO northern wall, no free-standing columns on playable floor. Entire x40..1240,y300..650 open smooth flat neutral stone. West/east exits (80,460)/(1200,460) connected to left/right edges, no side walls blocking routes. Strong horizontal composition, no tunnel view, no red cloth (reserved for boss).",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Royal approach corridor, requested 1280x720. North wall only above y300, faded navy royal banners and broken column details built INTO northern wall, no free-standing columns on playable floor. Entire x40..1240,y300..650 open smooth flat neutral stone. West/east exits (80,460)/(1200,460) connected to left/right edges, no side walls blocking routes. Strong horizontal composition, no tunnel view, no red cloth (reserved for boss). Critical layout: north architecture only top 35%, all bottom 65% empty stone floor. Match existing Guardroom and Entrance pixel style. Royal approach represented by rear-wall banners and shallow wall pilasters only, no center doorway leading into deep corridor.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-e2a63667-9fe7-4f54-942a-d02ac6c756f2.png",
+      "file": "FallenCitadel_RoyalCorridor.png",
+      "crop": [
+        76,
+        86,
+        1596,
+        941
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1280,
+        720
+      ],
+      "originalSHA256": "bff396c7abbaa6cd37c80b43ede91c174747505b0600f9647b279e024c86f9b3",
+      "finalSHA256": "8ab360f3819951209031ed95911141923876e0aa21e64c7166a2315ca9adcab0",
+      "finalRelativePath": "final/FallenCitadel_RoyalCorridor.png"
+    },
+    {
+      "key": "ThroneRoom",
+      "width": 1600,
+      "height": 900,
+      "description": "Boss throne room requested 1600x900. North backdrop entirely above y300: remnants of a ruined stone throne at center, tattered burgundy royal cloth and navy/gold accents, tiny wall torches, broken tall rear wall architecture. Throne platform if any confined above y280, never stairs onto combat floor. Entire rectangle x40..1560,y300..820 is broad completely unobstructed medium-value low-contrast flat neutral stone floor. West entrance center (80,570) and full left-edge approach remain clear. Future boss feet at (1100,560) must be blank floor, no boss or marker. No carpet running across battle arena; red fabric on north wall only. No foreground barriers.",
+      "prompt": "Use case: stylized-concept. Asset: production game dungeon background, a single standalone 16:9 opaque PNG, never a montage. Pixel-art medieval ruined citadel, suitable behind the already viewed white-haired anime pixel character and rusty armored knights. Fixed 2D belt-scroll camera, straight-on north wall in upper part and shallow elevated view of flat walkable floor in lower part, aligned horizontal, no isometric rotation, no perspective vanishing point, no side walls narrowing the floor. Crisp controlled pixel clusters, no blur or photographic textures. Gray-brown stone, rusty iron, faded navy banners, tiny warm wall torches and cool exterior light. Medium-value low-contrast quiet floor to keep characters readable. Decorations ONLY outside walkable area. No people, monsters, characters, text, labels, UI, arrows, portals, glowing gate graphics, overlays, watermark, floor obstacles, standing pillars on floor, loose rubble on floor, steps crossing routes. Architectural door recesses okay but not gate markers. Coordinates below refer to requested target canvas; if output resolution differs scale the composition proportionally. Fill canvas without borders. Boss throne room requested 1600x900. North backdrop entirely above y300: remnants of a ruined stone throne at center, tattered burgundy royal cloth and navy/gold accents, tiny wall torches, broken tall rear wall architecture. Throne platform if any confined above y280, never stairs onto combat floor. Entire rectangle x40..1560,y300..820 is broad completely unobstructed medium-value low-contrast flat neutral stone floor. West entrance center (80,570) and full left-edge approach remain clear. Future boss feet at (1100,560) must be blank floor, no boss or marker. No carpet running across battle arena; red fabric on north wall only. No foreground barriers. Critical composition: rear throne and all architecture confined to TOP 28% of canvas, vast bottom 72% is empty flat stone arena, NO steps below this band. Low rear throne remnant, no long carpet. Match palette/style of the previous rooms. Single 16:9 full-image boss arena.",
+      "generatedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-d3a2bc32-51a1-4302-a975-8fa8bdf0fc1e.png",
+      "file": "FallenCitadel_ThroneRoom.png",
+      "crop": [
+        0,
+        0,
+        1672,
+        941
+      ],
+      "originalSize": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "finalSize": [
+        1600,
+        900
+      ],
+      "originalSHA256": "9e46148b3870f5f2a4a44193a9280dea5e69dc6020bf85b3228f4640c422ad0b",
+      "finalSHA256": "78333455e4cd991e144fbb898d374cbab07cd6b152aed1d20ef2e4cbe8465d7d",
+      "finalRelativePath": "final/FallenCitadel_ThroneRoom.png"
+    }
+  ],
+  "styleReferences": [
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Towns\\town_capital_central.png"
+  ]
+}

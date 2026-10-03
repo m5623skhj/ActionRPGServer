@@ -130,6 +130,7 @@ namespace GameRoomServer
         void UpdateShots(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
         void UpdateProjectiles(float inDeltaSeconds);
         void CheckClear();
+        [[nodiscard]] bool IsMapCleared(const std::string& inMapId) const;
         [[nodiscard]] static const char* ReactionName(Reaction inReaction);
         [[nodiscard]] DungeonPoint MoveOnMap(const std::string& inMapId, DungeonPoint inPosition,
             DungeonPoint inTarget, float inDistance) const;

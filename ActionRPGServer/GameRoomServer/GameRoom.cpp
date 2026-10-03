@@ -44,7 +44,7 @@ namespace GameRoomServer
             { "airRecoilDistance", combatDefinition->airRecoilDistance }, { "muzzleHeight", combatDefinition->muzzleHeight },
             { "projectileSpeed", combatDefinition->projectileSpeed }, { "maxShots", 5 }
         };
-        // IDs are scoped to this dungeon instance and stay stable when changing rooms.
+        // Create monsters once per dungeon instance; map transfers preserve their IDs and HP.
         std::uint64_t nextMonsterId = 1;
         for (auto& [mapId, map] : dungeonWorld["maps"].items())
             for (auto& monster : map["monsters"])
@@ -122,6 +122,15 @@ namespace GameRoomServer
         });
     }
 
+    // Read authoritative HP on the room strand. Empty maps are already cleared.
+    bool GameRoom::IsMapCleared(const std::string& inMapId) const
+    {
+        const auto found = monsterIdsByMap.find(inMapId);
+        if (found == monsterIdsByMap.end()) return true;
+        return std::all_of(found->second.begin(), found->second.end(), [this](const auto id)
+            { return monsters.at(id).actor.hp == 0; });
+    }
+
     // Room state is owned by its strand; small movement steps cannot tunnel through walls/gates.
     void GameRoom::UpdatePlayers(const float inDeltaSeconds)
     {
@@ -139,6 +148,7 @@ namespace GameRoomServer
             const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
             if (length > 0)
             {
+                const bool mapCleared = IsMapCleared(player.mapId);
                 dx *= distance / length / steps; dy *= distance / length / steps;
                 for (int step = 0; step < steps; ++step)
                 {
@@ -155,7 +165,7 @@ namespace GameRoomServer
                     const auto zone = std::find_if(zones.begin(), zones.end(), [&player](const auto& value)
                         { return DungeonDefinition::Contains(value.at("polygon"), player.position); });
                     if (zone == zones.end()) player.warpArmed = true;
-                    else if (player.warpArmed)
+                    else if (player.warpArmed && mapCleared)
                     {
                         const auto& action = zone->at("action");
                         const std::string targetMapId = action.at("targetMapId");

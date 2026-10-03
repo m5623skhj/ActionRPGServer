@@ -1,3 +1,9 @@
+# 2026-10-03 출력·설치 경로 정리
+
+서버 던전 원본과 Debug/Release 실행 데이터에서 미사용 미니맵·아이콘 PNG/SVG 18개를 제거했습니다. 서버 output의 이미지·제작 도구는 `C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-editors/outputs/ServerOutputCleanup-20261003/removed-files.zip`에 보존 후 제거했습니다. 서버/클라이언트 JSON과 클라이언트 Assets는 유지합니다. 아래 설치 개수와 해시는 최초 통합 시점의 기록입니다. 현재 정리 결과는 `C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-editors/outputs/ServerOutputCleanup-20261003/CLEANUP_REPORT.json`을 참조하세요.
+
+---
+
 # FallenCitadel 전투 통합 결과
 
 ## 판정과 확인 범위
@@ -50,4 +56,6 @@ Combat.json 신규 설치 2개는 `.dungeon-installs/combat-config-final/journal
 
 최종 소스의 서버·클라이언트 빌드와 실제 입장→일반 전투→보스 처치→클리어 확인은 이번 작업에서 수행하지 않습니다. 프로토콜이 추가됐으므로 양쪽 실행 파일을 함께 갱신해야 합니다.
 
-보상 실제 지급·드랍·부활·전멸 종료·일반방 게이트 잠금·장애물 경로 탐색·특수 보스 패턴은 이번 최소 전투 연결 범위에 포함하지 않습니다.
+2026-10-03 후속 변경으로 현재 방의 몬스터를 모두 처치한 뒤에만 출구 워프를 허용합니다. 처음부터 몬스터가 없는 방은 바로 이동 가능하며, 같은 던전 진행 중 재방문해도 몬스터가 재생성되지 않습니다. 후속 변경도 빌드·실행 없이 정적으로 확인합니다.
+
+보상 실제 지급·드랍·부활·전멸 종료·장애물 경로 탐색·특수 보스 패턴은 이번 최소 전투 연결 범위에 포함하지 않습니다.

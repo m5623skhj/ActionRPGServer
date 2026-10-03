@@ -1,0 +1,155 @@
+{
+  "status": "static-checks-passed",
+  "editorUiUsed": false,
+  "editorUiImportSaveExportPending": true,
+  "gameBuildOrPlayTestPerformed": false,
+  "schemaVersion": 3,
+  "manifestVersion": 3,
+  "roomVersion": 5,
+  "dataId": 5,
+  "maxPlayers": 4,
+  "roomCount": 6,
+  "connectionCount": 5,
+  "warpZoneCount": 10,
+  "normalMonsterCount": 15,
+  "bossCount": 1,
+  "issues": [],
+  "projectBytes": 12963270,
+  "packageBytes": 9751862,
+  "compactRuntimeJsonBytes": 15952,
+  "backgrounds": [
+    {
+      "roomId": "Entrance",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_Entrance.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1496336
+    },
+    {
+      "roomId": "Guardroom",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_Guardroom.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1382620
+    },
+    {
+      "roomId": "Courtyard",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_Courtyard.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1585980
+    },
+    {
+      "roomId": "Armory",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_Armory.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1529657
+    },
+    {
+      "roomId": "RoyalCorridor",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_RoyalCorridor.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1479695
+    },
+    {
+      "roomId": "ThroneRoom",
+      "source": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-art\\fallen-citadel\\final\\FallenCitadel_ThroneRoom.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 2230797
+    }
+  ],
+  "rooms": [
+    {
+      "id": "Entrance",
+      "name": "성채 입구",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "normal",
+      "monsterCount": 0,
+      "monsterDataIds": []
+    },
+    {
+      "id": "Guardroom",
+      "name": "무너진 경비실",
+      "layout": {
+        "x": 1,
+        "y": 0
+      },
+      "kind": "normal",
+      "monsterCount": 3,
+      "monsterDataIds": [
+        2
+      ]
+    },
+    {
+      "id": "Courtyard",
+      "name": "잿빛 중앙 안뜰",
+      "layout": {
+        "x": 2,
+        "y": 0
+      },
+      "kind": "normal",
+      "monsterCount": 5,
+      "monsterDataIds": [
+        2
+      ]
+    },
+    {
+      "id": "Armory",
+      "name": "녹슨 무기고",
+      "layout": {
+        "x": 2,
+        "y": 1
+      },
+      "kind": "normal",
+      "monsterCount": 3,
+      "monsterDataIds": [
+        2
+      ]
+    },
+    {
+      "id": "RoyalCorridor",
+      "name": "빛바랜 왕실 회랑",
+      "layout": {
+        "x": 3,
+        "y": 0
+      },
+      "kind": "normal",
+      "monsterCount": 4,
+      "monsterDataIds": [
+        2
+      ]
+    },
+    {
+      "id": "ThroneRoom",
+      "name": "수호자의 왕좌",
+      "layout": {
+        "x": 4,
+        "y": 0
+      },
+      "kind": "boss",
+      "monsterCount": 1,
+      "monsterDataIds": [
+        3
+      ]
+    }
+  ],
+  "limitations": [
+    "New monster definitions have placeholder HP 100 and waiting AI only.",
+    "Client rendering and battle logic for IDs 2 and 3 are separate work.",
+    "Gateways are open; room-clear locks, rewards, and victory triggers are not implemented.",
+    "Content is prepared offline with the editor model; user must import, check, save, and export in DungeonEditor."
+  ],
+  "packageIntegrity": {
+    "entryCount": 21,
+    "crcVerified": true,
+    "pngFilesDecoded": 11,
+    "runtimeImageReferencesVerified": true,
+    "embeddedBackgroundHashesMatchPackage": true
+  }
+}
