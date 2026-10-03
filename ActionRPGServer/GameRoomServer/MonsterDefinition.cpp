@@ -48,7 +48,7 @@ namespace GameRoomServer
             return value;
         }
         double Number(const Json& inValue, const double inMin,
-            const double inMax = std::numeric_limits<double>::max())
+            const double inMax = std::numeric_limits<float>::max())
         {
             Require(inValue.is_number(), "Expected a number.");
             const double value = inValue.get<double>();
@@ -263,6 +263,11 @@ namespace GameRoomServer
     const nlohmann::json& MonsterDefinition::GetAi() const { return document->at("monsters").at(monsterIndex).at("ai"); }
     const nlohmann::json& MonsterDefinition::GetSkills() const { return document->at("skills"); }
     const nlohmann::json& MonsterDefinition::GetMotions() const { return document->at("motions"); }
+    const nlohmann::json& MonsterDefinition::GetNode(const std::string& inId) const { return *nodes.at(inId); }
+    const nlohmann::json& MonsterDefinition::GetSkill(const std::string& inId) const { return *skills.at(inId); }
+    const nlohmann::json& MonsterDefinition::GetMotion(const std::string& inId) const { return *motions.at(inId); }
+    const std::vector<const nlohmann::json*>& MonsterDefinition::GetOutgoing(const std::string& inId) const
+    { return outgoing.at(inId); }
 
     MonsterDefinition::Catalog MonsterDefinition::LoadCatalog(const std::filesystem::path& inPath)
     {
@@ -306,6 +311,19 @@ namespace GameRoomServer
                 definition->maxHp = source->at("maxHp").get<std::uint32_t>();
                 definition->document = document;
                 definition->monsterIndex = static_cast<std::size_t>(std::distance(monsters.begin(), source));
+                for (const auto& node : definition->GetAi().at("nodes"))
+                {
+                    const std::string id = node.at("id");
+                    definition->nodes.emplace(id, &node);
+                    definition->outgoing.emplace(id, std::vector<const Json*>{});
+                }
+                for (const auto& skill : definition->GetSkills()) definition->skills.emplace(skill.at("id").get<std::string>(), &skill);
+                for (const auto& motion : definition->GetMotions()) definition->motions.emplace(motion.at("id").get<std::string>(), &motion);
+                for (const auto& edge : definition->GetAi().at("edges"))
+                    definition->outgoing.at(edge.at("from").get<std::string>()).push_back(&edge);
+                for (auto& [id, edges] : definition->outgoing)
+                    std::sort(edges.begin(), edges.end(), [](const Json* a, const Json* b)
+                        { return a->at("priority").get<std::uint64_t>() < b->at("priority").get<std::uint64_t>(); });
                 definitions.emplace(dataId, std::move(definition));
                 std::cout << "Monster loaded: " << dataId << " (" << monsterId << ", " << file << ")\n";
             }

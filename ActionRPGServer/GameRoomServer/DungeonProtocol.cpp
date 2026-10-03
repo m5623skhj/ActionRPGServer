@@ -111,6 +111,86 @@ namespace ActionRPG::DungeonProtocol
         outBuffer << y;
     }
 
+    ::PacketId DungeonActionInput::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_ACTION_INPUT);
+    }
+
+    void DungeonActionInput::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> sequence;
+        inBuffer >> action;
+        inBuffer >> facingLeft;
+    }
+
+    void DungeonActionInput::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << sequence;
+        outBuffer << action;
+        outBuffer << facingLeft;
+    }
+
+    ::PacketId DungeonActionResult::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_ACTION_RESULT);
+    }
+
+    void DungeonActionResult::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> sequence;
+        inBuffer >> accepted;
+        inBuffer >> serverTick;
+    }
+
+    void DungeonActionResult::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << sequence;
+        outBuffer << accepted;
+        outBuffer << serverTick;
+    }
+
+    ::PacketId DungeonCombatStateRequest::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_COMBAT_STATE_REQUEST);
+    }
+
+    void DungeonCombatStateRequest::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> snapshotId;
+        inBuffer >> offset;
+    }
+
+    void DungeonCombatStateRequest::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << snapshotId;
+        outBuffer << offset;
+    }
+
+    ::PacketId DungeonCombatStateChunk::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_COMBAT_STATE_CHUNK);
+    }
+
+    void DungeonCombatStateChunk::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> snapshotId;
+        inBuffer >> totalBytes;
+        inBuffer >> offset;
+        inBuffer >> status;
+        inBuffer >> retryAfterMs;
+        inBuffer >> payload;
+    }
+
+    void DungeonCombatStateChunk::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << snapshotId;
+        outBuffer << totalBytes;
+        outBuffer << offset;
+        outBuffer << status;
+        outBuffer << retryAfterMs;
+        outBuffer << payload;
+    }
+
     void RegisterPackets()
     {
         PacketManager::GetInst().RegisterPacket<DungeonChallenge>();
@@ -119,5 +199,9 @@ namespace ActionRPG::DungeonProtocol
         PacketManager::GetInst().RegisterPacket<DungeonWorldChunk>();
         PacketManager::GetInst().RegisterPacket<DungeonMoveInput>();
         PacketManager::GetInst().RegisterPacket<DungeonPlayerState>();
+        PacketManager::GetInst().RegisterPacket<DungeonActionInput>();
+        PacketManager::GetInst().RegisterPacket<DungeonActionResult>();
+        PacketManager::GetInst().RegisterPacket<DungeonCombatStateRequest>();
+        PacketManager::GetInst().RegisterPacket<DungeonCombatStateChunk>();
     }
 }

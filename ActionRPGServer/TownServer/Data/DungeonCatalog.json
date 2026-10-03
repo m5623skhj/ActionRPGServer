@@ -5,28 +5,10 @@
       "id": "west_coast_dungeons",
       "dungeons": [
         {
-          "id": 1,
-          "name": "Forgotten Hall",
-          "levelRange": "Lv. 1 - 4",
-          "description": "An abandoned hall occupied by wandering monsters."
-        },
-        {
-          "id": 2,
-          "name": "Frost Cavern",
-          "levelRange": "Lv. 5 - 8",
-          "description": "A frozen cave where movement becomes difficult."
-        },
-        {
-          "id": 3,
-          "name": "Ashen Ruins",
-          "levelRange": "Lv. 9 - 12",
-          "description": "Ruins filled with fire creatures and falling embers."
-        },
-        {
-          "id": 4,
-          "name": "Ancient Depths",
-          "levelRange": "Lv. 13 - 16",
-          "description": "A deep sanctuary guarded by ancient monsters."
+          "id": 5,
+          "name": "몰락한 성채",
+          "levelRange": "제작용 초안",
+          "description": "녹슨 갑옷병이 지키는 폐허 성채. 왕좌의 수호자가 홀로 남아 있다."
         }
       ]
     }

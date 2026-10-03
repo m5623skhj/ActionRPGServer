@@ -44,7 +44,7 @@ ActionRPGServer/TownServer/x64/Debug/TownServer.exe 7777 4 7780
 - 현재 맵의 1280×720 직사각형 섹터 및 자신을 포함한 3×3 섹터의 등장·퇴장 관리
 - 이동 입력 시간 초과와 세션 송신 대기열 제한
 
-로컬에서 서버와 클라이언트 두 개를 함께 실행하려면 두 프로젝트를 `Debug | x64`로 빌드한 뒤 저장소 루트의 `RunTownLocalTest.bat`을 실행합니다. 배치 파일은 TCP 7777 포트가 이미 사용 중이면 시작하지 않습니다. 서버와 클라이언트는 입장 패킷 형식을 공유하므로 프로토콜이 바뀌면 둘 다 다시 빌드해야 합니다.
+로컬에서 TownServer·GameRoomServer와 클라이언트 두 개를 함께 실행하려면 세 프로젝트를 `Debug | x64`로 빌드한 뒤 저장소 루트의 `RunLocalTest.bat`을 실행합니다. 배치 파일은 TCP 7777 또는 7780 포트가 이미 사용 중이면 시작하지 않습니다. TownServer의 접속 대기 확인 후 GameRoomServer 한 개와 클라이언트 두 개를 실행합니다. 서버와 클라이언트는 패킷 형식을 공유하므로 프로토콜이 바뀌면 양쪽을 다시 빌드해야 합니다.
 
 콘텐츠 및 패킷을 추가하는 절차는 [TownServer 개발 가이드](ActionRPGServer/TownServer/DEVELOPMENT.md)를 참고합니다.
 
@@ -92,7 +92,11 @@ ZIP 안 `Assets`는 클라이언트 Assets에 복사합니다. 빌드 시 서버
 
 몬스터 정의는 `Data/Monsters/MonsterCatalog.json`을 통해 등록합니다.
 기본 Dummy는 Data ID 1이며, 던전 개체의 최대 HP와 초기 AI 상태는 정의 JSON에서 가져옵니다.
-AI 그래프 실행과 공격·드랍 처리는 아직 구현하지 않았습니다.
+AI 그래프 실행과 기본 전투 판정 코드, ID 2·3의 최소 추적·공격 패턴을 추가했습니다.
+클라이언트 전투 패킷·상태 표시 연결과 FallenCitadel 데이터 설치를 통합했습니다. 드랍·보상 지급은 아직 구현하지 않았습니다.
+정적 확인만 수행했으며, 기존 실행 파일에는 새 소스의 빌드가 필요합니다. 실제 입장·전투 동작은 검증하지 않았습니다.
+담당별 결과와 설치 기록은 [통합 보고서](output/combat-integration/INTEGRATION_REPORT.md)에 정리했습니다.
+서버 전투 설정과 연결 계약은 [전투 연결 안내](ActionRPGServer/GameRoomServer/COMBAT_PROTOCOL.md)를 참고하세요.
 설치와 검증 규칙은 [몬스터 정의 안내](ActionRPGServer/GameRoomServer/Data/Monsters/README.md)를 참고하세요.
 
 RUDP 서버를 시작하려면 `MY/DevServerCert` 개발 인증서가 로컬 인증서 저장소에 설치되어 있어야 합니다. 빌드 시 기본 옵션 파일이 실행 폴더의 `ServerOptionFile`로 복사됩니다.

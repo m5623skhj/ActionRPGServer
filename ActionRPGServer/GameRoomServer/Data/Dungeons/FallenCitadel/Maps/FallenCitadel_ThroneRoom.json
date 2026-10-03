@@ -1,0 +1,132 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FallenCitadel_ThroneRoom",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1600,
+    "bottom": 900
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 112,
+    "y": 570
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FallenCitadel_ThroneRoom.png",
+      "x": 0,
+      "y": 0,
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+      "x": 28,
+      "y": 514,
+      "width": 64,
+      "height": 112
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 40,
+        "y": 300
+      },
+      {
+        "x": 1560,
+        "y": 300
+      },
+      {
+        "x": 1560,
+        "y": 820
+      },
+      {
+        "x": 40,
+        "y": 820
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1600,
+        "y": 0
+      },
+      {
+        "x": 1600,
+        "y": 280
+      },
+      {
+        "x": 0,
+        "y": 280
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_west",
+      "position": {
+        "x": 112,
+        "y": 570
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Warden1",
+      "dataId": 3,
+      "position": {
+        "x": 1100,
+        "y": 560
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_RoyalCorridor",
+      "polygon": [
+        {
+          "x": 40,
+          "y": 510
+        },
+        {
+          "x": 80,
+          "y": 510
+        },
+        {
+          "x": 80,
+          "y": 630
+        },
+        {
+          "x": 40,
+          "y": 630
+        }
+      ],
+      "connectionId": "RoyalCorridor_ThroneRoom",
+      "direction": "west",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+        "x": 28,
+        "y": 514,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FallenCitadel_RoyalCorridor",
+        "targetEntryPointId": "Entry_east"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "monsters": [
+    {
+      "dataId": 2,
+      "walkSpeed": 140,
+      "runSpeed": 220,
+      "detectionRange": 600,
+      "bodyHeight": 96,
+      "hitRadius": 24,
+      "skills": [
+        {
+          "id": "RustedArmorSlash",
+          "damage": 10,
+          "hitSeconds": 0.2857142857142857,
+          "reachHeight": 80
+        }
+      ]
+    },
+    {
+      "dataId": 3,
+      "walkSpeed": 110,
+      "runSpeed": 180,
+      "detectionRange": 800,
+      "bodyHeight": 158,
+      "hitRadius": 36,
+      "skills": [
+        {
+          "id": "CitadelWardenSlash",
+          "damage": 20,
+          "hitSeconds": 0.4,
+          "reachHeight": 100
+        }
+      ]
+    }
+  ]
+}

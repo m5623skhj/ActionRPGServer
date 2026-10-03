@@ -15,10 +15,12 @@ namespace GameRoomServer
         std::string inSessionBrokerAddress,
         const std::uint16_t inSessionBrokerPort,
         const std::chrono::milliseconds inEnterTimeout,
-        std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> inDefinitions)
+        std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> inDefinitions,
+        std::shared_ptr<const CombatDefinition> inCombatDefinition)
         : strand(asio::make_strand(inIoContext)),
           ioContext(inIoContext),
           definitions(std::move(inDefinitions)),
+          combatDefinition(std::move(inCombatDefinition)),
           maxRoomCount(inMaxRoomCount),
           roomServerId(inRoomServerId),
           sessionBrokerAddress(std::move(inSessionBrokerAddress)),
@@ -80,7 +82,11 @@ namespace GameRoomServer
                         {
                             manager->RemoveRoom(inRoomId, true);
                         }
-                    }, definition->second);
+                    }, definition->second, self->combatDefinition,
+                    [weakSelf](const Protocol::RoomId inRoomId)
+                    {
+                        if (const auto manager = weakSelf.lock()) manager->CompleteDungeon(inRoomId);
+                    });
                 self->rooms.emplace(roomId, room);
                 room->Start();
 

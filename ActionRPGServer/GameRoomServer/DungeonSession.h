@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <chrono>
 
 namespace GameRoomServer
 {
@@ -27,6 +28,14 @@ namespace GameRoomServer
     private:
         void OnWorldRequest(const ActionRPG::DungeonProtocol::DungeonWorldRequest& inPacket);
         void OnMoveInput(const ActionRPG::DungeonProtocol::DungeonMoveInput& inPacket);
+        void OnActionInput(const ActionRPG::DungeonProtocol::DungeonActionInput& inPacket);
+        void OnCombatStateRequest(const ActionRPG::DungeonProtocol::DungeonCombatStateRequest& inPacket);
+        void SendActionResult(std::uint32_t inGeneration, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, ActionRPG::DungeonProtocol::DungeonActionResult inPacket);
+        void SendCombatChunk(std::uint32_t inGeneration, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::shared_ptr<const std::string> inSnapshot);
+        bool SendNextCombatChunk(std::uint32_t inOffset);
+        void ResetCombatStream();
         void SendPlayerState(std::uint32_t inGeneration,
             ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId,
@@ -45,5 +54,9 @@ namespace GameRoomServer
         std::weak_ptr<GameRoom> gameRoom;
         std::shared_ptr<const std::string> initialWorld;
         std::uint32_t nextWorldOffset{};
+        std::shared_ptr<const std::string> combatSnapshot;
+        std::uint32_t snapshotId{}, nextCombatOffset{}, combatBytesThisSecond{}, actionsThisSecond{};
+        bool snapshotPending{};
+        std::chrono::steady_clock::time_point lastSnapshotRequest{}, combatWindow{}, actionWindow{};
     };
 }

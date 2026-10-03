@@ -219,10 +219,13 @@ int main(const int inArgumentCount, char* inArguments[])
         const SessionBrokerEndpoint brokerEndpoint = LoadSessionBrokerEndpoint(brokerOptionPath);
         const auto monsterDefinitions = GameRoomServer::MonsterDefinition::LoadCatalog(
             executableDirectory / "Data" / "Monsters" / "MonsterCatalog.json");
+        const auto combatDefinition = GameRoomServer::CombatDefinition::Load(
+            executableDirectory / "Data" / "Combat.json", monsterDefinitions);
         std::shared_ptr<GameRoomServer::RoomManager> roomManager =
             std::make_shared<GameRoomServer::RoomManager>(ioContext, roomServerId, maxRoomCount,
                 brokerEndpoint.address, brokerEndpoint.port, ENTER_TIMEOUT,
-                GameRoomServer::DungeonDefinition::LoadDirectory(executableDirectory / "Data" / "Dungeons", monsterDefinitions));
+                GameRoomServer::DungeonDefinition::LoadDirectory(executableDirectory / "Data" / "Dungeons", monsterDefinitions),
+                combatDefinition);
         std::shared_ptr<GameRoomServer::TownControlClient> townControlClient =
             std::make_shared<GameRoomServer::TownControlClient>(
                 ioContext, roomManager, roomServerId, maxRoomCount);

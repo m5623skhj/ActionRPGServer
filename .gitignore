@@ -9,3 +9,4 @@ Tool/PacketGenerator/**/__pycache__/
 ActionRPGServer/.vs/ActionRPGServer.slnx/FileContentIndex/280b0995-b7f0-41b5-ae6a-d50b7a05aef4.vsidx
 ActionRPGServer/.vs/ActionRPGServer.slnx/FileContentIndex/
 ActionRPGServer/x64/
+.dungeon-installs/

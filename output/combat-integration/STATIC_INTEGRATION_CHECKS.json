@@ -1,0 +1,56 @@
+{
+  "verification": "static only; no build or gameplay execution",
+  "checks": {
+    "dungeonInstallHashOperations": 102,
+    "monsterSkillTiming": [
+      {
+        "dataId": 2,
+        "skill": "RustedArmorSlash",
+        "hitSeconds": 0.2857142857142857,
+        "durationSeconds": 0.5714285714285714
+      },
+      {
+        "dataId": 3,
+        "skill": "CitadelWardenSlash",
+        "hitSeconds": 0.4,
+        "durationSeconds": 0.8
+      }
+    ],
+    "monsterMotionImages": 10,
+    "dungeon": {
+      "dataId": 5,
+      "rooms": 6,
+      "monsterPlacements": {
+        "2": 15,
+        "3": 1
+      },
+      "warps": 10,
+      "targetEntriesValid": true
+    },
+    "combatAndMonsterRuntimeHashes": [
+      "Debug",
+      "Release"
+    ],
+    "projectXmlAndCombatFiles": true,
+    "townCatalogRuntimeHashes": [
+      "Debug",
+      "Release"
+    ],
+    "serverProtocolGenerationAndOriginalIds": true,
+    "clientMonsterRegistryAndAssetCatalogRuntimeHashes": [
+      "Debug",
+      "Release"
+    ],
+    "clientAssetCatalogDirectReferenceHashChecks": 58,
+    "bothProtocolGeneratedTargetsMatchCanonicalYaml": true,
+    "packetCount": 10,
+    "editorInstallHashOperationsIncludingDependencies": 150,
+    "clientCombatProjectReferences": true,
+    "clientReviewedStagingFilesMatchInstalledSource": 20,
+    "serverDiffWhitespaceCheck": true
+  },
+  "sourceIntegrationComplete": true,
+  "dataInstallationComplete": true,
+  "buildPerformed": false,
+  "playableVerified": false
+}

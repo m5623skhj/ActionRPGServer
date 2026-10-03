@@ -14,7 +14,8 @@ namespace GameRoomServer
         std::vector<PlayerId> inExpectedPlayerIds,
         const std::chrono::milliseconds inEnterTimeout,
         EmptyHandler inEmptyHandler,
-        std::shared_ptr<const DungeonDefinition> inDefinition)
+        std::shared_ptr<const DungeonDefinition> inDefinition,
+        std::shared_ptr<const CombatDefinition> inCombatDefinition, EmptyHandler inClearHandler)
         : strand(asio::make_strand(inIoContext)),
           enterTimer(strand),
           tickTimer(strand),
@@ -22,12 +23,27 @@ namespace GameRoomServer
           dungeonId(inDungeonId),
           combatSeed(inCombatSeed),
           definition(std::move(inDefinition)),
+          combatDefinition(std::move(inCombatDefinition)),
           expectedPlayers(inExpectedPlayerIds.begin(), inExpectedPlayerIds.end()),
           enterTimeout(inEnterTimeout),
-          emptyHandler(std::move(inEmptyHandler))
+          emptyHandler(std::move(inEmptyHandler)),
+          clearHandler(std::move(inClearHandler))
     {
         dungeonWorld = definition->world;
         dungeonWorld["roomId"] = roomId;
+        dungeonWorld["combatRules"] = {
+            { "version", 1 }, { "maxHp", combatDefinition->playerMaxHp },
+            { "walkSpeed", combatDefinition->walkSpeed }, { "runSpeed", combatDefinition->runSpeed },
+            { "shotPrepareSeconds", combatDefinition->shotPrepareSeconds },
+            { "shotIntervalSeconds", combatDefinition->shotIntervalSeconds },
+            { "shotRecoverSeconds", combatDefinition->shotRecoverSeconds },
+            { "jumpSpeed", combatDefinition->jumpSpeed }, { "gravity", combatDefinition->gravity },
+            { "jumpPrepareSeconds", combatDefinition->jumpPrepareSeconds },
+            { "hitStunSeconds", combatDefinition->hitStunSeconds }, { "downSeconds", combatDefinition->downSeconds },
+            { "riseSeconds", combatDefinition->riseSeconds }, { "airFireLift", combatDefinition->airFireLift },
+            { "airRecoilDistance", combatDefinition->airRecoilDistance }, { "muzzleHeight", combatDefinition->muzzleHeight },
+            { "projectileSpeed", combatDefinition->projectileSpeed }, { "maxShots", 5 }
+        };
         // IDs are scoped to this dungeon instance and stay stable when changing rooms.
         std::uint64_t nextMonsterId = 1;
         for (auto& [mapId, map] : dungeonWorld["maps"].items())
@@ -35,21 +51,36 @@ namespace GameRoomServer
             {
                 const auto monsterDefinition = definition->monsterDefinitions.at(monster.at("dataId").get<std::uint32_t>());
                 const auto instanceId = nextMonsterId++;
-                monsters.emplace(instanceId, MonsterState{ monsterDefinition, mapId, monster.at("id").get<std::string>(),
-                    monsterDefinition->GetAi().at("initialNodeId").get<std::string>(),
-                    DungeonDefinition::Point(monster.at("position")), monster.at("facingLeft").get<bool>(),
-                    monsterDefinition->maxHp });
+                MonsterState instance;
+                instance.definition = monsterDefinition;
+                instance.mapId = mapId;
+                instance.placementId = monster.at("id").get<std::string>();
+                instance.aiNodeId = monsterDefinition->GetAi().at("initialNodeId").get<std::string>();
+                instance.position = instance.spawnPosition = DungeonDefinition::Point(monster.at("position"));
+                instance.facingLeft = monster.at("facingLeft").get<bool>();
+                instance.actor.hp = monsterDefinition->maxHp;
+                monsters.emplace(instanceId, std::move(instance));
+                monsterIdsByMap[mapId].push_back(instanceId);
                 monster["instanceId"] = instanceId;
                 monster["hp"] = monsterDefinition->maxHp;
                 monster["maxHp"] = monsterDefinition->maxHp;
             }
+        for (const auto& room : definition->configuration.at("rooms"))
+            if (room.at("kind") == "boss")
+                for (const auto& [id, monster] : monsters)
+                    if (monster.mapId == room.at("mapId").get<std::string>()) bosses.insert(id);
         std::size_t slot = 0;
         dungeonWorld["players"] = nlohmann::json::object();
         for (const PlayerId id : inExpectedPlayerIds)
         {
             const auto& spawn = dungeonWorld.at("playerSpawns").at(slot++);
-            players.emplace(id, PlayerState{ dungeonWorld.at("entryMapId").get<std::string>(),
-                DungeonDefinition::Point(spawn) });
+            PlayerState player;
+            player.mapId = dungeonWorld.at("entryMapId").get<std::string>();
+            player.position = DungeonDefinition::Point(spawn);
+            player.walkSpeed = combatDefinition->walkSpeed;
+            player.runSpeed = combatDefinition->runSpeed;
+            player.actor.hp = combatDefinition->playerMaxHp;
+            players.emplace(id, std::move(player));
             dungeonWorld["players"][std::to_string(id)] = spawn;
         }
         const auto snapshot = std::make_shared<const std::string>(dungeonWorld.dump());
@@ -71,12 +102,15 @@ namespace GameRoomServer
         {
             const auto iterator = self->players.find(inPlayerId);
             if (iterator == self->players.end() || !self->enteredPlayers.contains(inPlayerId)
-                || self->state == State::Stopped || self->state == State::Cleared) return;
+                || self->state == State::Stopped || self->state == State::Cleared || self->clearRequested) return;
             auto& player = iterator->second;
             if (inInput.sequence <= player.sequence) return;
             player.sequence = inInput.sequence;
+            player.worldReady = true;
             player.directionX = inInput.directionX;
             player.directionY = inInput.directionY;
+            if (player.shotPhase == ShotPhase::None && player.actor.reaction == Reaction::None
+                && inInput.directionX != 0) player.facingLeft = inInput.directionX < 0;
             player.running = inInput.running != 0;
             player.lastInput = std::chrono::steady_clock::now();
             ActionRPG::DungeonProtocol::DungeonPlayerState packet;
@@ -91,9 +125,12 @@ namespace GameRoomServer
     // Room state is owned by its strand; small movement steps cannot tunnel through walls/gates.
     void GameRoom::UpdatePlayers(const float inDeltaSeconds)
     {
+        if (clearRequested) return;
         for (auto& [id, player] : players)
         {
-            if (!enteredPlayers.contains(id)) continue;
+            if (!enteredPlayers.contains(id) || !player.worldReady) continue;
+            if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
+                || player.shotPhase != ShotPhase::None || player.actor.height > 0 || player.jumpPreparing) continue;
             const auto& map = dungeonWorld.at("maps").at(player.mapId);
             float dx = static_cast<float>(player.directionX), dy = static_cast<float>(player.directionY);
             if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
@@ -128,6 +165,7 @@ namespace GameRoomServer
                         player.mapId = targetMapId;
                         player.position = DungeonDefinition::Point(entry->at("position"));
                         player.warpArmed = false;
+                        player.directionX = player.directionY = 0;
                         break;
                     }
                 }
@@ -286,7 +324,8 @@ namespace GameRoomServer
             {
                 ++self->serverTick;
                 self->UpdatePlayers(0.05f);
-                self->ScheduleTick();
+                self->UpdateCombat(0.05f);
+                if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();
             }
         });
     }

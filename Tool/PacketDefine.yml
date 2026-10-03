@@ -64,3 +64,47 @@ Packet:
         Name: x
       - Type: float
         Name: y
+
+  - Type: RequestPacket
+    PacketName: DungeonActionInput
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::uint8_t
+        Name: action
+      - Type: std::uint8_t
+        Name: facingLeft
+
+  - Type: ReplyPacket
+    PacketName: DungeonActionResult
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::uint8_t
+        Name: accepted
+      - Type: std::uint64_t
+        Name: serverTick
+
+  - Type: RequestPacket
+    PacketName: DungeonCombatStateRequest
+    Items:
+      - Type: std::uint32_t
+        Name: snapshotId
+      - Type: std::uint32_t
+        Name: offset
+
+  - Type: ReplyPacket
+    PacketName: DungeonCombatStateChunk
+    Items:
+      - Type: std::uint32_t
+        Name: snapshotId
+      - Type: std::uint32_t
+        Name: totalBytes
+      - Type: std::uint32_t
+        Name: offset
+      - Type: std::uint8_t
+        Name: status
+      - Type: std::uint32_t
+        Name: retryAfterMs
+      - Type: std::string
+        Name: payload

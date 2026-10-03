@@ -18,6 +18,10 @@ namespace ActionRPG::DungeonProtocol
         DUNGEON_WORLD_CHUNK,
         DUNGEON_MOVE_INPUT,
         DUNGEON_PLAYER_STATE,
+        DUNGEON_ACTION_INPUT,
+        DUNGEON_ACTION_RESULT,
+        DUNGEON_COMBAT_STATE_REQUEST,
+        DUNGEON_COMBAT_STATE_CHUNK,
     };
 
     class DungeonChallenge final : public IPacket
@@ -86,6 +90,56 @@ namespace ActionRPG::DungeonProtocol
         std::string mapId{};
         float x{};
         float y{};
+    };
+
+    class DungeonActionInput final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t sequence{};
+        std::uint8_t action{};
+        std::uint8_t facingLeft{};
+    };
+
+    class DungeonActionResult final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t sequence{};
+        std::uint8_t accepted{};
+        std::uint64_t serverTick{};
+    };
+
+    class DungeonCombatStateRequest final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t snapshotId{};
+        std::uint32_t offset{};
+    };
+
+    class DungeonCombatStateChunk final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t snapshotId{};
+        std::uint32_t totalBytes{};
+        std::uint32_t offset{};
+        std::uint8_t status{};
+        std::uint32_t retryAfterMs{};
+        std::string payload{};
     };
 
     void RegisterPackets();

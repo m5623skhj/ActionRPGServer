@@ -21,6 +21,10 @@ namespace GameRoomServer
             static_cast<::PacketId>(PacketType::DUNGEON_WORLD_REQUEST), &DungeonSession::OnWorldRequest);
         RegisterPacketHandler<DungeonSession, DungeonMoveInput>(
             static_cast<::PacketId>(PacketType::DUNGEON_MOVE_INPUT), &DungeonSession::OnMoveInput);
+        RegisterPacketHandler<DungeonSession, DungeonActionInput>(
+            static_cast<::PacketId>(PacketType::DUNGEON_ACTION_INPUT), &DungeonSession::OnActionInput);
+        RegisterPacketHandler<DungeonSession, DungeonCombatStateRequest>(
+            static_cast<::PacketId>(PacketType::DUNGEON_COMBAT_STATE_REQUEST), &DungeonSession::OnCombatStateRequest);
     }
 
     bool DungeonSession::ConfirmAuthentication(
@@ -45,6 +49,7 @@ namespace GameRoomServer
             gameRoom = inGameRoom;
             initialWorld = world;
             nextWorldOffset = 0;
+            ResetCombatStream();
             ActionRPG::DungeonProtocol::DungeonAuthResult result;
             result.succeeded = 1;
             sent = SendPacket(result);
@@ -71,6 +76,7 @@ namespace GameRoomServer
             gameRoom.reset();
             initialWorld.reset();
             nextWorldOffset = 0;
+            ResetCombatStream();
         }
 
         const std::shared_ptr<RoomManager> manager = roomManager.lock();
@@ -119,6 +125,7 @@ namespace GameRoomServer
         gameRoom.reset();
         initialWorld.reset();
         nextWorldOffset = 0;
+        ResetCombatStream();
     }
 
     // One bounded chunk per request keeps the RUDP pending queue and MTU bounded.
@@ -172,6 +179,161 @@ namespace GameRoomServer
             if (connectedGeneration != inGeneration || GetSessionGeneration() != inGeneration
                 || roomId != inRoomId || playerId != inPlayerId || !IsConnected()) return;
             sent = SendPacket(inPacket);
+        }
+        if (!sent) DoDisconnect(DISCONNECT_REASON::BY_ERROR);
+    }
+
+    // bindingMutex protects every stream field, including callbacks posted by the room strand.
+    void DungeonSession::ResetCombatStream()
+    {
+        combatSnapshot.reset();
+        snapshotId = nextCombatOffset = combatBytesThisSecond = actionsThisSecond = 0;
+        snapshotPending = false;
+        lastSnapshotRequest = combatWindow = actionWindow = {};
+    }
+
+    void DungeonSession::OnActionInput(const ActionRPG::DungeonProtocol::DungeonActionInput& inPacket)
+    {
+        if (inPacket.sequence == 0 || inPacket.action < 1 || inPacket.action > 2 || inPacket.facingLeft > 1) return;
+        std::shared_ptr<GameRoom> room;
+        std::uint32_t generation{};
+        ActionRPG::RoomControlProtocol::RoomId boundRoom{};
+        ActionRPG::RoomControlProtocol::PlayerId boundPlayer{};
+        {
+            std::lock_guard lock(bindingMutex);
+            if (!IsConnected() || connectedGeneration != GetSessionGeneration() || !initialWorld
+                || roomId == 0 || nextWorldOffset != initialWorld->size()) return;
+            const auto now = std::chrono::steady_clock::now();
+            if (now - actionWindow >= std::chrono::seconds(1)) { actionWindow = now; actionsThisSecond = 0; }
+            if (actionsThisSecond >= 20) return;
+            ++actionsThisSecond;
+            room = gameRoom.lock();
+            generation = connectedGeneration;
+            boundRoom = roomId;
+            boundPlayer = playerId;
+        }
+        if (room) room->SubmitAction(boundPlayer, inPacket,
+            [this, generation, boundRoom, boundPlayer](auto packet)
+                { SendActionResult(generation, boundRoom, boundPlayer, std::move(packet)); });
+    }
+
+    void DungeonSession::SendActionResult(std::uint32_t inGeneration,
+        ActionRPG::RoomControlProtocol::RoomId inRoomId, ActionRPG::RoomControlProtocol::PlayerId inPlayerId,
+        ActionRPG::DungeonProtocol::DungeonActionResult inPacket)
+    {
+        bool sent = true;
+        {
+            std::lock_guard lock(bindingMutex);
+            if (connectedGeneration != inGeneration || GetSessionGeneration() != inGeneration
+                || roomId != inRoomId || playerId != inPlayerId || !IsConnected()) return;
+            sent = SendPacket(inPacket);
+        }
+        if (!sent) DoDisconnect(DISCONNECT_REASON::BY_ERROR);
+    }
+
+    // A snapshot is immutable during transfer. Each request queues at most one 768-byte chunk.
+    void DungeonSession::OnCombatStateRequest(const ActionRPG::DungeonProtocol::DungeonCombatStateRequest& inPacket)
+    {
+        std::shared_ptr<GameRoom> room;
+        std::uint32_t generation{};
+        ActionRPG::RoomControlProtocol::RoomId boundRoom{};
+        ActionRPG::RoomControlProtocol::PlayerId boundPlayer{};
+        bool sent = true;
+        {
+            std::lock_guard lock(bindingMutex);
+            if (!IsConnected() || connectedGeneration != GetSessionGeneration() || !initialWorld
+                || roomId == 0 || nextWorldOffset != initialWorld->size()) return;
+            if (inPacket.snapshotId == 0 && inPacket.offset == 0)
+            {
+                const auto now = std::chrono::steady_clock::now();
+                if (snapshotPending || now - lastSnapshotRequest < std::chrono::milliseconds(200))
+                {
+                    ActionRPG::DungeonProtocol::DungeonCombatStateChunk result;
+                    result.status = 1;
+                    result.retryAfterMs = 200;
+                    sent = SendPacket(result);
+                }
+                else
+                {
+                    room = gameRoom.lock();
+                    if (room)
+                    {
+                        snapshotPending = true;
+                        lastSnapshotRequest = now;
+                        generation = connectedGeneration;
+                        boundRoom = roomId;
+                        boundPlayer = playerId;
+                    }
+                    else
+                    {
+                        ActionRPG::DungeonProtocol::DungeonCombatStateChunk result;
+                        result.status = 2;
+                        sent = SendPacket(result);
+                    }
+                }
+            }
+            else if (inPacket.snapshotId != snapshotId || snapshotPending)
+            {
+                ActionRPG::DungeonProtocol::DungeonCombatStateChunk result;
+                result.snapshotId = inPacket.snapshotId;
+                result.offset = inPacket.offset;
+                result.status = 3;
+                sent = SendPacket(result);
+            }
+            else sent = SendNextCombatChunk(inPacket.offset);
+        }
+        if (!sent) DoDisconnect(DISCONNECT_REASON::BY_ERROR);
+        if (room) room->GetCombatSnapshot(boundPlayer,
+            [this, generation, boundRoom, boundPlayer](auto snapshot)
+                { SendCombatChunk(generation, boundRoom, boundPlayer, std::move(snapshot)); });
+    }
+
+    bool DungeonSession::SendNextCombatChunk(std::uint32_t inOffset)
+    {
+        ActionRPG::DungeonProtocol::DungeonCombatStateChunk packet;
+        packet.snapshotId = snapshotId;
+        packet.offset = inOffset;
+        if (!combatSnapshot) packet.status = 2;
+        else
+        {
+            packet.totalBytes = static_cast<std::uint32_t>(combatSnapshot->size());
+            if (inOffset != nextCombatOffset || inOffset >= combatSnapshot->size()) packet.status = 3;
+            else
+            {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - combatWindow >= std::chrono::seconds(1)) { combatWindow = now; combatBytesThisSecond = 0; }
+                const auto payload = combatSnapshot->substr(inOffset, 768);
+                if (combatBytesThisSecond + payload.size() + 32 > 64 * 1024)
+                {
+                    packet.status = 1;
+                    packet.retryAfterMs = 1000;
+                }
+                else packet.payload = payload;
+            }
+        }
+        const bool sent = SendPacket(packet);
+        if (sent && packet.status == 0)
+        {
+            nextCombatOffset += static_cast<std::uint32_t>(packet.payload.size());
+            combatBytesThisSecond += static_cast<std::uint32_t>(packet.payload.size() + 32);
+        }
+        return sent;
+    }
+
+    void DungeonSession::SendCombatChunk(std::uint32_t inGeneration,
+        ActionRPG::RoomControlProtocol::RoomId inRoomId, ActionRPG::RoomControlProtocol::PlayerId inPlayerId,
+        std::shared_ptr<const std::string> inSnapshot)
+    {
+        bool sent = true;
+        {
+            std::lock_guard lock(bindingMutex);
+            if (connectedGeneration != inGeneration || GetSessionGeneration() != inGeneration
+                || roomId != inRoomId || playerId != inPlayerId || !IsConnected() || !snapshotPending) return;
+            snapshotPending = false;
+            combatSnapshot = std::move(inSnapshot);
+            if (++snapshotId == 0) ++snapshotId;
+            nextCombatOffset = 0;
+            sent = SendNextCombatChunk(0);
         }
         if (!sent) DoDisconnect(DISCONNECT_REASON::BY_ERROR);
     }

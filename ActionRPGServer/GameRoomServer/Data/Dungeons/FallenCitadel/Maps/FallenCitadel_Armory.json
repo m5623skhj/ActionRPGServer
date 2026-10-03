@@ -1,0 +1,184 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FallenCitadel_Armory",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1280,
+    "bottom": 720
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 640,
+    "y": 112
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Armory.png",
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Editor_pad.png",
+      "x": 600,
+      "y": 28,
+      "width": 80,
+      "height": 64
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 560,
+        "y": 30
+      },
+      {
+        "x": 720,
+        "y": 30
+      },
+      {
+        "x": 720,
+        "y": 300
+      },
+      {
+        "x": 1240,
+        "y": 300
+      },
+      {
+        "x": 1240,
+        "y": 650
+      },
+      {
+        "x": 40,
+        "y": 650
+      },
+      {
+        "x": 40,
+        "y": 300
+      },
+      {
+        "x": 560,
+        "y": 300
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 540,
+        "y": 0
+      },
+      {
+        "x": 540,
+        "y": 280
+      },
+      {
+        "x": 0,
+        "y": 280
+      }
+    ],
+    [
+      {
+        "x": 740,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 280
+      },
+      {
+        "x": 740,
+        "y": 280
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_north",
+      "position": {
+        "x": 640,
+        "y": 112
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Soldier1",
+      "dataId": 2,
+      "position": {
+        "x": 370,
+        "y": 420
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier2",
+      "dataId": 2,
+      "position": {
+        "x": 790,
+        "y": 430
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier3",
+      "dataId": 2,
+      "position": {
+        "x": 980,
+        "y": 540
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_Courtyard",
+      "polygon": [
+        {
+          "x": 600,
+          "y": 40
+        },
+        {
+          "x": 680,
+          "y": 40
+        },
+        {
+          "x": 680,
+          "y": 80
+        },
+        {
+          "x": 600,
+          "y": 80
+        }
+      ],
+      "connectionId": "Courtyard_Armory",
+      "direction": "north",
+      "visual": {
+        "kind": "pad",
+        "asset": "Images/Dungeons/FallenCitadel_Editor_pad.png",
+        "x": 600,
+        "y": 28,
+        "width": 80,
+        "height": 64
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FallenCitadel_Courtyard",
+        "targetEntryPointId": "Entry_south"
+      }
+    }
+  ]
+}

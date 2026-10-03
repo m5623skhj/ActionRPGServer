@@ -1,0 +1,200 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FallenCitadel_Guardroom",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1280,
+    "bottom": 720
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 112,
+    "y": 460
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Guardroom.png",
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+      "x": 28,
+      "y": 404,
+      "width": 64,
+      "height": 112
+    },
+    {
+      "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+      "x": 1188,
+      "y": 404,
+      "width": 64,
+      "height": 112
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 40,
+        "y": 300
+      },
+      {
+        "x": 1240,
+        "y": 300
+      },
+      {
+        "x": 1240,
+        "y": 650
+      },
+      {
+        "x": 40,
+        "y": 650
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 280
+      },
+      {
+        "x": 0,
+        "y": 280
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_west",
+      "position": {
+        "x": 112,
+        "y": 460
+      }
+    },
+    {
+      "id": "Entry_east",
+      "position": {
+        "x": 1168,
+        "y": 460
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Soldier1",
+      "dataId": 2,
+      "position": {
+        "x": 480,
+        "y": 410
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier2",
+      "dataId": 2,
+      "position": {
+        "x": 720,
+        "y": 520
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier3",
+      "dataId": 2,
+      "position": {
+        "x": 960,
+        "y": 410
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_Entrance",
+      "polygon": [
+        {
+          "x": 40,
+          "y": 400
+        },
+        {
+          "x": 80,
+          "y": 400
+        },
+        {
+          "x": 80,
+          "y": 520
+        },
+        {
+          "x": 40,
+          "y": 520
+        }
+      ],
+      "connectionId": "Entrance_Guardroom",
+      "direction": "west",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+        "x": 28,
+        "y": 404,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FallenCitadel_Entrance",
+        "targetEntryPointId": "Entry_east"
+      }
+    },
+    {
+      "id": "Gate_Courtyard",
+      "polygon": [
+        {
+          "x": 1200,
+          "y": 400
+        },
+        {
+          "x": 1240,
+          "y": 400
+        },
+        {
+          "x": 1240,
+          "y": 520
+        },
+        {
+          "x": 1200,
+          "y": 520
+        }
+      ],
+      "connectionId": "Guardroom_Courtyard",
+      "direction": "east",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
+        "x": 1188,
+        "y": 404,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FallenCitadel_Courtyard",
+        "targetEntryPointId": "Entry_west"
+      }
+    }
+  ]
+}

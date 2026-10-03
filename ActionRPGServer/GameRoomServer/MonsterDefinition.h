@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace GameRoomServer
 {
@@ -24,10 +25,16 @@ namespace GameRoomServer
         [[nodiscard]] const nlohmann::json& GetAi() const;
         [[nodiscard]] const nlohmann::json& GetSkills() const;
         [[nodiscard]] const nlohmann::json& GetMotions() const;
+        [[nodiscard]] const nlohmann::json& GetNode(const std::string& inId) const;
+        [[nodiscard]] const nlohmann::json& GetSkill(const std::string& inId) const;
+        [[nodiscard]] const nlohmann::json& GetMotion(const std::string& inId) const;
+        [[nodiscard]] const std::vector<const nlohmann::json*>& GetOutgoing(const std::string& inId) const;
         [[nodiscard]] static Catalog LoadCatalog(const std::filesystem::path& inPath);
 
     private:
         std::shared_ptr<const nlohmann::json> document;
         std::size_t monsterIndex{};
+        std::unordered_map<std::string, const nlohmann::json*> nodes, skills, motions;
+        std::unordered_map<std::string, std::vector<const nlohmann::json*>> outgoing;
     };
 }

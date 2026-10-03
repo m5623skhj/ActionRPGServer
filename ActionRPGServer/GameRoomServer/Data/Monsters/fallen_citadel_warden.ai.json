@@ -1,7 +1,18 @@
 {
   "schemaVersion": 1,
   "documentId": "FallenCitadelWardenDefinitions",
-  "skills": [],
+  "skills": [
+    {
+      "id": "CitadelWardenSlash",
+      "label": "수호자의 검 베기",
+      "animationId": "attack",
+      "durationSeconds": 0.8,
+      "cooldownSeconds": 1.8,
+      "minRange": 0,
+      "maxRange": 120,
+      "hitType": "Normal"
+    }
+  ],
   "motions": [],
   "monsters": [
     {
@@ -13,23 +24,256 @@
         "nodes": [
           {
             "id": "Idle",
-            "label": "대기",
-            "position": { "x": 70, "y": 130 },
-            "action": { "type": "Wait", "parameters": { "seconds": 1.0 } }
+            "label": "대상 감지 대기",
+            "position": {
+              "x": 70,
+              "y": 130
+            },
+            "action": {
+              "type": "Wait",
+              "parameters": {
+                "seconds": 0.5
+              }
+            }
+          },
+          {
+            "id": "Chase",
+            "label": "대상 추적",
+            "position": {
+              "x": 330,
+              "y": 130
+            },
+            "action": {
+              "type": "MoveToTarget",
+              "parameters": {
+                "stopDistance": 110,
+                "run": false
+              }
+            }
+          },
+          {
+            "id": "Ready",
+            "label": "공격 거리·쿨다운 대기",
+            "position": {
+              "x": 590,
+              "y": 130
+            },
+            "action": {
+              "type": "Wait",
+              "parameters": {
+                "seconds": 0.1
+              }
+            }
+          },
+          {
+            "id": "Attack",
+            "label": "준비 → 근접 타격 → 회수",
+            "position": {
+              "x": 590,
+              "y": 390
+            },
+            "action": {
+              "type": "UseSkill",
+              "parameters": {
+                "skillId": "CitadelWardenSlash"
+              }
+            }
+          },
+          {
+            "id": "Recover",
+            "label": "공격 후 추가 대기",
+            "position": {
+              "x": 330,
+              "y": 390
+            },
+            "action": {
+              "type": "Wait",
+              "parameters": {
+                "seconds": 0.4
+              }
+            }
+          },
+          {
+            "id": "Return",
+            "label": "생성 위치 귀환",
+            "position": {
+              "x": 70,
+              "y": 390
+            },
+            "action": {
+              "type": "ReturnToSpawn",
+              "parameters": {
+                "arrivalDistance": 10
+              }
+            }
           }
         ],
         "edges": [
           {
+            "id": "IdleHasTarget",
+            "from": "Idle",
+            "to": "Chase",
+            "priority": 0,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "HasTarget",
+              "parameters": {}
+            }
+          },
+          {
             "id": "IdleLoop",
             "from": "Idle",
             "to": "Idle",
+            "priority": 1,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ChaseTargetLost",
+            "from": "Chase",
+            "to": "Return",
+            "priority": 0,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "TargetLost",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ChaseArrived",
+            "from": "Chase",
+            "to": "Ready",
+            "priority": 1,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ReadyTargetLost",
+            "from": "Ready",
+            "to": "Return",
+            "priority": 0,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "TargetLost",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ReadyTargetMoved",
+            "from": "Ready",
+            "to": "Chase",
+            "priority": 1,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "TargetOutOfRange",
+              "parameters": {
+                "distance": 120
+              }
+            }
+          },
+          {
+            "id": "ReadyAttack",
+            "from": "Ready",
+            "to": "Attack",
+            "priority": 2,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "All",
+              "children": [
+                {
+                  "type": "TargetInRange",
+                  "parameters": {
+                    "distance": 120
+                  }
+                },
+                {
+                  "type": "SkillReady",
+                  "parameters": {
+                    "skillId": "CitadelWardenSlash"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "ReadyLoop",
+            "from": "Ready",
+            "to": "Ready",
+            "priority": 3,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "AttackFinished",
+            "from": "Attack",
+            "to": "Recover",
             "priority": 0,
             "trigger": "AfterAction",
-            "condition": { "type": "Always", "parameters": {} }
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "RecoverTargetLost",
+            "from": "Recover",
+            "to": "Return",
+            "priority": 0,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "TargetLost",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "RecoverFinished",
+            "from": "Recover",
+            "to": "Chase",
+            "priority": 1,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ReturnHasTarget",
+            "from": "Return",
+            "to": "Chase",
+            "priority": 0,
+            "trigger": "OnUpdate",
+            "condition": {
+              "type": "HasTarget",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "ReturnArrived",
+            "from": "Return",
+            "to": "Idle",
+            "priority": 1,
+            "trigger": "AfterAction",
+            "condition": {
+              "type": "Always",
+              "parameters": {}
+            }
           }
         ]
       }
     }
   ],
-  "approval": { "status": "draft", "validatorVersion": 1, "approvedAt": null }
+  "approval": {
+    "status": "draft",
+    "validatorVersion": 1,
+    "approvedAt": null
+  }
 }
