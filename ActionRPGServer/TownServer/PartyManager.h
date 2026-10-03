@@ -75,6 +75,7 @@ namespace TownServer::Domain
         [[nodiscard]] LeaveResult RemovePlayer(PlayerId inPlayerId);
         [[nodiscard]] Result SetSettings(PlayerId inLeaderPlayerId, std::string inTitle,
             bool inIsPublic);
+        [[nodiscard]] bool SetLeader(PartyId inPartyId, PlayerId inPlayerId);
 
         [[nodiscard]] std::optional<PartyView> GetPartyForPlayer(PlayerId inPlayerId) const;
         [[nodiscard]] std::optional<PartyView> GetParty(PartyId inPartyId) const;

@@ -116,7 +116,7 @@ int main(const int inArgumentCount, char* inArguments[])
             std::make_shared<TownServer::Domain::TownInstance>(
                 ioContext, std::move(townMaps), std::move(dungeonCatalog));
         std::shared_ptr<RoomControlTcpServer> roomControlServer = std::make_shared<RoomControlTcpServer>(
-            ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), roomControlPort), townInstance);
+            ioContext, asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), roomControlPort), townInstance);
         TownClientTcpServer server(
             ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);

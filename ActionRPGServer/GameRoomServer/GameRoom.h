@@ -45,7 +45,8 @@ namespace GameRoomServer
             std::uint64_t inCombatSeed, std::vector<PlayerId> inExpectedPlayerIds,
             std::chrono::milliseconds inEnterTimeout, EmptyHandler inEmptyHandler,
             std::shared_ptr<const DungeonDefinition> inDefinition,
-            std::shared_ptr<const CombatDefinition> inCombatDefinition, EmptyHandler inClearHandler);
+            std::shared_ptr<const CombatDefinition> inCombatDefinition, EmptyHandler inClearHandler,
+            std::function<void(std::vector<PlayerId>)> inStartedHandler);
 
         void Start();
         void Stop();
@@ -204,6 +205,7 @@ namespace GameRoomServer
         std::chrono::milliseconds enterTimeout;
         EmptyHandler emptyHandler;
         EmptyHandler clearHandler;
+        std::function<void(std::vector<PlayerId>)> startedHandler;
         std::vector<ProjectileState> projectiles;
         std::unordered_set<std::uint64_t> bosses;
         std::uint64_t nextProjectileId{ 1 };

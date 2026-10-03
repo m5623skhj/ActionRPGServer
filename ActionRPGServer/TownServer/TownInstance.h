@@ -36,12 +36,15 @@ namespace TownServer::Domain
         void Stop();
         void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
             std::uint32_t inCharacterId);
-        void Leave(std::uint64_t inSessionId);
+        void Leave(std::uint64_t inSessionId,
+            std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId)> inDungeonLeaveHandler);
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
         void ValidateDungeonRequest(std::uint64_t inSessionId, std::string inZoneId,
             std::uint32_t inDungeonId, DungeonRequestHandler inHandler);
         void CompleteDungeonRequest(std::vector<PlayerId> inParticipantPlayerIds,
             ActionRPG::RoomControlProtocol::CreateRoomResult inResult);
+        void ValidateDungeonJoin(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            std::function<void(bool)> inHandler);
         void ValidateDungeonCompletion(std::uint64_t inSessionId,
             ActionRPG::RoomControlProtocol::RoomId inRoomId, DungeonRequestHandler inHandler);
         void CompleteDungeonCompletion(std::vector<PlayerId> inParticipants, bool inRetry,
@@ -55,8 +58,11 @@ namespace TownServer::Domain
         void UpdatePartySettings(std::uint64_t inSessionId, std::string inTitle, bool inIsPublic);
         void RequestPartyDirectoryPage(std::uint64_t inSessionId, std::uint32_t inPage);
         void UnsubscribePartyDirectory(std::uint64_t inSessionId);
-        void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
-        void LeaveDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
+        void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            std::function<void(bool)> inHandler);
+        void LeaveDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            bool inNotify = true);
+        void HandleRoomStarted(ActionRPG::RoomControlProtocol::RoomStarted inRoomStarted);
         void HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded);
 
     private:
@@ -84,6 +90,7 @@ namespace TownServer::Domain
             TownProtocol::Vector2 lastBroadcastPosition;
             bool wasMovingOnLastBroadcast{};
             ActionRPG::RoomControlProtocol::RoomId dungeonRoomId{};
+            ActionRPG::RoomControlProtocol::RoomId reservedDungeonRoomId{};
             std::string activeTransitionZoneId;
         };
 
@@ -106,6 +113,7 @@ namespace TownServer::Domain
             TownProtocol::PartyResultCode inResult);
         void SendEmptyPartySnapshot(PlayerId inPlayerId);
         void BroadcastPartySnapshot(PartyManager::PartyId inPartyId);
+        void RefreshDungeonLeader(ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void SendPartyDirectoryPage(PlayerId inPlayerId, std::uint32_t inPage);
         void NotifyPartyDirectoryChanged();
         [[nodiscard]] bool IsPartyBusy(PartyManager::PartyId inPartyId) const;

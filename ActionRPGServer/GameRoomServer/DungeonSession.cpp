@@ -99,6 +99,14 @@ namespace GameRoomServer
         }
     }
 
+    void DungeonSession::RejectAuthentication(const std::uint64_t inChallenge, const std::uint32_t inExpectedGeneration)
+    {
+        std::lock_guard lock(bindingMutex);
+        if (connectedGeneration == inExpectedGeneration && GetSessionGeneration() == inExpectedGeneration
+            && challenge == inChallenge && roomId == 0 && IsConnected())
+            DoDisconnect(DISCONNECT_REASON::BY_ERROR);
+    }
+
     void DungeonSession::OnDisconnected()
     {
         std::uint64_t disconnectedChallenge{};

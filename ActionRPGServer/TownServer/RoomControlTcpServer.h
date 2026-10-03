@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -33,6 +34,8 @@ namespace TownServer::Network
             std::vector<ActionRPG::RoomControlProtocol::PlayerId> inParticipants, FinishRoomResultHandler inHandler);
         void ConfirmJoin(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge, std::uint32_t inCharacterId);
+        void LeaveRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId);
 
     private:
         struct RoomServerState
@@ -65,6 +68,7 @@ namespace TownServer::Network
         void CloseInvalidSession(const RoomServerState& inState);
 
         std::shared_ptr<Domain::TownInstance> townInstance;
+        const std::string authenticationKey;
         std::unordered_map<std::uint64_t, RoomServerState> roomServers;
         std::unordered_map<ActionRPG::RoomControlProtocol::RoomId, std::uint64_t> roomToServerSession;
         std::unordered_map<ActionRPG::RoomControlProtocol::RoomId,

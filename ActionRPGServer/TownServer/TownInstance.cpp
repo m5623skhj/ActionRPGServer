@@ -123,12 +123,27 @@ namespace TownServer::Domain
         });
     }
 
-    void TownInstance::Leave(const std::uint64_t inSessionId)
+    void TownInstance::Leave(const std::uint64_t inSessionId,
+        std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId)> inDungeonLeaveHandler)
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
-        asio::dispatch(strand, [self, inSessionId]()
+        asio::dispatch(strand, [self, inSessionId, handler = std::move(inDungeonLeaveHandler)]()
         {
+            ActionRPG::RoomControlProtocol::RoomId previousRoomId = 0;
+            const auto session = self->sessionToPlayer.find(inSessionId);
+            if (session != self->sessionToPlayer.end())
+            {
+                const auto player = self->players.find(session->second);
+                if (player != self->players.end() && handler)
+                {
+                    previousRoomId = player->second.dungeonRoomId;
+                    const auto roomId = player->second.dungeonRoomId != 0
+                        ? player->second.dungeonRoomId : player->second.reservedDungeonRoomId;
+                    if (roomId != 0) handler(roomId, session->second);
+                }
+            }
             self->LeaveOnStrand(inSessionId);
+            if (previousRoomId != 0) self->RefreshDungeonLeader(previousRoomId);
         });
     }
 
@@ -165,7 +180,9 @@ namespace TownServer::Domain
             {
                 const PlayerId requestingPlayerId = sessionIterator->second;
                 const auto playerIterator = self->players.find(requestingPlayerId);
-                if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0)
+                if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0
+                    && playerIterator->second.reservedDungeonRoomId == 0
+                    && !self->pendingDungeonPlayers.contains(requestingPlayerId))
                 {
                     const PlayerEntry& entry = playerIterator->second;
                     const TownMap& map = self->maps.at(entry.mapId);
@@ -232,6 +249,7 @@ namespace TownServer::Domain
                 const auto iterator = self->players.find(playerId);
                 if (iterator != self->players.end())
                 {
+                    if (result.succeeded) iterator->second.reservedDungeonRoomId = result.roomId;
                     iterator->second.session->Send(TownProtocol::Encode(response));
                 }
             }
@@ -250,9 +268,12 @@ namespace TownServer::Domain
             {
                 const auto playerId = session->second;
                 const auto party = self->partyManager.GetPartyForPlayer(playerId);
-                if (!party) participants.push_back(playerId);
-                else if (party->leaderPlayerId == playerId)
-                    for (const auto& member : party->members) participants.push_back(member.playerId);
+                const auto player = self->players.find(playerId);
+                // Missing party members stay in town; the room verifies this actual entered set again.
+                if (player != self->players.end() && player->second.dungeonRoomId == inRoomId
+                    && (!party || party->leaderPlayerId == playerId))
+                    for (const auto& [id, entry] : self->players)
+                        if (entry.dungeonRoomId == inRoomId) participants.push_back(id);
             }
             const bool valid = inRoomId != 0 && !participants.empty()
                 && std::all_of(participants.begin(), participants.end(), [self, inRoomId](const auto playerId)
@@ -266,6 +287,18 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::ValidateDungeonJoin(const PlayerId inPlayerId,
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId, std::function<void(bool)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, inRoomId, handler = std::move(inHandler)]()
+        {
+            const auto player = self->players.find(inPlayerId);
+            handler(inRoomId != 0 && player != self->players.end()
+                && player->second.dungeonRoomId == 0 && player->second.reservedDungeonRoomId == inRoomId);
+        });
+    }
+
     // Response precedes town visibility events so clients reset before recreating remote players.
     void TownInstance::CompleteDungeonCompletion(std::vector<PlayerId> inParticipants, const bool inRetry,
         ActionRPG::RoomControlProtocol::FinishRoomResult inResult)
@@ -275,15 +308,24 @@ namespace TownServer::Domain
         {
             const TownProtocol::DungeonCompletionResponse response{result.previousRoomId, result.succeeded,
                 inRetry, result.roomId, result.combatSeed, result.sessionBrokerAddress, result.sessionBrokerPort};
+            std::vector<PlayerId> returningPlayers;
             for (const auto playerId : participants)
             {
                 self->pendingDungeonPlayers.erase(playerId);
                 const auto found = self->players.find(playerId);
                 if (found != self->players.end() && found->second.dungeonRoomId == result.previousRoomId)
+                {
                     found->second.session->Send(TownProtocol::Encode(response));
+                    returningPlayers.push_back(playerId);
+                }
             }
             if (result.succeeded)
-                for (const auto playerId : participants) self->LeaveDungeon(playerId, result.previousRoomId);
+                for (const auto playerId : returningPlayers)
+                {
+                    self->LeaveDungeon(playerId, result.previousRoomId, false);
+                    const auto found = self->players.find(playerId);
+                    if (inRetry && found != self->players.end()) found->second.reservedDungeonRoomId = result.roomId;
+                }
         });
     }
 
@@ -300,7 +342,8 @@ namespace TownServer::Domain
             }
             const PlayerId playerId = sessionIterator->second;
             if (self->pendingDungeonPlayers.contains(playerId)
-                || self->players.at(playerId).dungeonRoomId != 0)
+                || self->players.at(playerId).dungeonRoomId != 0
+                || self->players.at(playerId).reservedDungeonRoomId != 0)
             {
                 self->SendPartyResult(playerId, TownProtocol::PartyOperationType::Create,
                     TownProtocol::PartyResultCode::Busy);
@@ -344,6 +387,8 @@ namespace TownServer::Domain
                 self->partyManager.GetPartyForPlayer(inviterPlayerId);
             if (self->pendingDungeonPlayers.contains(inviterPlayerId)
                 || self->pendingDungeonPlayers.contains(inTargetPlayerId)
+                || self->players.at(inviterPlayerId).reservedDungeonRoomId != 0
+                || self->players.at(inTargetPlayerId).reservedDungeonRoomId != 0
                 || (currentParty.has_value() && self->IsPartyBusy(currentParty->partyId)))
             {
                 self->SendPartyResult(inviterPlayerId, TownProtocol::PartyOperationType::Invite,
@@ -391,6 +436,7 @@ namespace TownServer::Domain
             const std::optional<PartyManager::Invitation> invitation =
                 self->partyManager.GetInvitation(playerId, inInvitationId);
             if (self->pendingDungeonPlayers.contains(playerId)
+                || self->players.at(playerId).reservedDungeonRoomId != 0
                 || (invitation.has_value() && self->IsPartyBusy(invitation->partyId)))
             {
                 self->SendPartyResult(playerId,
@@ -570,40 +616,69 @@ namespace TownServer::Domain
 
     void TownInstance::EnterDungeon(
         const PlayerId inPlayerId,
-        const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId, std::function<void(bool)> inHandler)
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
-        asio::dispatch(strand, [self, inPlayerId, inRoomId]()
+        asio::dispatch(strand, [self, inPlayerId, inRoomId, handler = std::move(inHandler)]()
         {
             const auto iterator = self->players.find(inPlayerId);
-            if (iterator == self->players.end() || iterator->second.dungeonRoomId != 0)
+            if (iterator == self->players.end() || iterator->second.dungeonRoomId != 0
+                || iterator->second.reservedDungeonRoomId != inRoomId)
             {
+                handler(false);
                 return;
             }
             self->HideFromTown(inPlayerId, iterator->second);
             self->partyDirectorySubscribers.erase(inPlayerId);
             iterator->second.dungeonRoomId = inRoomId;
+            iterator->second.reservedDungeonRoomId = 0;
             iterator->second.player.StopMovement();
+            handler(true);
         });
     }
 
     void TownInstance::LeaveDungeon(
         const PlayerId inPlayerId,
-        const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId, const bool inNotify)
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
-        asio::dispatch(strand, [self, inPlayerId, inRoomId]()
+        asio::dispatch(strand, [self, inPlayerId, inRoomId, inNotify]()
         {
             const auto iterator = self->players.find(inPlayerId);
-            if (iterator == self->players.end() || iterator->second.dungeonRoomId != inRoomId)
+            if (iterator == self->players.end()) return;
+            auto& entry = iterator->second;
+            if (entry.reservedDungeonRoomId == inRoomId)
+            {
+                entry.reservedDungeonRoomId = 0;
+                if (inNotify) entry.session->Send(TownProtocol::Encode(TownProtocol::EnterDungeonResponse{}));
+            }
+            if (entry.dungeonRoomId != inRoomId)
             {
                 return;
             }
+            // Reuse the existing successful town-return response, before visibility events.
+            if (inNotify) entry.session->Send(TownProtocol::Encode(
+                TownProtocol::DungeonCompletionResponse{inRoomId, true, false}));
             iterator->second.dungeonRoomId = 0;
             iterator->second.sector = self->GetSector(
                 iterator->second.mapId, iterator->second.player.GetPosition());
             self->AddToSector(inPlayerId, iterator->second.sector);
             self->RefreshVisibility(inPlayerId);
+            // Defer leadership selection until a batch return has removed all participants.
+            asio::post(self->strand, [self, inRoomId]() { self->RefreshDungeonLeader(inRoomId); });
+        });
+    }
+
+    void TownInstance::HandleRoomStarted(ActionRPG::RoomControlProtocol::RoomStarted inRoomStarted)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, started = std::move(inRoomStarted)]()
+        {
+            const std::unordered_set<PlayerId> participants(
+                started.participantPlayerIds.begin(), started.participantPlayerIds.end());
+            for (const auto& [id, entry] : self->players)
+                if (entry.reservedDungeonRoomId == started.roomId && !participants.contains(id))
+                    self->LeaveDungeon(id, started.roomId);
         });
     }
 
@@ -614,8 +689,12 @@ namespace TownServer::Domain
         {
             if (roomEnded.reason != ActionRPG::RoomControlProtocol::RoomEndReason::Cleared)
             {
+                for (const auto& [id, entry] : self->players)
+                    if (entry.dungeonRoomId == roomEnded.roomId || entry.reservedDungeonRoomId == roomEnded.roomId)
+                        self->LeaveDungeon(id, roomEnded.roomId);
                 return;
             }
+            self->RefreshDungeonLeader(roomEnded.roomId);
             for (const PlayerId playerId : roomEnded.rewardPlayerIds)
             {
                 const auto iterator = self->players.find(playerId);
@@ -1119,8 +1198,33 @@ namespace TownServer::Domain
             {
                 const auto player = players.find(inMember.playerId);
                 return pendingDungeonPlayers.contains(inMember.playerId)
-                    || (player != players.end() && player->second.dungeonRoomId != 0);
+                    || (player != players.end() && (player->second.dungeonRoomId != 0
+                        || player->second.reservedDungeonRoomId != 0));
             });
+    }
+
+    // Keep the client-visible party leader eligible to choose for the actual room participants.
+    void TownInstance::RefreshDungeonLeader(const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+    {
+        for (const auto& [id, entry] : players)
+        {
+            if (entry.dungeonRoomId != inRoomId) continue;
+            const auto party = partyManager.GetPartyForPlayer(id);
+            if (!party) continue;
+            const auto leader = players.find(party->leaderPlayerId);
+            if (leader != players.end() && leader->second.dungeonRoomId == inRoomId) continue;
+            for (const auto& member : party->members)
+            {
+                const auto player = players.find(member.playerId);
+                if (player == players.end() || player->second.dungeonRoomId != inRoomId) continue;
+                if (partyManager.SetLeader(party->partyId, member.playerId))
+                {
+                    BroadcastPartySnapshot(party->partyId);
+                    if (party->isPublic) NotifyPartyDirectoryChanged();
+                }
+                break;
+            }
+        }
     }
 
     TownInstance::SectorCoordinate TownInstance::GetSector(const std::string_view inMapId,

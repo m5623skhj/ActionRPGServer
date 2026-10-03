@@ -24,6 +24,12 @@ git -C External/MultiSocketRUDP submodule update --init external/CommonCode
 
 `TownServer` 자체에는 이 서브모듈이 필요하지 않습니다.
 
+두 서버의 제어 채널은 같은 호스트의 loopback 주소로만 연결합니다. 직접 실행할 때는
+양쪽 프로세스에 동일한 무작위 64자리 16진수 `ACTIONRPG_ROOM_CONTROL_KEY` 환경 변수를
+설정해야 합니다. 키가 없거나 형식이 잘못되면 시작을 거절하며, 등록 키가 다르면 연결을
+거절합니다. 키를 소스나 명령 인자에 넣지 않습니다. `RunLocalTest.bat`은 실행마다 키를
+자동 생성해 두 서버에 전달하며 파일에 저장하거나 출력하지 않습니다.
+
 ## TownServer 빌드와 실행
 
 `ActionRPGServer/ActionRPGServer.slnx`를 Visual Studio에서 열고 `Debug | x64` 또는 `Release | x64`로 `TownServer` 프로젝트를 빌드합니다. Debug 솔루션 빌드의 실행 파일은 `ActionRPGServer/x64/Debug/TownServer.exe`입니다.
@@ -73,8 +79,11 @@ artifacts/bin/x64/Debug/GameRoomServer.exe 127.0.0.1 7780 2 1000 4 D:/Config/Roo
 GameRoomServer는 다음 기능을 포함합니다.
 
 - TownServer에 등록하고 생성 요청을 받는 길이 프레임 기반 내부 TCP 채널
-- 룸별 Asio strand, 20Hz 틱, 참가 인원 확정용 30초 입장 제한 시간
+- 룸별 Asio strand, 30Hz 틱과 15Hz 상태 전송, 참가 인원 확정용 30초 입장 제한 시간
 - 참가 예정 인원과 실제 입장 인원의 분리 관리
+- 입장 완료까지 참가자 예약 유지, 미입장·인증 실패·룸 종료 시 예약 해제
+- 실제 룸 참가자 기준 복귀·재도전, 미입장 또는 이탈한 파티장을 대신할 참가자 승계
+- 룸 제어 연결 단절 시 타운 상태 복구와 기존 복귀 응답을 통한 클라이언트 정리
 - RUDP 연결 직후 challenge 발급 및 TownServer TCP 세션을 통한 유저 확인
 - GameRoomServer ID가 포함된 전역 고유 룸 ID와 공유 전투 시드
 - 클리어 순간 남아 있는 유저를 기준으로 한 보상 대상 전달

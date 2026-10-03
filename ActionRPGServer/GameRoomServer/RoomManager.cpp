@@ -54,7 +54,7 @@ namespace GameRoomServer
                 const auto definition = self->definitions.find(request.dungeonId);
                 const std::unordered_set<Protocol::PlayerId> participantIds(
                     request.participantPlayerIds.begin(), request.participantPlayerIds.end());
-                if ((self->rooms.size() >= self->maxRoomCount && !self->rooms.contains(inReplacingRoomId)) || definition == self->definitions.end()
+                if (self->stopped || (self->rooms.size() >= self->maxRoomCount && !self->rooms.contains(inReplacingRoomId)) || definition == self->definitions.end()
                     || request.participantPlayerIds.empty()
                     || participantIds.contains(0) || participantIds.size() != request.participantPlayerIds.size()
                     || request.participantPlayerIds.size() > definition->second->maxPlayers)
@@ -86,6 +86,14 @@ namespace GameRoomServer
                     [weakSelf](const Protocol::RoomId inRoomId)
                     {
                         if (const auto manager = weakSelf.lock()) manager->CompleteDungeon(inRoomId);
+                    }, [weakSelf, roomId](std::vector<Protocol::PlayerId> inPlayers)
+                    {
+                        if (const auto manager = weakSelf.lock())
+                            asio::dispatch(manager->strand, [manager, roomId, players = std::move(inPlayers)]()
+                            {
+                                if (manager->rooms.contains(roomId)) manager->Send(Protocol::Encode(
+                                    Protocol::RoomStarted{roomId, players}));
+                            });
                     });
                 self->rooms.emplace(roomId, room);
                 room->Start();
@@ -159,6 +167,11 @@ namespace GameRoomServer
         const std::shared_ptr<RoomManager> self = shared_from_this();
         asio::dispatch(strand, [self, inChallenge, inSession, inSessionGeneration]()
         {
+            if (self->stopped)
+            {
+                if (inSession) inSession->RejectAuthentication(inChallenge, inSessionGeneration);
+                return;
+            }
             if (inChallenge != 0 && inSession != nullptr)
             {
                 self->pendingSessions[inChallenge] = PendingSession{ inSession, inSessionGeneration };
@@ -175,6 +188,11 @@ namespace GameRoomServer
             const auto roomIterator = self->rooms.find(request.roomId);
             if (pendingIterator == self->pendingSessions.end() || roomIterator == self->rooms.end())
             {
+                if (pendingIterator != self->pendingSessions.end())
+                {
+                    pendingIterator->second.session->RejectAuthentication(request.challenge, pendingIterator->second.generation);
+                    self->pendingSessions.erase(pendingIterator);
+                }
                 return;
             }
 
@@ -274,17 +292,39 @@ namespace GameRoomServer
         });
     }
 
+    // Town disconnects must remove the same member from the authoritative room set.
+    void RoomManager::LeaveRoom(Protocol::LeaveRoom inRequest)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, request = inRequest]()
+        {
+            const auto room = self->rooms.find(request.roomId);
+            if (room == self->rooms.end()) return;
+            room->second->Leave(request.playerId, [self, request](const bool removed, const bool empty)
+            {
+                asio::dispatch(self->strand, [self, request, removed, empty]()
+                {
+                    if (removed) self->Send(Protocol::Encode(request));
+                    if (empty) self->RemoveRoom(request.roomId, true);
+                });
+            });
+        });
+    }
+
     void RoomManager::Stop()
     {
         const std::shared_ptr<RoomManager> self = shared_from_this();
         asio::dispatch(strand, [self]()
         {
+            self->stopped = true;
             for (const auto& [roomId, room] : self->rooms)
             {
                 room->Stop();
             }
             self->rooms.clear();
             self->endedRooms.clear();
+            for (const auto& [challenge, pending] : self->pendingSessions)
+                pending.session->RejectAuthentication(challenge, pending.generation);
             self->pendingSessions.clear();
         });
     }
@@ -306,18 +346,21 @@ namespace GameRoomServer
                     || !inSession->ConfirmAuthentication(
                         inRoomId, inPlayerId, inChallenge, inGeneration, roomIterator->second))
                 {
+                    inSession->RejectAuthentication(inChallenge, inGeneration);
                     if (roomIterator != self->rooms.end() && inRoomAccepted)
                     {
                         const std::weak_ptr<RoomManager> weakSelf = self;
                         roomIterator->second->RemoveUnannouncedPlayer(inPlayerId,
-                            [weakSelf, inRoomId](const bool inRoomEmpty)
+                            [weakSelf, inRoomId, inPlayerId](const bool inRoomEmpty)
                             {
-                                if (inRoomEmpty)
+                                if (const auto manager = weakSelf.lock())
                                 {
-                                    if (const std::shared_ptr<RoomManager> manager = weakSelf.lock())
+                                    asio::dispatch(manager->strand, [manager, inRoomId, inPlayerId, inRoomEmpty]()
                                     {
-                                        manager->RemoveRoom(inRoomId, true);
-                                    }
+                                        if (!manager->rooms.contains(inRoomId)) return;
+                                        manager->Send(Protocol::Encode(Protocol::LeaveRoom{inRoomId, inPlayerId}));
+                                        if (inRoomEmpty) manager->RemoveRoom(inRoomId, true);
+                                    });
                                 }
                             });
                     }

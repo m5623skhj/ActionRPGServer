@@ -173,13 +173,32 @@ mapId가 바뀌면 이전 방의 표시 목록을 교체합니다. 삭제된 탄
   roomId(uint64), combatSeed(uint64), sessionBrokerAddress(string), sessionBrokerPort(uint16).
 
 TownServer는 인증된 요청자의 현재 roomId·파티장·참여자·진행 중 요청을 검사한다.
+방 생성 응답 후에도 참가자 예약을 유지한다. 인증된 EnterRoom에서 예약을 실제 입장으로
+전환하고, RoomStarted(10)의 실제 참가자 목록에 없는 미입장자는 예약을 해제한다.
+RoomStarted는 roomId(uint64), participantPlayerIds(vector<uint64>) 형식이다.
+인증 실패·RoomEnded(Aborted)·제어 연결 종료도 예약을 해제한다. 재도전의 새 방에도
+같은 예약을 적용한다. ConfirmJoin은 해당 플레이어에게 예약된 roomId만 허용한다.
+복귀·재도전 대상은 현재 파티 전체가 아닌 같은 룸에 실제 입장한 유저다. 파티장이
+미입장 또는 이탈한 경우 참여 중인 파티원 중 슬롯 순서가 빠른 유저에게 권한을 넘긴다.
+Town TCP 연결 종료 시 TownServer가 RoomControl LeaveRoom(6)을 요청하고,
+GameRoomServer는 실제 입장 집합에서 제거한 뒤 같은 패킷으로 통지한다.
 GameRoomServer는 실제 Cleared 상태와 입장한 참여자 집합의 일치를 확인한다.
 마을 이동 성공 시 roomId는 0이다. 재도전은 기존 dungeonId로 새 roomId/seed와 전체 전투 상태를 생성한다.
 새 방 생성이 실패하면 기존 클리어 방을 유지한다. 방 한도에 도달해도 기존 방의 교체는 허용한다.
 성공 응답을 모든 참여자에게 먼저 보내고 마을 가시성을 복구한다.
 클라이언트는 기존 RUDP 코어 종료를 비동기로 기다린 뒤 마을 복귀 또는 새 방 인증을 시작한다.
 종료가 끝나기 전에 새 코어를 시작하지 않으며, 대기 중 마을 이벤트를 보관했다가 복귀 후 처리한다.
+룸 중단 또는 제어 연결 단절 시 서버는 기존 DungeonCompletionResponse를
+previousRoomId=중단된 룸, succeeded=true, retry=false, roomId=0으로 먼저 보내고 타운
+가시성을 복구한다. 이 응답은 클리어 성공이 아닌 타운 복귀 성공을 뜻하며, 입장 완료한
+클라이언트는 요청을 보내지 않았더라도 기존 종료·복귀 흐름으로 처리한다.
+입장 대기 중인 유저에는 EnterDungeonResponse(succeeded=false)를 보낸다.
+입장 연결 중에는 기존 RUDP 연결 실패·입장 시간 초과 경로로 클라이언트가 정리한다.
 거절·응답 지연 시 안내와 재선택을 제공한다. 중복 클릭과 이전 roomId 응답은 적용하지 않는다.
 
-패킷이 추가되었으므로 클라이언트·TownServer·GameRoomServer를 함께 빌드/갱신해야 한다.
+RoomControl RegisterRoomServer(1)은 roomServerId(uint64), maxRoomCount(uint32),
+authenticationKey(string) 순서다. 두 서버는 같은 무작위 64자리 16진수
+ACTIONRPG_ROOM_CONTROL_KEY 환경 변수를 사용하며 제어 연결은 loopback에 한정한다.
+이번 리뷰 수정은 RoomControl 내부 패킷을 변경하므로 TownServer·GameRoomServer를 함께
+빌드/갱신해야 한다. Town·Dungeon 클라이언트 패킷 형식은 이번 수정에서 변경하지 않았다.
 이번 변경의 빌드·실행·실제 클리어/복귀/재도전 검증은 수행하지 않았다.

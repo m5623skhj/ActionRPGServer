@@ -21,7 +21,8 @@ namespace GameRoomServer
           connectingSocket(strand),
           roomManager(std::move(inRoomManager)),
           roomServerId(inRoomServerId),
-          maxRoomCount(inMaxRoomCount)
+          maxRoomCount(inMaxRoomCount),
+          authenticationKey(Protocol::LoadAuthenticationKey())
     {
     }
 
@@ -98,6 +99,15 @@ namespace GameRoomServer
             return;
         }
 
+        asio::error_code endpointError;
+        const auto endpoint = connectingSocket.remote_endpoint(endpointError);
+        if (endpointError || !endpoint.address().is_loopback())
+        {
+            asio::error_code ignoredError;
+            connectingSocket.close(ignoredError);
+            HandleClosed();
+            return;
+        }
         connectingSocket.set_option(asio::ip::tcp::no_delay(true));
         const std::weak_ptr<TownControlClient> weakSelf = weak_from_this();
         session = std::make_shared<ActionRPG::Network::TcpSession>(
@@ -118,7 +128,7 @@ namespace GameRoomServer
             }
         });
         session->Start();
-        session->Send(Protocol::Encode(Protocol::RegisterRoomServer{ roomServerId, maxRoomCount }));
+        session->Send(Protocol::Encode(Protocol::RegisterRoomServer{ roomServerId, maxRoomCount, authenticationKey }));
         std::cout << "Connected to TownServer room control channel.\n";
     }
 
@@ -174,6 +184,13 @@ namespace GameRoomServer
             roomManager->ConfirmJoin(*request);
             return;
         }
+        case Protocol::PacketType::LeaveRoom:
+        {
+            const auto request = Protocol::DecodeLeaveRoom(inPacket);
+            if (!request) { session->Stop(); return; }
+            roomManager->LeaveRoom(*request);
+            return;
+        }
         default:
             session->Stop();
             return;
@@ -187,5 +204,6 @@ namespace GameRoomServer
             std::cerr << "TownServer room control channel disconnected.\n";
         }
         session.reset();
+        roomManager->Stop();
     }
 }

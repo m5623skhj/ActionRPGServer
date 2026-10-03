@@ -15,7 +15,8 @@ namespace GameRoomServer
         const std::chrono::milliseconds inEnterTimeout,
         EmptyHandler inEmptyHandler,
         std::shared_ptr<const DungeonDefinition> inDefinition,
-        std::shared_ptr<const CombatDefinition> inCombatDefinition, EmptyHandler inClearHandler)
+        std::shared_ptr<const CombatDefinition> inCombatDefinition, EmptyHandler inClearHandler,
+        std::function<void(std::vector<PlayerId>)> inStartedHandler)
         : strand(asio::make_strand(inIoContext)),
           enterTimer(strand),
           tickTimer(strand),
@@ -27,7 +28,8 @@ namespace GameRoomServer
           expectedPlayers(inExpectedPlayerIds.begin(), inExpectedPlayerIds.end()),
           enterTimeout(inEnterTimeout),
           emptyHandler(std::move(inEmptyHandler)),
-          clearHandler(std::move(inClearHandler))
+          clearHandler(std::move(inClearHandler)),
+          startedHandler(std::move(inStartedHandler))
     {
         dungeonWorld = definition->world;
         dungeonWorld["roomId"] = roomId;
@@ -346,6 +348,7 @@ namespace GameRoomServer
             return;
         }
         state = State::Running;
+        if (startedHandler) startedHandler(std::vector<PlayerId>(enteredPlayers.begin(), enteredPlayers.end()));
         asio::error_code ignoredError;
         enterTimer.cancel(ignoredError);
         nextTickAt = std::chrono::steady_clock::now();

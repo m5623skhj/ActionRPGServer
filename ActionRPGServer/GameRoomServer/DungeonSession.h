@@ -25,6 +25,7 @@ namespace GameRoomServer
         bool ConfirmAuthentication(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge,
             std::uint32_t inExpectedGeneration, std::shared_ptr<GameRoom> inGameRoom);
+        void RejectAuthentication(std::uint64_t inChallenge, std::uint32_t inExpectedGeneration);
 
     private:
         void OnWorldRequest(const ActionRPG::DungeonProtocol::DungeonWorldRequest& inPacket);

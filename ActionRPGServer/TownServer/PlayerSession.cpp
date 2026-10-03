@@ -36,7 +36,10 @@ namespace TownServer::Network
     {
         if (const std::shared_ptr<Domain::TownInstance> town = townInstance.lock())
         {
-            town->Leave(GetSessionId());
+            town->Leave(GetSessionId(), [weakControl = roomControlServer](const auto inRoomId, const auto inPlayerId)
+            {
+                if (const auto control = weakControl.lock()) control->LeaveRoom(inRoomId, inPlayerId);
+            });
         }
     }
 
@@ -117,8 +120,12 @@ namespace TownServer::Network
                 tcpSession->Stop();
                 return;
             }
-            roomControl->ConfirmJoin(request->roomId, authenticatedPlayerId, request->challenge,
-                characterId.load(std::memory_order_acquire));
+            town->ValidateDungeonJoin(authenticatedPlayerId, request->roomId,
+                [roomControl, request = *request, authenticatedPlayerId,
+                    selectedCharacterId = characterId.load(std::memory_order_acquire)](const bool valid)
+                {
+                    if (valid) roomControl->ConfirmJoin(request.roomId, authenticatedPlayerId, request.challenge, selectedCharacterId);
+                });
             return;
         }
         case TownProtocol::PacketType::EnterDungeonRequest:

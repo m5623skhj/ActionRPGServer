@@ -22,7 +22,8 @@ namespace ActionRPG::RoomControlProtocol
         LeaveRoom = 6,
         RoomEnded = 7,
         FinishRoom = 8,
-        FinishRoomResult = 9
+        FinishRoomResult = 9,
+        RoomStarted = 10
     };
 
     enum class RoomEndReason : std::uint8_t
@@ -35,6 +36,7 @@ namespace ActionRPG::RoomControlProtocol
     {
         RoomServerId roomServerId{};
         std::uint32_t maxRoomCount{};
+        std::string authenticationKey;
     };
 
     struct CreateRoom
@@ -100,7 +102,14 @@ namespace ActionRPG::RoomControlProtocol
         std::vector<PlayerId> rewardPlayerIds;
     };
 
+    struct RoomStarted
+    {
+        RoomId roomId{};
+        std::vector<PlayerId> participantPlayerIds;
+    };
+
     [[nodiscard]] std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::string LoadAuthenticationKey();
 
     [[nodiscard]] std::vector<std::uint8_t> Encode(const RegisterRoomServer& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const CreateRoom& inPacket);
@@ -113,6 +122,8 @@ namespace ActionRPG::RoomControlProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterRoom& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const LeaveRoom& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const RoomEnded& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const RoomStarted& inPacket);
+    [[nodiscard]] std::optional<RoomStarted> DecodeRoomStarted(const std::vector<std::uint8_t>& inPacket);
 
     [[nodiscard]] std::optional<RegisterRoomServer> DecodeRegisterRoomServer(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<CreateRoom> DecodeCreateRoom(const std::vector<std::uint8_t>& inPacket);

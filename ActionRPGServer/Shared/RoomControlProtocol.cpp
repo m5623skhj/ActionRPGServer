@@ -1,13 +1,25 @@
 #include "RoomControlProtocol.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
+#include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace
 {
     constexpr std::size_t MAX_PARTICIPANT_COUNT = 64;
     constexpr std::size_t MAX_ADDRESS_LENGTH = 255;
+
+    bool IsAuthenticationKey(const std::string& inKey)
+    {
+        return inKey.size() == 64 && std::all_of(inKey.begin(), inKey.end(), [](const char value)
+        {
+            return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')
+                || (value >= 'A' && value <= 'F');
+        });
+    }
 
     class PacketWriter final
     {
@@ -180,12 +192,26 @@ namespace
 
 namespace ActionRPG::RoomControlProtocol
 {
+    std::string LoadAuthenticationKey()
+    {
+        char* rawKey = nullptr;
+        std::size_t length = 0;
+        const auto error = _dupenv_s(&rawKey, &length, "ACTIONRPG_ROOM_CONTROL_KEY");
+        const std::unique_ptr<char, decltype(&std::free)> keyStorage(rawKey, &std::free);
+        const std::string key = rawKey == nullptr ? std::string{} : std::string(rawKey);
+        if (error != 0 || !IsAuthenticationKey(key))
+        {
+            throw std::runtime_error("Set ACTIONRPG_ROOM_CONTROL_KEY to the same random 64-digit hex key for both servers.");
+        }
+        return key;
+    }
+
     std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket)
     {
         PacketReader reader(inPacket);
         std::uint16_t type{};
         if (!reader.ReadUInt16(type) || type < static_cast<std::uint16_t>(PacketType::RegisterRoomServer)
-            || type > static_cast<std::uint16_t>(PacketType::FinishRoomResult))
+            || type > static_cast<std::uint16_t>(PacketType::RoomStarted))
         {
             return std::nullopt;
         }
@@ -197,6 +223,7 @@ namespace ActionRPG::RoomControlProtocol
         PacketWriter writer(PacketType::RegisterRoomServer);
         writer.WriteUInt64(inPacket.roomServerId);
         writer.WriteUInt32(inPacket.maxRoomCount);
+        writer.WriteString(inPacket.authenticationKey);
         return writer.Finish();
     }
 
@@ -256,6 +283,24 @@ namespace ActionRPG::RoomControlProtocol
         return writer.Finish();
     }
 
+    std::vector<std::uint8_t> Encode(const RoomStarted& inPacket)
+    {
+        PacketWriter writer(PacketType::RoomStarted);
+        writer.WriteUInt64(inPacket.roomId);
+        WritePlayerIds(writer, inPacket.participantPlayerIds);
+        return writer.Finish();
+    }
+
+    std::optional<RoomStarted> DecodeRoomStarted(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        RoomStarted packet;
+        if (!ReadExpectedType(reader, PacketType::RoomStarted) || !reader.ReadUInt64(packet.roomId)
+            || packet.roomId == 0 || !ReadPlayerIds(reader, packet.participantPlayerIds, false) || !reader.Finished())
+            return std::nullopt;
+        return packet;
+    }
+
     std::optional<RegisterRoomServer> DecodeRegisterRoomServer(const std::vector<std::uint8_t>& inPacket)
     {
         PacketReader reader(inPacket);
@@ -263,6 +308,7 @@ namespace ActionRPG::RoomControlProtocol
         if (!ReadExpectedType(reader, PacketType::RegisterRoomServer)
             || !reader.ReadUInt64(packet.roomServerId)
             || !reader.ReadUInt32(packet.maxRoomCount)
+            || !reader.ReadString(packet.authenticationKey) || !IsAuthenticationKey(packet.authenticationKey)
             || packet.roomServerId == 0 || packet.maxRoomCount == 0 || !reader.Finished())
         {
             return std::nullopt;

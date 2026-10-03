@@ -43,6 +43,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Use a fresh shared secret for this launch; never write it to disk or echo it.
+set "ACTIONRPG_ROOM_CONTROL_KEY="
+for /f "delims=" %%K in ('powershell.exe -NoProfile -Command "$bytes = New-Object byte[] 32; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); try { $rng.GetBytes($bytes); [BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant() } finally { $rng.Dispose() }"') do set "ACTIONRPG_ROOM_CONTROL_KEY=%%K"
+if not defined ACTIONRPG_ROOM_CONTROL_KEY (
+    echo [ERROR] Unable to generate the room control authentication key.
+    exit /b 1
+)
+
 echo [1/4] Starting TownServer on 127.0.0.1:%TOWN_PORT%...
 start "TownServer" /D "%TOWN_SERVER_DIR%" cmd.exe /k ""%TOWN_SERVER_EXE%" %TOWN_PORT% %IO_THREADS% %TOWN_CONTROL_PORT%"
 

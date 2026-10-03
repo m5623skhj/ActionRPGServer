@@ -127,7 +127,6 @@ namespace ActionRPG::Network
             return;
         }
 
-        const bool writeInProgress = !sendQueue.empty();
         queuedSendBytes += framedPacket.size();
         sendQueue.push_back(std::move(framedPacket));
 
@@ -139,22 +138,27 @@ namespace ActionRPG::Network
 
     void TcpSession::WriteNext()
     {
-        if (stopped || sendQueue.empty())
+        if (stopped || writeInProgress || sendQueue.empty())
         {
             return;
         }
 
         const std::shared_ptr<TcpSession> self = shared_from_this();
-        asio::async_write(socket, asio::buffer(sendQueue.front()), [self](const asio::error_code& inError, const std::size_t)
+        // Closing the socket cancels I/O but does not end the buffer's lifetime requirement.
+        const auto packet = std::make_shared<std::vector<std::uint8_t>>(std::move(sendQueue.front()));
+        sendQueue.pop_front();
+        writeInProgress = true;
+        asio::async_write(socket, asio::buffer(*packet), [self, packet](const asio::error_code& inError, const std::size_t)
         {
+            if (self->stopped) return;
+            self->writeInProgress = false;
             if (inError)
             {
                 self->Close();
                 return;
             }
 
-            self->queuedSendBytes -= self->sendQueue.front().size();
-            self->sendQueue.pop_front();
+            self->queuedSendBytes -= packet->size();
             self->WriteNext();
         });
     }

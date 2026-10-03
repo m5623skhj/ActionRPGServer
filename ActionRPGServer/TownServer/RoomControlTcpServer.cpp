@@ -17,7 +17,8 @@ namespace TownServer::Network
         const asio::ip::tcp::endpoint& inEndpoint,
         std::shared_ptr<Domain::TownInstance> inTownInstance)
         : TcpAcceptServer(inIoContext, inEndpoint),
-          townInstance(std::move(inTownInstance))
+          townInstance(std::move(inTownInstance)),
+          authenticationKey(Protocol::LoadAuthenticationKey())
     {
     }
 
@@ -121,12 +122,26 @@ namespace TownServer::Network
         roomServers.at(sessionId).session->Start();
     }
 
+    void RoomControlTcpServer::LeaveRoom(const Protocol::RoomId inRoomId, const Protocol::PlayerId inPlayerId)
+    {
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId]()
+        {
+            const auto room = roomToServerSession.find(inRoomId);
+            if (room == roomToServerSession.end()) return;
+            const auto server = roomServers.find(room->second);
+            if (server != roomServers.end()) server->second.session->Send(
+                Protocol::Encode(Protocol::LeaveRoom{inRoomId, inPlayerId}));
+        });
+    }
+
     void RoomControlTcpServer::HandleClosedSession(const std::uint64_t inSessionId)
     {
         for (auto iterator = roomToServerSession.begin(); iterator != roomToServerSession.end();)
         {
             if (iterator->second == inSessionId)
             {
+                townInstance->HandleRoomEnded(Protocol::RoomEnded{
+                    iterator->first, Protocol::RoomEndReason::Aborted, {}});
                 iterator = roomToServerSession.erase(iterator);
             }
             else
@@ -210,7 +225,8 @@ namespace TownServer::Network
                     return inPair.first != inSessionId && inPair.second.registered
                         && inPair.second.roomServerId == packet->roomServerId;
                 });
-            if (!packet.has_value() || state.registered || duplicateId)
+            if (!packet.has_value() || state.registered || duplicateId
+                || packet->authenticationKey != authenticationKey)
             {
                 CloseInvalidSession(state);
                 return;
@@ -283,14 +299,30 @@ namespace TownServer::Network
                 CloseInvalidSession(state);
                 return;
             }
-            townInstance->EnterDungeon(packet->playerId, packet->roomId);
+            townInstance->EnterDungeon(packet->playerId, packet->roomId,
+                [this, roomId = packet->roomId, playerId = packet->playerId](const bool accepted)
+                {
+                    if (!accepted) LeaveRoom(roomId, playerId);
+                });
+            return;
+        }
+        case Protocol::PacketType::RoomStarted:
+        {
+            const auto packet = Protocol::DecodeRoomStarted(inPacket);
+            if (!packet || !roomToServerSession.contains(packet->roomId)
+                || roomToServerSession.at(packet->roomId) != inSessionId)
+            { CloseInvalidSession(state); return; }
+            townInstance->HandleRoomStarted(*packet);
             return;
         }
         case Protocol::PacketType::LeaveRoom:
         {
             const std::optional<Protocol::LeaveRoom> packet = Protocol::DecodeLeaveRoom(inPacket);
-            if (!packet.has_value() || !roomToServerSession.contains(packet->roomId)
-                || roomToServerSession.at(packet->roomId) != inSessionId)
+            if (!packet.has_value())
+            { CloseInvalidSession(state); return; }
+            // A disconnect notification may arrive after a successful finish removed the mapping.
+            if (!roomToServerSession.contains(packet->roomId)) return;
+            if (roomToServerSession.at(packet->roomId) != inSessionId)
             {
                 CloseInvalidSession(state);
                 return;

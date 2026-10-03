@@ -244,6 +244,7 @@ int main(const int inArgumentCount, char* inArguments[])
         }
 
         std::atomic_bool shutdownRequested{};
+        asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
         const auto requestShutdown = [&]()
         {
             if (shutdownRequested.exchange(true))
@@ -252,6 +253,8 @@ int main(const int inArgumentCount, char* inArguments[])
             }
             townControlClient->Stop();
             roomManager->Stop();
+            asio::error_code ignoredError;
+            shutdownSignals.cancel(ignoredError);
             workGuard.reset();
         };
         rudpCore.SetFatalErrorHandler([&ioContext, &requestShutdown](const ServerFatalError&)
@@ -259,7 +262,6 @@ int main(const int inArgumentCount, char* inArguments[])
             asio::post(ioContext, requestShutdown);
         });
 
-        asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
         shutdownSignals.async_wait([&requestShutdown](const asio::error_code& inError, const int)
         {
             if (!inError)

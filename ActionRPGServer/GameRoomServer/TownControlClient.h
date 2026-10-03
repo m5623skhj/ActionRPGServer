@@ -42,6 +42,7 @@ namespace GameRoomServer
         std::shared_ptr<RoomManager> roomManager;
         ActionRPG::RoomControlProtocol::RoomServerId roomServerId;
         std::uint32_t maxRoomCount;
+        const std::string authenticationKey;
         bool stopped{};
     };
 }

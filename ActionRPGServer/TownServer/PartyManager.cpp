@@ -58,6 +58,17 @@ namespace
 
 namespace TownServer::Domain
 {
+    bool PartyManager::SetLeader(const PartyId inPartyId, const PlayerId inPlayerId)
+    {
+        const auto member = playerParties.find(inPlayerId);
+        const auto party = parties.find(inPartyId);
+        if (member == playerParties.end() || member->second != inPartyId || party == parties.end()) return false;
+        if (party->second.leaderPlayerId == inPlayerId) return false;
+        party->second.leaderPlayerId = inPlayerId;
+        CancelInvitations(inPartyId);
+        return true;
+    }
+
     PartyManager::Result PartyManager::Create(const PlayerId inPlayerId,
         std::string inTitle, const bool inIsPublic, PartyId& outPartyId)
     {

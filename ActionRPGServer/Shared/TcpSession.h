@@ -45,6 +45,7 @@ namespace ActionRPG::Network
         std::vector<std::uint8_t> receiveBody;
         std::deque<std::vector<std::uint8_t>> sendQueue;
         std::size_t queuedSendBytes = 0;
+        bool writeInProgress = false;
         bool stopped = false;
     };
 }
