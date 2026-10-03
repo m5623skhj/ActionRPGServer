@@ -365,13 +365,32 @@ namespace GameRoomServer
         {
             const float direction = inPlayer.facingLeft ? -1.0f : 1.0f;
             const float axisScale = inPlayer.airAttack ? 0.70710678f : 1.0f;
-            projectiles.push_back({ nextProjectileId++, inPlayerId, inPlayer.mapId, inPlayer.position,
-                inPlayer.actor.height + combatDefinition->muzzleHeight, direction * axisScale,
-                inPlayer.airAttack ? -axisScale : 0.0f, combatDefinition->projectileRange });
-            auto& spawned = projectiles.back();
-            spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
-            spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
-                combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
+            const float muzzleForward = inPlayer.airAttack
+                ? combatDefinition->airMuzzleForward : combatDefinition->muzzleForward;
+            const float muzzleHeight = inPlayer.airAttack
+                ? combatDefinition->airMuzzleHeight : combatDefinition->muzzleHeight;
+            const DungeonPoint muzzlePosition{ inPlayer.position.x + direction * muzzleForward, inPlayer.position.y };
+
+            // Check the whole ground segment so the muzzle offset cannot spawn a shot beyond a wall.
+            const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+            const int steps = std::max(1, static_cast<int>(std::ceil(muzzleForward / 4)));
+            bool validSpawn = true;
+            for (int step = 0; step <= steps && validSpawn; ++step)
+            {
+                const float ratio = static_cast<float>(step) / steps;
+                validSpawn = DungeonDefinition::Movable(map,
+                    { inPlayer.position.x + direction * muzzleForward * ratio, inPlayer.position.y });
+            }
+            if (validSpawn)
+            {
+                projectiles.push_back({ nextProjectileId++, inPlayerId, inPlayer.mapId, muzzlePosition,
+                    inPlayer.actor.height + muzzleHeight, direction * axisScale,
+                    inPlayer.airAttack ? -axisScale : 0.0f, combatDefinition->projectileRange });
+                auto& spawned = projectiles.back();
+                spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
+                spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
+                    combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
+            }
             --inPlayer.pendingShots;
             ++inPlayer.shotCount;
             if (inPlayer.airAttack)

@@ -34,7 +34,8 @@ namespace GameRoomServer
         std::uint32_t shotDamage{};
         float walkSpeed{}, runSpeed{}, bodyHeight{}, hitRadius{};
         float shotPrepareSeconds{}, shotIntervalSeconds{}, shotRecoverSeconds{};
-        float projectileSpeed{}, projectileRange{}, projectileRadius{}, muzzleHeight{};
+        float projectileSpeed{}, projectileRange{}, projectileRadius{};
+        float muzzleForward{}, muzzleHeight{}, airMuzzleForward{}, airMuzzleHeight{};
         float jumpPrepareSeconds{}, jumpSpeed{}, gravity{}, hitStunSeconds{}, downSeconds{}, riseSeconds{};
         float airFireLift{}, airRecoilDistance{};
         std::unordered_map<std::uint32_t, MonsterCombatProfile> monsters;

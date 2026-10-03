@@ -58,7 +58,8 @@ namespace GameRoomServer
         result->hitRadius = Number(player.at("hitRadius"), 1, 100);
         const auto& shot = player.at("shot");
         Keys(shot, { "damage", "prepareSeconds", "intervalSeconds", "recoverSeconds", "speed", "range",
-            "radius", "muzzleHeight", "airFireLift", "airRecoilDistance" });
+            "radius", "muzzleForward", "muzzleHeight", "airMuzzleForward", "airMuzzleHeight",
+            "airFireLift", "airRecoilDistance" });
         result->shotDamage = Integer(shot.at("damage"), 1, 1000000);
         result->shotPrepareSeconds = Number(shot.at("prepareSeconds"), 0.05, 10);
         result->shotIntervalSeconds = Number(shot.at("intervalSeconds"), 0.05, 10);
@@ -66,7 +67,10 @@ namespace GameRoomServer
         result->projectileSpeed = Number(shot.at("speed"), 1, 5000);
         result->projectileRange = Number(shot.at("range"), 1, 5000);
         result->projectileRadius = Number(shot.at("radius"), 0.1, 100);
-        result->muzzleHeight = Number(shot.at("muzzleHeight"), 0, player.at("bodyHeight").get<double>());
+        result->muzzleForward = Number(shot.at("muzzleForward"), 0, 1000);
+        result->muzzleHeight = Number(shot.at("muzzleHeight"), 0, 1000);
+        result->airMuzzleForward = Number(shot.at("airMuzzleForward"), 0, 1000);
+        result->airMuzzleHeight = Number(shot.at("airMuzzleHeight"), 0, 1000);
         result->airFireLift = Number(shot.at("airFireLift"), 0, 1000);
         result->airRecoilDistance = Number(shot.at("airRecoilDistance"), 0, 100);
         const auto& jump = player.at("jump");
