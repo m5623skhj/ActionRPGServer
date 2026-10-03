@@ -14,9 +14,9 @@
   "reactions": { "hitStunSeconds": 0.25, "downSeconds": 0.5, "riseSeconds": 0.35 },
   "monsters": [
     { "dataId": 1, "walkSpeed": 0, "runSpeed": 0, "detectionRange": 0, "bodyHeight": 96, "hitRadius": 24, "skills": [] },
-    { "dataId": 2, "walkSpeed": 140, "runSpeed": 220, "detectionRange": 600, "bodyHeight": 96, "hitRadius": 24,
+    { "dataId": 2, "walkSpeed": 140, "runSpeed": 220, "detectionRange": 600, "bodyHeight": 200, "hitRadius": 24,
       "skills": [{ "id": "RustedArmorSlash", "damage": 10, "hitSeconds": 0.2857142857142857, "reachHeight": 80 }] },
-    { "dataId": 3, "walkSpeed": 110, "runSpeed": 180, "detectionRange": 800, "bodyHeight": 158, "hitRadius": 36,
+    { "dataId": 3, "walkSpeed": 110, "runSpeed": 180, "detectionRange": 800, "bodyHeight": 330, "hitRadius": 36,
       "skills": [{ "id": "CitadelWardenSlash", "damage": 20, "hitSeconds": 0.4, "reachHeight": 100 }] }
   ]
 }

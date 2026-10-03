@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace GameRoomServer
@@ -14,6 +15,46 @@ namespace GameRoomServer
         constexpr unsigned MAX_TRANSITIONS_PER_TICK = 64;
         constexpr std::size_t MAX_SNAPSHOT_BYTES = 512 * 1024;
         float Distance(DungeonPoint a, DungeonPoint b) { return std::hypot(a.x - b.x, a.y - b.y); }
+
+        /**
+         * Return the first fraction where a segment overlaps both a ground circle and a height interval.
+         * The caller expands the cylinder by the projectile radius; a segment starting inside hits at zero.
+         */
+        std::optional<float> ProjectileHitFraction(DungeonPoint inStart, float inStartHeight,
+            DungeonPoint inEnd, float inEndHeight, DungeonPoint inTarget, float inRadius,
+            float inLower, float inUpper)
+        {
+            const float dx = inEnd.x - inStart.x, dy = inEnd.y - inStart.y;
+            const float ox = inStart.x - inTarget.x, oy = inStart.y - inTarget.y;
+            const double a = static_cast<double>(dx) * dx + static_cast<double>(dy) * dy;
+            const double b = 2 * (static_cast<double>(ox) * dx + static_cast<double>(oy) * dy);
+            const double c = static_cast<double>(ox) * ox + static_cast<double>(oy) * oy
+                - static_cast<double>(inRadius) * inRadius;
+            double first = 0, last = 1;
+            if (a <= 0.000001f) { if (c > 0) return std::nullopt; }
+            else
+            {
+                const double discriminant = b * b - 4 * a * c;
+                if (discriminant < 0) return std::nullopt;
+                const double root = std::sqrt(discriminant);
+                first = std::max(first, (-b - root) / (2 * a));
+                last = std::min(last, (-b + root) / (2 * a));
+            }
+            const float dz = inEndHeight - inStartHeight;
+            if (std::abs(dz) <= 0.000001f)
+            {
+                if (inStartHeight < inLower || inStartHeight > inUpper) return std::nullopt;
+            }
+            else
+            {
+                const double t1 = (static_cast<double>(inLower) - inStartHeight) / dz;
+                const double t2 = (static_cast<double>(inUpper) - inStartHeight) / dz;
+                first = std::max(first, std::min(t1, t2));
+                last = std::min(last, std::max(t1, t2));
+            }
+            if (first > last) return std::nullopt;
+            return static_cast<float>(first);
+        }
     }
 
     const char* GameRoom::ReactionName(Reaction inReaction)
@@ -390,6 +431,32 @@ namespace GameRoomServer
                 spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
                 spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
                     combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
+
+                // Ground shots also cover the forward body-to-muzzle segment, after the wall check above.
+                if (!inPlayer.airAttack)
+                {
+                    const auto mapMonsters = monsterIdsByMap.find(inPlayer.mapId);
+                    std::uint64_t nearestId{};
+                    float nearest = std::numeric_limits<float>::max();
+                    if (mapMonsters != monsterIdsByMap.end()) for (const auto id : mapMonsters->second)
+                    {
+                        const auto& monster = monsters.at(id);
+                        if (monster.actor.hp == 0 || (monster.position.x - inPlayer.position.x) * direction < 0) continue;
+                        const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
+                        const auto along = ProjectileHitFraction(inPlayer.position, spawned.height,
+                            spawned.position, spawned.height, monster.position, profile.hitRadius + spawned.radius,
+                            monster.actor.height - spawned.radius, monster.actor.height + profile.bodyHeight + spawned.radius);
+                        if (along && (*along < nearest || (*along == nearest && id < nearestId)))
+                        { nearest = *along; nearestId = id; }
+                    }
+                    if (nearestId != 0)
+                    {
+                        auto& victim = monsters.at(nearestId);
+                        ApplyDamage(victim.actor, spawned.damage, false);
+                        victim.actionStarted = victim.actionComplete = false;
+                        spawned.remainingDistance = 0;
+                    }
+                }
             }
             --inPlayer.pendingShots;
             ++inPlayer.shotCount;
@@ -442,35 +509,11 @@ namespace GameRoomServer
                     const auto& monster = monsters.at(id);
                     if (monster.actor.hp == 0) continue;
                     const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
-                    const float radius = profile.hitRadius + projectile.radius;
-                    const float dx = projectile.position.x - start.x, dy = projectile.position.y - start.y;
-                    const float ox = start.x - monster.position.x, oy = start.y - monster.position.y;
-                    const double a = static_cast<double>(dx) * dx + static_cast<double>(dy) * dy;
-                    const double b = 2 * (static_cast<double>(ox) * dx + static_cast<double>(oy) * dy);
-                    const double c = static_cast<double>(ox) * ox + static_cast<double>(oy) * oy - static_cast<double>(radius) * radius;
-                    double first = 0, last = 1;
-                    if (a <= 0.000001f) { if (c > 0) continue; }
-                    else
-                    {
-                        const double discriminant = b * b - 4 * a * c;
-                        if (discriminant < 0) continue;
-                        const double root = std::sqrt(discriminant);
-                        first = std::max(first, (-b - root) / (2 * a));
-                        last = std::min(last, (-b + root) / (2 * a));
-                    }
-                    const float dz = projectile.height - startHeight;
-                    const float lower = monster.actor.height - projectile.radius;
-                    const float upper = monster.actor.height + profile.bodyHeight + projectile.radius;
-                    if (std::abs(dz) <= 0.000001f) { if (startHeight < lower || startHeight > upper) continue; }
-                    else
-                    {
-                        const double t1 = (static_cast<double>(lower) - startHeight) / dz;
-                        const double t2 = (static_cast<double>(upper) - startHeight) / dz;
-                        first = std::max(first, std::min(t1, t2)); last = std::min(last, std::max(t1, t2));
-                    }
-                    if (first > last) continue;
-                    const float along = static_cast<float>(first);
-                    if (along < nearest || (along == nearest && id < nearestId)) { nearest = along; nearestId = id; }
+                    const auto along = ProjectileHitFraction(start, startHeight, projectile.position, projectile.height,
+                        monster.position, profile.hitRadius + projectile.radius, monster.actor.height - projectile.radius,
+                        monster.actor.height + profile.bodyHeight + projectile.radius);
+                    if (along && (*along < nearest || (*along == nearest && id < nearestId)))
+                    { nearest = *along; nearestId = id; }
                 }
                 if (nearestId != 0)
                 {
