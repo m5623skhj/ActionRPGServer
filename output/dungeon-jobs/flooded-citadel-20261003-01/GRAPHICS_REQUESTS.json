@@ -1,0 +1,1009 @@
+{
+  "version": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "sourceRequestId": "flooded-citadel-20261003-01-02-design",
+  "sourceRequestRevision": 1,
+  "requirementsRevision": 1,
+  "rulesVersion": "1.0.1",
+  "dispatchOwner": "coordinator",
+  "maxConcurrentGraphicsRequests": 1,
+  "newBackgroundCount": 3,
+  "newBackgroundLimit": 4,
+  "roomBackgrounds": [
+    {
+      "roomId": "Floodgate",
+      "backgroundKey": "causeway"
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "backgroundKey": "causeway"
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "backgroundKey": "courtyard"
+    },
+    {
+      "roomId": "SupplyTerrace",
+      "backgroundKey": "courtyard"
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "backgroundKey": "courtyard"
+    },
+    {
+      "roomId": "DrownedThrone",
+      "backgroundKey": "throne"
+    }
+  ],
+  "requests": [
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-causeway",
+      "revision": 1,
+      "requirementsRevision": 1,
+      "sequence": 1,
+      "status": "specification-only-not-dispatched",
+      "purpose": "성문과 제방길의 공통 배경",
+      "backgroundKey": "causeway",
+      "roomIds": [
+        "Floodgate",
+        "BrokenCauseway"
+      ],
+      "reuseCount": 2,
+      "requestedPixels": {
+        "width": 1280,
+        "height": 720
+      },
+      "designWorld": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "nominalWorldUnitsPerRequestedPixel": {
+        "x": 1,
+        "y": 1
+      },
+      "actualPixels": null,
+      "referenceArtAbsolutePaths": [
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_Courtyard.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_ThroneRoom.png"
+      ],
+      "dryFloorPolygons": [
+        [
+          {
+            "x": 40,
+            "y": 320
+          },
+          {
+            "x": 1240,
+            "y": 320
+          },
+          {
+            "x": 1240,
+            "y": 650
+          },
+          {
+            "x": 40,
+            "y": 650
+          }
+        ]
+      ],
+      "decorativeWaterPolygons": [
+        [
+          {
+            "x": 40,
+            "y": 260
+          },
+          {
+            "x": 460,
+            "y": 260
+          },
+          {
+            "x": 460,
+            "y": 300
+          },
+          {
+            "x": 40,
+            "y": 300
+          }
+        ],
+        [
+          {
+            "x": 820,
+            "y": 260
+          },
+          {
+            "x": 1240,
+            "y": 260
+          },
+          {
+            "x": 1240,
+            "y": 300
+          },
+          {
+            "x": 820,
+            "y": 300
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 670
+          },
+          {
+            "x": 1280,
+            "y": 670
+          },
+          {
+            "x": 1280,
+            "y": 720
+          },
+          {
+            "x": 0,
+            "y": 720
+          }
+        ]
+      ],
+      "blockedRegions": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1280,
+            "y": 0
+          },
+          {
+            "x": 1280,
+            "y": 300
+          },
+          {
+            "x": 0,
+            "y": 300
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 670
+          },
+          {
+            "x": 1280,
+            "y": 670
+          },
+          {
+            "x": 1280,
+            "y": 720
+          },
+          {
+            "x": 0,
+            "y": 720
+          }
+        ]
+      ],
+      "activeExitDirectionsByRoom": [
+        {
+          "roomId": "Floodgate",
+          "directions": [
+            "east"
+          ]
+        },
+        {
+          "roomId": "BrokenCauseway",
+          "directions": [
+            "west",
+            "east"
+          ]
+        }
+      ],
+      "transitionRegions": [
+        {
+          "roomId": "Floodgate",
+          "direction": "east",
+          "polygon": [
+            {
+              "x": 1200,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 540
+            },
+            {
+              "x": 1200,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 1220,
+            "y": 480
+          },
+          "targetRoomId": "BrokenCauseway",
+          "targetEntryPointId": "Entry_west"
+        },
+        {
+          "roomId": "BrokenCauseway",
+          "direction": "west",
+          "polygon": [
+            {
+              "x": 40,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 540
+            },
+            {
+              "x": 40,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 60,
+            "y": 480
+          },
+          "targetRoomId": "Floodgate",
+          "targetEntryPointId": "Entry_east"
+        },
+        {
+          "roomId": "BrokenCauseway",
+          "direction": "east",
+          "polygon": [
+            {
+              "x": 1200,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 540
+            },
+            {
+              "x": 1200,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 1220,
+            "y": 480
+          },
+          "targetRoomId": "ReservoirCourt",
+          "targetEntryPointId": "Entry_west"
+        }
+      ],
+      "monsterFootPositions": [
+        {
+          "roomId": "Floodgate",
+          "positions": []
+        },
+        {
+          "roomId": "BrokenCauseway",
+          "positions": [
+            [
+              480,
+              420
+            ],
+            [
+              750,
+              540
+            ],
+            [
+              1000,
+              430
+            ]
+          ]
+        }
+      ],
+      "decorations": {
+        "allowed": "outside dryFloorPolygons only; north scenery, outer walls, muted banners, reeds on water borders",
+        "forbidden": "water, pillars, rubble, chests, monsters or gates on playable dry floor"
+      },
+      "camera": "fixed oblique 2D belt-scroll view matching source game; no rotated isometric view",
+      "transparency": "opaque full background; no transparent holes",
+      "tileBoundariesRequired": false,
+      "outputAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+      "originalsAbsoluteDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\originals",
+      "deliveryMetadataAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json",
+      "pixelSizePolicy": {
+        "exactSizeGuaranteed": false,
+        "preserveOriginal": true,
+        "reportActualWidthHeight": true,
+        "nextStep": "Before stage 09 reconcile original dimensions and image/world mapping using the existing model; do not report requested size as actual size.",
+        "smallAspectMismatch": "If aspect ratio differs by at most 1%, place original image at the requested world rectangle and record scaleX=requestedWidth/actualWidth and scaleY=requestedHeight/actualHeight; no asset resampling or pixel-file overwrite is needed.",
+        "largeAspectMismatch": "If aspect ratio differs by more than 1%, use uniform placement scale and revise world/dry masks/positions; rederive exit/arrival bands using min(128,axisSize*0.2), then validate. Coordinator must confirm the revised geometry before stage 09."
+      },
+      "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1280 x 720 pixels; actual output resolution must be reported. Purpose: 성문과 제방길의 공통 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":320},{\"x\":1240,\"y\":320},{\"x\":1240,\"y\":650},{\"x\":40,\"y\":650}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":460,\"y\":260},{\"x\":460,\"y\":300},{\"x\":40,\"y\":300}],[{\"x\":820,\"y\":260},{\"x\":1240,\"y\":260},{\"x\":1240,\"y\":300},{\"x\":820,\"y\":300}],[{\"x\":0,\"y\":670},{\"x\":1280,\"y\":670},{\"x\":1280,\"y\":720},{\"x\":0,\"y\":720}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"Floodgate\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"BrokenCauseway\",\"targetEntryPointId\":\"Entry_west\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":420},{\"x\":80,\"y\":420},{\"x\":80,\"y\":540},{\"x\":40,\"y\":540}],\"visualCenter\":{\"x\":60,\"y\":480},\"targetRoomId\":\"Floodgate\",\"targetEntryPointId\":\"Entry_east\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"ReservoirCourt\",\"targetEntryPointId\":\"Entry_west\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. North wall rubble only above y=260 and side edges; playable strip x=40..1240,y=320..650 clear; water below y=670 and selected north pockets only. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.",
+      "completionCriteria": [
+        "actual image file and measured dimensions",
+        "no water or solid scenery in the designated dry floor",
+        "exit/entry rectangles unobstructed",
+        "all reuse rooms can use the same image without extra warp symbols",
+        "original and metadata preserved"
+      ]
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-courtyard",
+      "revision": 1,
+      "requirementsRevision": 1,
+      "sequence": 2,
+      "status": "specification-only-not-dispatched",
+      "purpose": "안뜰·회랑·선택 보급대의 공통 배경",
+      "backgroundKey": "courtyard",
+      "roomIds": [
+        "ReservoirCourt",
+        "SupplyTerrace",
+        "CollapsedGallery"
+      ],
+      "reuseCount": 3,
+      "requestedPixels": {
+        "width": 1280,
+        "height": 720
+      },
+      "designWorld": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "nominalWorldUnitsPerRequestedPixel": {
+        "x": 1,
+        "y": 1
+      },
+      "actualPixels": null,
+      "referenceArtAbsolutePaths": [
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_Courtyard.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_ThroneRoom.png"
+      ],
+      "dryFloorPolygons": [
+        [
+          {
+            "x": 480,
+            "y": 30
+          },
+          {
+            "x": 800,
+            "y": 30
+          },
+          {
+            "x": 1240,
+            "y": 360
+          },
+          {
+            "x": 1240,
+            "y": 700
+          },
+          {
+            "x": 40,
+            "y": 700
+          },
+          {
+            "x": 40,
+            "y": 360
+          }
+        ]
+      ],
+      "decorativeWaterPolygons": [
+        [
+          {
+            "x": 40,
+            "y": 40
+          },
+          {
+            "x": 440,
+            "y": 40
+          },
+          {
+            "x": 40,
+            "y": 340
+          }
+        ],
+        [
+          {
+            "x": 840,
+            "y": 40
+          },
+          {
+            "x": 1240,
+            "y": 40
+          },
+          {
+            "x": 1240,
+            "y": 340
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 702
+          },
+          {
+            "x": 1280,
+            "y": 702
+          },
+          {
+            "x": 1280,
+            "y": 720
+          },
+          {
+            "x": 0,
+            "y": 720
+          }
+        ]
+      ],
+      "blockedRegions": [
+        [
+          {
+            "x": 40,
+            "y": 40
+          },
+          {
+            "x": 440,
+            "y": 40
+          },
+          {
+            "x": 40,
+            "y": 340
+          }
+        ],
+        [
+          {
+            "x": 840,
+            "y": 40
+          },
+          {
+            "x": 1240,
+            "y": 40
+          },
+          {
+            "x": 1240,
+            "y": 340
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 702
+          },
+          {
+            "x": 1280,
+            "y": 702
+          },
+          {
+            "x": 1280,
+            "y": 720
+          },
+          {
+            "x": 0,
+            "y": 720
+          }
+        ]
+      ],
+      "activeExitDirectionsByRoom": [
+        {
+          "roomId": "ReservoirCourt",
+          "directions": [
+            "west",
+            "east",
+            "south"
+          ]
+        },
+        {
+          "roomId": "SupplyTerrace",
+          "directions": [
+            "north"
+          ]
+        },
+        {
+          "roomId": "CollapsedGallery",
+          "directions": [
+            "west",
+            "east"
+          ]
+        }
+      ],
+      "transitionRegions": [
+        {
+          "roomId": "ReservoirCourt",
+          "direction": "west",
+          "polygon": [
+            {
+              "x": 40,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 540
+            },
+            {
+              "x": 40,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 60,
+            "y": 480
+          },
+          "targetRoomId": "BrokenCauseway",
+          "targetEntryPointId": "Entry_east"
+        },
+        {
+          "roomId": "ReservoirCourt",
+          "direction": "east",
+          "polygon": [
+            {
+              "x": 1200,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 540
+            },
+            {
+              "x": 1200,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 1220,
+            "y": 480
+          },
+          "targetRoomId": "CollapsedGallery",
+          "targetEntryPointId": "Entry_west"
+        },
+        {
+          "roomId": "ReservoirCourt",
+          "direction": "south",
+          "polygon": [
+            {
+              "x": 600,
+              "y": 660
+            },
+            {
+              "x": 680,
+              "y": 660
+            },
+            {
+              "x": 680,
+              "y": 700
+            },
+            {
+              "x": 600,
+              "y": 700
+            }
+          ],
+          "visualCenter": {
+            "x": 640,
+            "y": 680
+          },
+          "targetRoomId": "SupplyTerrace",
+          "targetEntryPointId": "Entry_north"
+        },
+        {
+          "roomId": "SupplyTerrace",
+          "direction": "north",
+          "polygon": [
+            {
+              "x": 600,
+              "y": 40
+            },
+            {
+              "x": 680,
+              "y": 40
+            },
+            {
+              "x": 680,
+              "y": 80
+            },
+            {
+              "x": 600,
+              "y": 80
+            }
+          ],
+          "visualCenter": {
+            "x": 640,
+            "y": 60
+          },
+          "targetRoomId": "ReservoirCourt",
+          "targetEntryPointId": "Entry_south"
+        },
+        {
+          "roomId": "CollapsedGallery",
+          "direction": "west",
+          "polygon": [
+            {
+              "x": 40,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 420
+            },
+            {
+              "x": 80,
+              "y": 540
+            },
+            {
+              "x": 40,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 60,
+            "y": 480
+          },
+          "targetRoomId": "ReservoirCourt",
+          "targetEntryPointId": "Entry_east"
+        },
+        {
+          "roomId": "CollapsedGallery",
+          "direction": "east",
+          "polygon": [
+            {
+              "x": 1200,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 420
+            },
+            {
+              "x": 1240,
+              "y": 540
+            },
+            {
+              "x": 1200,
+              "y": 540
+            }
+          ],
+          "visualCenter": {
+            "x": 1220,
+            "y": 480
+          },
+          "targetRoomId": "DrownedThrone",
+          "targetEntryPointId": "Entry_west"
+        }
+      ],
+      "monsterFootPositions": [
+        {
+          "roomId": "ReservoirCourt",
+          "positions": [
+            [
+              360,
+              450
+            ],
+            [
+              500,
+              590
+            ],
+            [
+              750,
+              430
+            ],
+            [
+              920,
+              590
+            ],
+            [
+              1080,
+              470
+            ]
+          ]
+        },
+        {
+          "roomId": "SupplyTerrace",
+          "positions": [
+            [
+              490,
+              460
+            ],
+            [
+              660,
+              550
+            ],
+            [
+              840,
+              460
+            ]
+          ]
+        },
+        {
+          "roomId": "CollapsedGallery",
+          "positions": [
+            [
+              360,
+              460
+            ],
+            [
+              560,
+              590
+            ],
+            [
+              820,
+              440
+            ],
+            [
+              1040,
+              580
+            ]
+          ]
+        }
+      ],
+      "decorations": {
+        "allowed": "outside dryFloorPolygons only; north scenery, outer walls, muted banners, reeds on water borders",
+        "forbidden": "water, pillars, rubble, chests, monsters or gates on playable dry floor"
+      },
+      "camera": "fixed oblique 2D belt-scroll view matching source game; no rotated isometric view",
+      "transparency": "opaque full background; no transparent holes",
+      "tileBoundariesRequired": false,
+      "outputAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+      "originalsAbsoluteDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\originals",
+      "deliveryMetadataAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\GRAPHICS_RESULT.json",
+      "pixelSizePolicy": {
+        "exactSizeGuaranteed": false,
+        "preserveOriginal": true,
+        "reportActualWidthHeight": true,
+        "nextStep": "Before stage 09 reconcile original dimensions and image/world mapping using the existing model; do not report requested size as actual size.",
+        "smallAspectMismatch": "If aspect ratio differs by at most 1%, place original image at the requested world rectangle and record scaleX=requestedWidth/actualWidth and scaleY=requestedHeight/actualHeight; no asset resampling or pixel-file overwrite is needed.",
+        "largeAspectMismatch": "If aspect ratio differs by more than 1%, use uniform placement scale and revise world/dry masks/positions; rederive exit/arrival bands using min(128,axisSize*0.2), then validate. Coordinator must confirm the revised geometry before stage 09."
+      },
+      "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1280 x 720 pixels; actual output resolution must be reported. Purpose: 안뜰·회랑·선택 보급대의 공통 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":480,\"y\":30},{\"x\":800,\"y\":30},{\"x\":1240,\"y\":360},{\"x\":1240,\"y\":700},{\"x\":40,\"y\":700},{\"x\":40,\"y\":360}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":40},{\"x\":440,\"y\":40},{\"x\":40,\"y\":340}],[{\"x\":840,\"y\":40},{\"x\":1240,\"y\":40},{\"x\":1240,\"y\":340}],[{\"x\":0,\"y\":702},{\"x\":1280,\"y\":702},{\"x\":1280,\"y\":720},{\"x\":0,\"y\":720}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"ReservoirCourt\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":420},{\"x\":80,\"y\":420},{\"x\":80,\"y\":540},{\"x\":40,\"y\":540}],\"visualCenter\":{\"x\":60,\"y\":480},\"targetRoomId\":\"BrokenCauseway\",\"targetEntryPointId\":\"Entry_east\"},{\"roomId\":\"ReservoirCourt\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"CollapsedGallery\",\"targetEntryPointId\":\"Entry_west\"},{\"roomId\":\"ReservoirCourt\",\"direction\":\"south\",\"polygon\":[{\"x\":600,\"y\":660},{\"x\":680,\"y\":660},{\"x\":680,\"y\":700},{\"x\":600,\"y\":700}],\"visualCenter\":{\"x\":640,\"y\":680},\"targetRoomId\":\"SupplyTerrace\",\"targetEntryPointId\":\"Entry_north\"},{\"roomId\":\"SupplyTerrace\",\"direction\":\"north\",\"polygon\":[{\"x\":600,\"y\":40},{\"x\":680,\"y\":40},{\"x\":680,\"y\":80},{\"x\":600,\"y\":80}],\"visualCenter\":{\"x\":640,\"y\":60},\"targetRoomId\":\"ReservoirCourt\",\"targetEntryPointId\":\"Entry_south\"},{\"roomId\":\"CollapsedGallery\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":420},{\"x\":80,\"y\":420},{\"x\":80,\"y\":540},{\"x\":40,\"y\":540}],\"visualCenter\":{\"x\":60,\"y\":480},\"targetRoomId\":\"ReservoirCourt\",\"targetEntryPointId\":\"Entry_east\"},{\"roomId\":\"CollapsedGallery\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"DrownedThrone\",\"targetEntryPointId\":\"Entry_west\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. The dry floor is a convex hexagonal apron widening from a 320-pixel-wide north approach to a broad arena; NO thin bridge or inward corners. North scenery and water stay outside that hexagon. The identical background is reused in three rooms, so avoid distinct doors or symbols implying nonexistent graph links. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.",
+      "completionCriteria": [
+        "actual image file and measured dimensions",
+        "no water or solid scenery in the designated dry floor",
+        "exit/entry rectangles unobstructed",
+        "all reuse rooms can use the same image without extra warp symbols",
+        "original and metadata preserved"
+      ]
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-throne",
+      "revision": 1,
+      "requirementsRevision": 1,
+      "sequence": 3,
+      "status": "specification-only-not-dispatched",
+      "purpose": "보스 1마리를 배치하는 침수된 왕좌 배경",
+      "backgroundKey": "throne",
+      "roomIds": [
+        "DrownedThrone"
+      ],
+      "reuseCount": 1,
+      "requestedPixels": {
+        "width": 1600,
+        "height": 900
+      },
+      "designWorld": {
+        "left": 0,
+        "top": 0,
+        "right": 1600,
+        "bottom": 900
+      },
+      "nominalWorldUnitsPerRequestedPixel": {
+        "x": 1,
+        "y": 1
+      },
+      "actualPixels": null,
+      "referenceArtAbsolutePaths": [
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_Courtyard.png",
+        "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_ThroneRoom.png"
+      ],
+      "dryFloorPolygons": [
+        [
+          {
+            "x": 40,
+            "y": 340
+          },
+          {
+            "x": 1560,
+            "y": 340
+          },
+          {
+            "x": 1560,
+            "y": 820
+          },
+          {
+            "x": 40,
+            "y": 820
+          }
+        ]
+      ],
+      "decorativeWaterPolygons": [
+        [
+          {
+            "x": 40,
+            "y": 260
+          },
+          {
+            "x": 430,
+            "y": 260
+          },
+          {
+            "x": 430,
+            "y": 320
+          },
+          {
+            "x": 40,
+            "y": 320
+          }
+        ],
+        [
+          {
+            "x": 1170,
+            "y": 260
+          },
+          {
+            "x": 1560,
+            "y": 260
+          },
+          {
+            "x": 1560,
+            "y": 320
+          },
+          {
+            "x": 1170,
+            "y": 320
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 840
+          },
+          {
+            "x": 1600,
+            "y": 840
+          },
+          {
+            "x": 1600,
+            "y": 900
+          },
+          {
+            "x": 0,
+            "y": 900
+          }
+        ]
+      ],
+      "blockedRegions": [
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1600,
+            "y": 0
+          },
+          {
+            "x": 1600,
+            "y": 320
+          },
+          {
+            "x": 0,
+            "y": 320
+          }
+        ],
+        [
+          {
+            "x": 0,
+            "y": 840
+          },
+          {
+            "x": 1600,
+            "y": 840
+          },
+          {
+            "x": 1600,
+            "y": 900
+          },
+          {
+            "x": 0,
+            "y": 900
+          }
+        ]
+      ],
+      "activeExitDirectionsByRoom": [
+        {
+          "roomId": "DrownedThrone",
+          "directions": [
+            "west"
+          ]
+        }
+      ],
+      "transitionRegions": [
+        {
+          "roomId": "DrownedThrone",
+          "direction": "west",
+          "polygon": [
+            {
+              "x": 40,
+              "y": 510
+            },
+            {
+              "x": 80,
+              "y": 510
+            },
+            {
+              "x": 80,
+              "y": 630
+            },
+            {
+              "x": 40,
+              "y": 630
+            }
+          ],
+          "visualCenter": {
+            "x": 60,
+            "y": 570
+          },
+          "targetRoomId": "CollapsedGallery",
+          "targetEntryPointId": "Entry_east"
+        }
+      ],
+      "monsterFootPositions": [
+        {
+          "roomId": "DrownedThrone",
+          "positions": [
+            [
+              1080,
+              600
+            ]
+          ]
+        }
+      ],
+      "decorations": {
+        "allowed": "outside dryFloorPolygons only; north scenery, outer walls, muted banners, reeds on water borders",
+        "forbidden": "water, pillars, rubble, chests, monsters or gates on playable dry floor"
+      },
+      "camera": "fixed oblique 2D belt-scroll view matching source game; no rotated isometric view",
+      "transparency": "opaque full background; no transparent holes",
+      "tileBoundariesRequired": false,
+      "outputAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+      "originalsAbsoluteDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\originals",
+      "deliveryMetadataAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json",
+      "pixelSizePolicy": {
+        "exactSizeGuaranteed": false,
+        "preserveOriginal": true,
+        "reportActualWidthHeight": true,
+        "nextStep": "Before stage 09 reconcile original dimensions and image/world mapping using the existing model; do not report requested size as actual size.",
+        "smallAspectMismatch": "If aspect ratio differs by at most 1%, place original image at the requested world rectangle and record scaleX=requestedWidth/actualWidth and scaleY=requestedHeight/actualHeight; no asset resampling or pixel-file overwrite is needed.",
+        "largeAspectMismatch": "If aspect ratio differs by more than 1%, use uniform placement scale and revise world/dry masks/positions; rederive exit/arrival bands using min(128,axisSize*0.2), then validate. Coordinator must confirm the revised geometry before stage 09."
+      },
+      "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1600 x 900 pixels; actual output resolution must be reported. Purpose: 보스 1마리를 배치하는 침수된 왕좌 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":340},{\"x\":1560,\"y\":340},{\"x\":1560,\"y\":820},{\"x\":40,\"y\":820}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":430,\"y\":260},{\"x\":430,\"y\":320},{\"x\":40,\"y\":320}],[{\"x\":1170,\"y\":260},{\"x\":1560,\"y\":260},{\"x\":1560,\"y\":320},{\"x\":1170,\"y\":320}],[{\"x\":0,\"y\":840},{\"x\":1600,\"y\":840},{\"x\":1600,\"y\":900},{\"x\":0,\"y\":900}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"DrownedThrone\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":510},{\"x\":80,\"y\":510},{\"x\":80,\"y\":630},{\"x\":40,\"y\":630}],\"visualCenter\":{\"x\":60,\"y\":570},\"targetRoomId\":\"CollapsedGallery\",\"targetEntryPointId\":\"Entry_east\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. Broken throne and drowned royal remnants only in north-side scenery above y=260, leave the arena x=40..1560,y=340..820 clear, boss foot at (1080,600); avoid foreground decoration covering the boss. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.",
+      "completionCriteria": [
+        "actual image file and measured dimensions",
+        "no water or solid scenery in the designated dry floor",
+        "exit/entry rectangles unobstructed",
+        "all reuse rooms can use the same image without extra warp symbols",
+        "original and metadata preserved"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "dungeonId": "FloodedCitadel",
+  "dataId": 6,
+  "rulesVersion": "1.0.1",
+  "requirementsRevision": 1,
+  "requirements": {
+    "name": "침수된 성채",
+    "concept": "물이 고인 폐허와 무너진 성벽",
+    "maxPlayers": 4,
+    "roomCountTarget": 6,
+    "bossesInBossRoom": 1,
+    "reuseMonsterDataIds": [
+      2,
+      3
+    ],
+    "newSkillTypes": false,
+    "target": "editable-project-static-validation-package-install-plan"
+  },
+  "approval": {
+    "humanRequest": "던전 하나 만들어 봐",
+    "humanThemeChoice": "침수된 성채: 물이 고인 폐허와 무너진 성벽",
+    "contentProduction": true,
+    "existingTools": true,
+    "roleRequestsByCoordinator": true,
+    "newRuntimeCode": false,
+    "installation": true,
+    "buildOrPlayTest": false,
+    "commitOrPush": false,
+    "installationFollowup": "사용자의 침수된 성채 진입 불가 수정 요청 및 클라이언트 종료 확인에 따라 누락된 원본/Debug 실행 데이터 설치"
+  },
+  "currentStage": "12",
+  "currentRequestId": "flooded-citadel-20261003-01-13-entry-install-fix",
+  "status": "completed",
+  "requests": [
+    {
+      "requestId": "flooded-citadel-20261003-01-01-requirements",
+      "revision": 1,
+      "stage": "01",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "사용자가 침수된 성채 컨셉 선택"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-02-design",
+      "revision": 1,
+      "stage": "02",
+      "owner": "dungeon",
+      "threadId": "01a0faa6-5ec8-7723-8493-c7be6363780b",
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN.md"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-03-monster-reuse",
+      "revision": 1,
+      "stage": "03",
+      "owner": "monster",
+      "threadId": "01a0fa9f-bdd8-7301-b1b3-3174704ba71d",
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\MONSTER_REUSE_RESULT.json"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-04-skill-reuse",
+      "revision": 1,
+      "stage": "04",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "기존 근접 공격 2종 재사용; 신규 타입/이펙트 없음"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-causeway",
+      "revision": 1,
+      "stage": "05",
+      "owner": "graphics",
+      "threadId": "01a0fa9f-7587-73e2-a85d-be95e68d307f",
+      "status": "completed"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-courtyard",
+      "revision": 1,
+      "stage": "05",
+      "owner": "graphics",
+      "threadId": "01a0fa9f-7587-73e2-a85d-be95e68d307f",
+      "status": "completed"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-05-bg-throne",
+      "revision": 1,
+      "stage": "05",
+      "owner": "graphics",
+      "threadId": "01a0fa9f-7587-73e2-a85d-be95e68d307f",
+      "status": "completed"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-06-server-catalog",
+      "revision": 1,
+      "stage": "06",
+      "owner": "server",
+      "threadId": "01a0fa9f-44e9-7750-bf89-1583ad8f1334",
+      "status": "completed",
+      "output": "output\\dungeon-jobs\\flooded-citadel-20261003-01\\SERVER_REGISTRATION_RESULT.json"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-07-skill-reuse",
+      "revision": 1,
+      "stage": "07",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "현재 양쪽 런타임의 근접 공격 2종과 기존 attack 모션 재사용; 신규 구성/효과 없음"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-08-monster-reuse",
+      "revision": 1,
+      "stage": "08",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "MONSTER_REUSE_RESULT 및 DESIGN_RESULT의 AI/모션/전투 확인 근거로 ID2/3 재사용, 새로운 몬스터 정의 없음"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-09-10-compose-package",
+      "revision": 1,
+      "stage": "09-10",
+      "owner": "dungeon",
+      "threadId": "01a0faa6-5ec8-7723-8493-c7be6363780b",
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DUNGEON_BUILD_RESULT.json"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-11-install-not-requested",
+      "revision": 1,
+      "stage": "11",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "사용자 승인 범위에 설치 미포함; 기존 도구의 설치 계획 12개 신규 파일만 생성, 미설치"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-12-report",
+      "revision": 1,
+      "stage": "12",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "편집 파일·정적 검사·게임용 ZIP·미니맵·설치 계획 완성, 미실시 검증 및 제약 기록"
+    },
+    {
+      "requestId": "flooded-citadel-20261003-01-13-entry-install-fix",
+      "revision": 1,
+      "stage": "11",
+      "owner": "coordinator",
+      "status": "completed",
+      "result": "원본 12파일과 RunLocalTest Debug 실행 폴더 12파일 설치 완료 및 해시 확인",
+      "sourceInstallReport": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\source-install-r1\\REPORT.json",
+      "runtimePlan": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\runtime-plan-r1\\INSTALL_PLAN.json"
+    }
+  ],
+  "artifacts": [
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN.md",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\GRAPHICS_REQUESTS.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN_RESULT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\MONSTER_REUSE_RESULT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\GEOMETRY_APPROVALS.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\SERVER_REGISTRATION_RESULT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\FloodedCitadel.dungeon-project.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\STATIC_CHECKS.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\FloodedCitadel.zip",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\INSTALL_PLAN.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\REPORT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.svg",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DUNGEON_BUILD_RESULT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\REPORT.md",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\INSTALL_FIX_RESULT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\runtime-install-r2\\REPORT.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\.dungeon-installs\\412fb6f0-d45c-486d-bd2c-3803f47a9773\\journal.json"
+  ],
+  "lastCompletedRequestId": "flooded-citadel-20261003-01-13-entry-install-fix",
+  "nextAction": "사용자가 RunLocalTest.bat을 다시 실행하여 새 던전 진입 확인",
+  "updatedAt": "2026-10-03T14:56:37.0595150+00:00",
+  "completion": {
+    "editableProject": true,
+    "staticValidation": true,
+    "packageGenerated": true,
+    "sourceCatalogRegistration": true,
+    "sourceDungeonInstalled": true,
+    "executableDataInstalled": true,
+    "playVerified": false,
+    "gameBuildOrPlayTestPerformed": false,
+    "roomCount": 6,
+    "ordinaryMonsterCount": 15,
+    "bossCount": 1,
+    "zipBytes": 8276902,
+    "resultFile": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DUNGEON_BUILD_RESULT.json"
+  }
+}

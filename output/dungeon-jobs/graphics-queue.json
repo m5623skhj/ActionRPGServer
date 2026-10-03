@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "activeRequestId": null,
+  "updatedAt": "2026-10-03T14:20:19.6274525+00:00",
+  "requests": [
+    {
+      "jobId": "flooded-citadel-20261003-01",
+      "requestId": "flooded-citadel-20261003-01-05-bg-causeway",
+      "revision": 1,
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+      "result": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json"
+    },
+    {
+      "jobId": "flooded-citadel-20261003-01",
+      "requestId": "flooded-citadel-20261003-01-05-bg-courtyard",
+      "revision": 1,
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+      "result": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\GRAPHICS_RESULT.json"
+    },
+    {
+      "jobId": "flooded-citadel-20261003-01",
+      "requestId": "flooded-citadel-20261003-01-05-bg-throne",
+      "revision": 1,
+      "status": "completed",
+      "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+      "result": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json"
+    }
+  ]
+}

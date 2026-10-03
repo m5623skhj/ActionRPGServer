@@ -1,0 +1,186 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FloodedCitadel_DrownedThrone",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1600,
+    "bottom": 900
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 112,
+    "y": 570
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Throne.png",
+      "x": 0,
+      "y": 0,
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+      "x": 28,
+      "y": 514,
+      "width": 64,
+      "height": 112
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 40,
+        "y": 360
+      },
+      {
+        "x": 1560,
+        "y": 360
+      },
+      {
+        "x": 1560,
+        "y": 780
+      },
+      {
+        "x": 40,
+        "y": 780
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1600,
+        "y": 0
+      },
+      {
+        "x": 1600,
+        "y": 360
+      },
+      {
+        "x": 0,
+        "y": 360
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 780
+      },
+      {
+        "x": 1600,
+        "y": 780
+      },
+      {
+        "x": 1600,
+        "y": 900
+      },
+      {
+        "x": 0,
+        "y": 900
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 360
+      },
+      {
+        "x": 40,
+        "y": 360
+      },
+      {
+        "x": 40,
+        "y": 780
+      },
+      {
+        "x": 0,
+        "y": 780
+      }
+    ],
+    [
+      {
+        "x": 1560,
+        "y": 360
+      },
+      {
+        "x": 1600,
+        "y": 360
+      },
+      {
+        "x": 1600,
+        "y": 780
+      },
+      {
+        "x": 1560,
+        "y": 780
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_west",
+      "position": {
+        "x": 112,
+        "y": 570
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Warden1",
+      "dataId": 3,
+      "position": {
+        "x": 1080,
+        "y": 600
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_CollapsedGallery",
+      "polygon": [
+        {
+          "x": 40,
+          "y": 510
+        },
+        {
+          "x": 80,
+          "y": 510
+        },
+        {
+          "x": 80,
+          "y": 630
+        },
+        {
+          "x": 40,
+          "y": 630
+        }
+      ],
+      "connectionId": "CollapsedGallery_DrownedThrone",
+      "direction": "west",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+        "x": 28,
+        "y": 514,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FloodedCitadel_CollapsedGallery",
+        "targetEntryPointId": "Entry_east"
+      }
+    }
+  ]
+}

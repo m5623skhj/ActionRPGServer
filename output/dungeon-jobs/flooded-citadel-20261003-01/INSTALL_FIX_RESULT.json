@@ -1,0 +1,171 @@
+{
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-13-entry-install-fix",
+  "result": "source-and-debug-runtime-installed",
+  "cause": "카탈로그에 ID6만 등록되어 있고 원본 및 Debug 실행 서버에 FloodedCitadel 데이터 누락",
+  "sourceInstallation": {
+    "status": "installed",
+    "changedFiles": 12,
+    "journal": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\.dungeon-installs\\1c292e7f-15f2-4996-844e-fd9aef11d3e5\\journal.json",
+    "restartRequired": false,
+    "playableVerified": false
+  },
+  "sourceInstalledFilesVerified": 12,
+  "runtimePlan": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\runtime-plan-r1\\INSTALL_PLAN.json",
+  "runtimeAttemptReport": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\runtime-install-r1\\REPORT.json",
+  "runtimeInstalled": true,
+  "pendingProcess": null,
+  "runtimeFilesModifiedByFailedAttempt": false,
+  "gameBuildOrPlayTestPerformed": false,
+  "sourceFileChecks": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_Floodgate.json",
+      "expected": "308068223785355fa25a30ff85c02c719a1bfb1b74ac48eb0ca3fca7a18905ef",
+      "actual": "308068223785355fa25a30ff85c02c719a1bfb1b74ac48eb0ca3fca7a18905ef",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_BrokenCauseway.json",
+      "expected": "41fc3a6954660d3d9d7f22da2b7db7998fc3574a49f29ae410b9310dbab62426",
+      "actual": "41fc3a6954660d3d9d7f22da2b7db7998fc3574a49f29ae410b9310dbab62426",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_ReservoirCourt.json",
+      "expected": "d120dd4828516f8946c581d3f5b2187eb90fe6483e379a37681df7a327cc33bf",
+      "actual": "d120dd4828516f8946c581d3f5b2187eb90fe6483e379a37681df7a327cc33bf",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_SupplyTerrace.json",
+      "expected": "40fea680f7ed22deb3e0cbcccba6d7f272b2cc36d74f097f22f6cf36a2427d24",
+      "actual": "40fea680f7ed22deb3e0cbcccba6d7f272b2cc36d74f097f22f6cf36a2427d24",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_CollapsedGallery.json",
+      "expected": "1d8ceb4dc4682015f41379ce9cff25d6d16709add5463f4f9d91c9cb07d4ef0f",
+      "actual": "1d8ceb4dc4682015f41379ce9cff25d6d16709add5463f4f9d91c9cb07d4ef0f",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_DrownedThrone.json",
+      "expected": "3719bade3f78a55858710c0c2923ff03e3baa3836dd9e5218f9413ef6cac3ffe",
+      "actual": "3719bade3f78a55858710c0c2923ff03e3baa3836dd9e5218f9413ef6cac3ffe",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FloodedCitadel_Causeway.png",
+      "expected": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094",
+      "actual": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FloodedCitadel_Courtyard.png",
+      "expected": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e",
+      "actual": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FloodedCitadel_Throne.png",
+      "expected": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5",
+      "actual": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FloodedCitadel_Editor_gate.png",
+      "expected": "040894aada6703ad427db990b97947773aa894f856e1bf06387bc46855ad51a4",
+      "actual": "040894aada6703ad427db990b97947773aa894f856e1bf06387bc46855ad51a4",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FloodedCitadel_Editor_pad.png",
+      "expected": "37afa3c491b5fd054563726704dc84cb28a44e41919661fce69d253453e64ac8",
+      "actual": "37afa3c491b5fd054563726704dc84cb28a44e41919661fce69d253453e64ac8",
+      "match": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FloodedCitadel\\Dungeon.json",
+      "expected": "18d8dffdf1041f11c88241016245360d800f3991f01c8c0640b2c945e6c7b94b",
+      "actual": "18d8dffdf1041f11c88241016245360d800f3991f01c8c0640b2c945e6c7b94b",
+      "match": true
+    }
+  ],
+  "runtimeInstallation": {
+    "status": "installed",
+    "changedFiles": 12,
+    "journal": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\.dungeon-installs\\412fb6f0-d45c-486d-bd2c-3803f47a9773\\journal.json",
+    "restartRequired": true,
+    "playableVerified": false
+  },
+  "runtimeReport": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\runtime-install-r2\\REPORT.json",
+  "runtimeFileChecks": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_Floodgate.json",
+      "match": true,
+      "sha256": "308068223785355fa25a30ff85c02c719a1bfb1b74ac48eb0ca3fca7a18905ef"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_BrokenCauseway.json",
+      "match": true,
+      "sha256": "41fc3a6954660d3d9d7f22da2b7db7998fc3574a49f29ae410b9310dbab62426"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_ReservoirCourt.json",
+      "match": true,
+      "sha256": "d120dd4828516f8946c581d3f5b2187eb90fe6483e379a37681df7a327cc33bf"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_SupplyTerrace.json",
+      "match": true,
+      "sha256": "40fea680f7ed22deb3e0cbcccba6d7f272b2cc36d74f097f22f6cf36a2427d24"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_CollapsedGallery.json",
+      "match": true,
+      "sha256": "1d8ceb4dc4682015f41379ce9cff25d6d16709add5463f4f9d91c9cb07d4ef0f"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Maps\\FloodedCitadel_DrownedThrone.json",
+      "match": true,
+      "sha256": "3719bade3f78a55858710c0c2923ff03e3baa3836dd9e5218f9413ef6cac3ffe"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\Assets\\Images\\Dungeons\\FloodedCitadel_Causeway.png",
+      "match": true,
+      "sha256": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\Assets\\Images\\Dungeons\\FloodedCitadel_Courtyard.png",
+      "match": true,
+      "sha256": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\Assets\\Images\\Dungeons\\FloodedCitadel_Throne.png",
+      "match": true,
+      "sha256": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\Assets\\Images\\Dungeons\\FloodedCitadel_Editor_gate.png",
+      "match": true,
+      "sha256": "040894aada6703ad427db990b97947773aa894f856e1bf06387bc46855ad51a4"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\Assets\\Images\\Dungeons\\FloodedCitadel_Editor_pad.png",
+      "match": true,
+      "sha256": "37afa3c491b5fd054563726704dc84cb28a44e41919661fce69d253453e64ac8"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\artifacts\\bin\\x64\\Debug\\Data\\Dungeons\\FloodedCitadel\\Dungeon.json",
+      "match": true,
+      "sha256": "18d8dffdf1041f11c88241016245360d800f3991f01c8c0640b2c945e6c7b94b"
+    }
+  ],
+  "approvedProcessTermination": {
+    "pid": 20092,
+    "humanApproved": true,
+    "terminated": true,
+    "executablePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\artifacts\\bin\\x64\\Debug\\ActionRPGClient.exe"
+  },
+  "completedAt": "2026-10-03T14:56:37.0380600+00:00"
+}

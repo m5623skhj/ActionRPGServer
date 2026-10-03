@@ -1,0 +1,33 @@
+{
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-03-monster-reuse",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "result": "completed-by-coordinator-after-role-usage-limit",
+  "evidence": "설계 담당의 기존 검사 결과와 몬스터 담당의 2026-10-03 소스 확인 결과를 총괄이 취합",
+  "reusableMonsterDataIds": [
+    2,
+    3
+  ],
+  "skills": [
+    "RustedArmorSlash",
+    "CitadelWardenSlash"
+  ],
+  "newMonsterDataRequired": false,
+  "newSkillTypesRequired": false,
+  "newGraphicsRequired": false,
+  "sourceSupportConfirmed": true,
+  "gameBuildOrPlayTestPerformed": false,
+  "limitations": [
+    "현재 HP100 및 공격/이동 수치는 통합용 임시값",
+    "CharacterHurtRects 프레임별 영역은 런타임 미연결; 기존 bodyHeight/hitRadius 사용",
+    "아이템 드랍 및 장애물 경로 탐색 미구현"
+  ],
+  "evidenceFiles": [
+    "DESIGN_RESULT.json",
+    "ActionRPGServer/GameRoomServer/COMBAT_PROTOCOL.md",
+    "ActionRPGServer/GameRoomServer/Data/Monsters/MonsterCatalog.json"
+  ],
+  "roleInterruption": "usage-limit-before-result-file",
+  "coordinatorDisposition": "기존 검증 결과를 재사용하며 추가 몬스터 수정 없음"
+}

@@ -1,0 +1,479 @@
+{
+  "version": 3,
+  "dataId": 6,
+  "dungeonId": "FloodedCitadel",
+  "name": "침수된 성채",
+  "maxPlayers": 4,
+  "entryRoomId": "Floodgate",
+  "entryMapId": "FloodedCitadel_Floodgate",
+  "rooms": [
+    {
+      "id": "Floodgate",
+      "name": "물막이 성문",
+      "kind": "normal",
+      "mapId": "FloodedCitadel_Floodgate",
+      "mapPath": "Maps/FloodedCitadel_Floodgate.json",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "playerSpawns": [
+        {
+          "id": "Party1",
+          "position": {
+            "x": 240,
+            "y": 420
+          }
+        },
+        {
+          "id": "Party2",
+          "position": {
+            "x": 340,
+            "y": 420
+          }
+        },
+        {
+          "id": "Party3",
+          "position": {
+            "x": 240,
+            "y": 540
+          }
+        },
+        {
+          "id": "Party4",
+          "position": {
+            "x": 340,
+            "y": 540
+          }
+        }
+      ]
+    },
+    {
+      "id": "BrokenCauseway",
+      "name": "무너진 제방길",
+      "kind": "normal",
+      "mapId": "FloodedCitadel_BrokenCauseway",
+      "mapPath": "Maps/FloodedCitadel_BrokenCauseway.json",
+      "layout": {
+        "x": 1,
+        "y": 0
+      },
+      "playerSpawns": []
+    },
+    {
+      "id": "ReservoirCourt",
+      "name": "침수된 중앙 안뜰",
+      "kind": "normal",
+      "mapId": "FloodedCitadel_ReservoirCourt",
+      "mapPath": "Maps/FloodedCitadel_ReservoirCourt.json",
+      "layout": {
+        "x": 2,
+        "y": 0
+      },
+      "playerSpawns": []
+    },
+    {
+      "id": "SupplyTerrace",
+      "name": "버려진 보급대",
+      "kind": "normal",
+      "mapId": "FloodedCitadel_SupplyTerrace",
+      "mapPath": "Maps/FloodedCitadel_SupplyTerrace.json",
+      "layout": {
+        "x": 2,
+        "y": 1
+      },
+      "playerSpawns": []
+    },
+    {
+      "id": "CollapsedGallery",
+      "name": "무너진 성벽 회랑",
+      "kind": "normal",
+      "mapId": "FloodedCitadel_CollapsedGallery",
+      "mapPath": "Maps/FloodedCitadel_CollapsedGallery.json",
+      "layout": {
+        "x": 3,
+        "y": 0
+      },
+      "playerSpawns": []
+    },
+    {
+      "id": "DrownedThrone",
+      "name": "침수된 왕좌",
+      "kind": "boss",
+      "mapId": "FloodedCitadel_DrownedThrone",
+      "mapPath": "Maps/FloodedCitadel_DrownedThrone.json",
+      "layout": {
+        "x": 4,
+        "y": 0
+      },
+      "playerSpawns": []
+    }
+  ],
+  "connections": [
+    {
+      "id": "Floodgate_BrokenCauseway",
+      "fromRoomId": "Floodgate",
+      "toRoomId": "BrokenCauseway",
+      "bidirectional": true,
+      "fromSide": "east",
+      "toSide": "west",
+      "validLayout": true,
+      "fromPort": {
+        "x": 56,
+        "y": 38
+      },
+      "toPort": {
+        "x": 92,
+        "y": 38
+      },
+      "fromStyle": "gate",
+      "toStyle": "gate",
+      "gates": [
+        {
+          "roomId": "Floodgate",
+          "warpId": "Gate_BrokenCauseway",
+          "direction": "east",
+          "style": "gate"
+        },
+        {
+          "roomId": "BrokenCauseway",
+          "warpId": "Gate_Floodgate",
+          "direction": "west",
+          "style": "gate"
+        }
+      ]
+    },
+    {
+      "id": "BrokenCauseway_ReservoirCourt",
+      "fromRoomId": "BrokenCauseway",
+      "toRoomId": "ReservoirCourt",
+      "bidirectional": true,
+      "fromSide": "east",
+      "toSide": "west",
+      "validLayout": true,
+      "fromPort": {
+        "x": 128,
+        "y": 38
+      },
+      "toPort": {
+        "x": 164,
+        "y": 38
+      },
+      "fromStyle": "gate",
+      "toStyle": "gate",
+      "gates": [
+        {
+          "roomId": "BrokenCauseway",
+          "warpId": "Gate_ReservoirCourt",
+          "direction": "east",
+          "style": "gate"
+        },
+        {
+          "roomId": "ReservoirCourt",
+          "warpId": "Gate_BrokenCauseway",
+          "direction": "west",
+          "style": "gate"
+        }
+      ]
+    },
+    {
+      "id": "ReservoirCourt_CollapsedGallery",
+      "fromRoomId": "ReservoirCourt",
+      "toRoomId": "CollapsedGallery",
+      "bidirectional": true,
+      "fromSide": "east",
+      "toSide": "west",
+      "validLayout": true,
+      "fromPort": {
+        "x": 200,
+        "y": 38
+      },
+      "toPort": {
+        "x": 236,
+        "y": 38
+      },
+      "fromStyle": "gate",
+      "toStyle": "gate",
+      "gates": [
+        {
+          "roomId": "ReservoirCourt",
+          "warpId": "Gate_CollapsedGallery",
+          "direction": "east",
+          "style": "gate"
+        },
+        {
+          "roomId": "CollapsedGallery",
+          "warpId": "Gate_ReservoirCourt",
+          "direction": "west",
+          "style": "gate"
+        }
+      ]
+    },
+    {
+      "id": "CollapsedGallery_DrownedThrone",
+      "fromRoomId": "CollapsedGallery",
+      "toRoomId": "DrownedThrone",
+      "bidirectional": true,
+      "fromSide": "east",
+      "toSide": "west",
+      "validLayout": true,
+      "fromPort": {
+        "x": 272,
+        "y": 38
+      },
+      "toPort": {
+        "x": 308,
+        "y": 38
+      },
+      "fromStyle": "gate",
+      "toStyle": "gate",
+      "gates": [
+        {
+          "roomId": "CollapsedGallery",
+          "warpId": "Gate_DrownedThrone",
+          "direction": "east",
+          "style": "gate"
+        },
+        {
+          "roomId": "DrownedThrone",
+          "warpId": "Gate_CollapsedGallery",
+          "direction": "west",
+          "style": "gate"
+        }
+      ]
+    },
+    {
+      "id": "ReservoirCourt_SupplyTerrace",
+      "fromRoomId": "ReservoirCourt",
+      "toRoomId": "SupplyTerrace",
+      "bidirectional": true,
+      "fromSide": "south",
+      "toSide": "north",
+      "validLayout": true,
+      "fromPort": {
+        "x": 182,
+        "y": 56
+      },
+      "toPort": {
+        "x": 182,
+        "y": 92
+      },
+      "fromStyle": "pad",
+      "toStyle": "pad",
+      "gates": [
+        {
+          "roomId": "ReservoirCourt",
+          "warpId": "Gate_SupplyTerrace",
+          "direction": "south",
+          "style": "pad"
+        },
+        {
+          "roomId": "SupplyTerrace",
+          "warpId": "Gate_ReservoirCourt",
+          "direction": "north",
+          "style": "pad"
+        }
+      ]
+    }
+  ],
+  "minimap": {
+    "svg": "Minimap.svg",
+    "png": "Minimap.png",
+    "icons": {
+      "normal": "Icons/normal.png",
+      "boss": "Icons/boss.png"
+    },
+    "width": 364,
+    "height": 148,
+    "scale": 1,
+    "rooms": [
+      {
+        "id": "Floodgate",
+        "name": "물막이 성문",
+        "kind": "normal",
+        "isEntry": true,
+        "x": 20,
+        "y": 20,
+        "width": 36,
+        "height": 36,
+        "icon": "normal",
+        "center": {
+          "x": 38,
+          "y": 38
+        }
+      },
+      {
+        "id": "BrokenCauseway",
+        "name": "무너진 제방길",
+        "kind": "normal",
+        "isEntry": false,
+        "x": 92,
+        "y": 20,
+        "width": 36,
+        "height": 36,
+        "icon": "normal",
+        "center": {
+          "x": 110,
+          "y": 38
+        }
+      },
+      {
+        "id": "ReservoirCourt",
+        "name": "침수된 중앙 안뜰",
+        "kind": "normal",
+        "isEntry": false,
+        "x": 164,
+        "y": 20,
+        "width": 36,
+        "height": 36,
+        "icon": "normal",
+        "center": {
+          "x": 182,
+          "y": 38
+        }
+      },
+      {
+        "id": "SupplyTerrace",
+        "name": "버려진 보급대",
+        "kind": "normal",
+        "isEntry": false,
+        "x": 164,
+        "y": 92,
+        "width": 36,
+        "height": 36,
+        "icon": "normal",
+        "center": {
+          "x": 182,
+          "y": 110
+        }
+      },
+      {
+        "id": "CollapsedGallery",
+        "name": "무너진 성벽 회랑",
+        "kind": "normal",
+        "isEntry": false,
+        "x": 236,
+        "y": 20,
+        "width": 36,
+        "height": 36,
+        "icon": "normal",
+        "center": {
+          "x": 254,
+          "y": 38
+        }
+      },
+      {
+        "id": "DrownedThrone",
+        "name": "침수된 왕좌",
+        "kind": "boss",
+        "isEntry": false,
+        "x": 308,
+        "y": 20,
+        "width": 36,
+        "height": 36,
+        "icon": "boss",
+        "center": {
+          "x": 326,
+          "y": 38
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "Floodgate_BrokenCauseway",
+        "fromRoomId": "Floodgate",
+        "toRoomId": "BrokenCauseway",
+        "bidirectional": true,
+        "fromSide": "east",
+        "toSide": "west",
+        "validLayout": true,
+        "fromPort": {
+          "x": 56,
+          "y": 38
+        },
+        "toPort": {
+          "x": 92,
+          "y": 38
+        },
+        "fromStyle": "gate",
+        "toStyle": "gate"
+      },
+      {
+        "id": "BrokenCauseway_ReservoirCourt",
+        "fromRoomId": "BrokenCauseway",
+        "toRoomId": "ReservoirCourt",
+        "bidirectional": true,
+        "fromSide": "east",
+        "toSide": "west",
+        "validLayout": true,
+        "fromPort": {
+          "x": 128,
+          "y": 38
+        },
+        "toPort": {
+          "x": 164,
+          "y": 38
+        },
+        "fromStyle": "gate",
+        "toStyle": "gate"
+      },
+      {
+        "id": "ReservoirCourt_CollapsedGallery",
+        "fromRoomId": "ReservoirCourt",
+        "toRoomId": "CollapsedGallery",
+        "bidirectional": true,
+        "fromSide": "east",
+        "toSide": "west",
+        "validLayout": true,
+        "fromPort": {
+          "x": 200,
+          "y": 38
+        },
+        "toPort": {
+          "x": 236,
+          "y": 38
+        },
+        "fromStyle": "gate",
+        "toStyle": "gate"
+      },
+      {
+        "id": "CollapsedGallery_DrownedThrone",
+        "fromRoomId": "CollapsedGallery",
+        "toRoomId": "DrownedThrone",
+        "bidirectional": true,
+        "fromSide": "east",
+        "toSide": "west",
+        "validLayout": true,
+        "fromPort": {
+          "x": 272,
+          "y": 38
+        },
+        "toPort": {
+          "x": 308,
+          "y": 38
+        },
+        "fromStyle": "gate",
+        "toStyle": "gate"
+      },
+      {
+        "id": "ReservoirCourt_SupplyTerrace",
+        "fromRoomId": "ReservoirCourt",
+        "toRoomId": "SupplyTerrace",
+        "bidirectional": true,
+        "fromSide": "south",
+        "toSide": "north",
+        "validLayout": true,
+        "fromPort": {
+          "x": 182,
+          "y": 56
+        },
+        "toPort": {
+          "x": 182,
+          "y": 92
+        },
+        "fromStyle": "pad",
+        "toStyle": "pad"
+      }
+    ]
+  }
+}

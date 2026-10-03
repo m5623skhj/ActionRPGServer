@@ -1,0 +1,254 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FloodedCitadel_BrokenCauseway",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1280,
+    "bottom": 720
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 112,
+    "y": 480
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Causeway.png",
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+      "x": 28,
+      "y": 424,
+      "width": 64,
+      "height": 112
+    },
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+      "x": 1188,
+      "y": 424,
+      "width": 64,
+      "height": 112
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 40,
+        "y": 330
+      },
+      {
+        "x": 1240,
+        "y": 330
+      },
+      {
+        "x": 1240,
+        "y": 625
+      },
+      {
+        "x": 40,
+        "y": 625
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 330
+      },
+      {
+        "x": 0,
+        "y": 330
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 625
+      },
+      {
+        "x": 1280,
+        "y": 625
+      },
+      {
+        "x": 1280,
+        "y": 720
+      },
+      {
+        "x": 0,
+        "y": 720
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 330
+      },
+      {
+        "x": 40,
+        "y": 330
+      },
+      {
+        "x": 40,
+        "y": 625
+      },
+      {
+        "x": 0,
+        "y": 625
+      }
+    ],
+    [
+      {
+        "x": 1240,
+        "y": 330
+      },
+      {
+        "x": 1280,
+        "y": 330
+      },
+      {
+        "x": 1280,
+        "y": 625
+      },
+      {
+        "x": 1240,
+        "y": 625
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_west",
+      "position": {
+        "x": 112,
+        "y": 480
+      }
+    },
+    {
+      "id": "Entry_east",
+      "position": {
+        "x": 1168,
+        "y": 480
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Soldier1",
+      "dataId": 2,
+      "position": {
+        "x": 480,
+        "y": 420
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier2",
+      "dataId": 2,
+      "position": {
+        "x": 750,
+        "y": 540
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier3",
+      "dataId": 2,
+      "position": {
+        "x": 1000,
+        "y": 430
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_Floodgate",
+      "polygon": [
+        {
+          "x": 40,
+          "y": 420
+        },
+        {
+          "x": 80,
+          "y": 420
+        },
+        {
+          "x": 80,
+          "y": 540
+        },
+        {
+          "x": 40,
+          "y": 540
+        }
+      ],
+      "connectionId": "Floodgate_BrokenCauseway",
+      "direction": "west",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+        "x": 28,
+        "y": 424,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FloodedCitadel_Floodgate",
+        "targetEntryPointId": "Entry_east"
+      }
+    },
+    {
+      "id": "Gate_ReservoirCourt",
+      "polygon": [
+        {
+          "x": 1200,
+          "y": 420
+        },
+        {
+          "x": 1240,
+          "y": 420
+        },
+        {
+          "x": 1240,
+          "y": 540
+        },
+        {
+          "x": 1200,
+          "y": 540
+        }
+      ],
+      "connectionId": "BrokenCauseway_ReservoirCourt",
+      "direction": "east",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+        "x": 1188,
+        "y": 424,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FloodedCitadel_ReservoirCourt",
+        "targetEntryPointId": "Entry_west"
+      }
+    }
+  ]
+}

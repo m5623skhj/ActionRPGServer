@@ -1,0 +1,549 @@
+{
+  "schemaVersion": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-09-10-compose-package",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "rulesVersion": "1.0.1",
+  "status": "passed",
+  "stage": "09",
+  "checkedAt": "2026-10-03T14:33:28.341Z",
+  "validationTool": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\model.js",
+  "parsePassed": true,
+  "modelIssues": [],
+  "counts": {
+    "roomCount": 6,
+    "connectionCount": 5,
+    "warpZoneCount": 10,
+    "ordinary": 15,
+    "bosses": 1,
+    "dummies": 0,
+    "bossRooms": 1
+  },
+  "bossRoomOnly": true,
+  "designPositionsAndConnectionsPreserved": true,
+  "footEllipseRadii": {
+    "x": 32,
+    "y": 18
+  },
+  "footChecks": [
+    {
+      "roomId": "Floodgate",
+      "id": "Party1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "Floodgate",
+      "id": "Party2",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "Floodgate",
+      "id": "Party3",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "Floodgate",
+      "id": "Party4",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "Floodgate",
+      "id": "Entry_east",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "id": "Soldier1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "id": "Soldier2",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "id": "Soldier3",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "id": "Entry_west",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "BrokenCauseway",
+      "id": "Entry_east",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Soldier1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Soldier2",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Soldier3",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Soldier4",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Soldier5",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Entry_west",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Entry_east",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "ReservoirCourt",
+      "id": "Entry_south",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "SupplyTerrace",
+      "id": "Soldier1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "SupplyTerrace",
+      "id": "Soldier2",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "SupplyTerrace",
+      "id": "Soldier3",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "SupplyTerrace",
+      "id": "Entry_north",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Soldier1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Soldier2",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Soldier3",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Soldier4",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Entry_west",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "CollapsedGallery",
+      "id": "Entry_east",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "DrownedThrone",
+      "id": "Warden1",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    },
+    {
+      "roomId": "DrownedThrone",
+      "id": "Entry_west",
+      "centerFitsFootEllipse": true,
+      "footEllipseFitsAtNineCentersWithin8WorldUnits": true
+    }
+  ],
+  "imageChecks": [
+    {
+      "key": "causeway",
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+      "metadataPath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094",
+      "nativePixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "opaque": true,
+      "assetResampled": false,
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "worldUnitsPerImagePixel": {
+        "x": 0.7655502392344498,
+        "y": 0.7651434643995749
+      },
+      "roomIds": [
+        "Floodgate",
+        "BrokenCauseway"
+      ]
+    },
+    {
+      "key": "courtyard",
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+      "metadataPath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e",
+      "nativePixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "opaque": true,
+      "assetResampled": false,
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "worldUnitsPerImagePixel": {
+        "x": 0.7655502392344498,
+        "y": 0.7651434643995749
+      },
+      "roomIds": [
+        "ReservoirCourt",
+        "SupplyTerrace",
+        "CollapsedGallery"
+      ]
+    },
+    {
+      "key": "throne",
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+      "metadataPath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5",
+      "nativePixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "opaque": true,
+      "assetResampled": false,
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1600,
+        "bottom": 900
+      },
+      "worldUnitsPerImagePixel": {
+        "x": 0.9569377990430622,
+        "y": 0.9564293304994687
+      },
+      "roomIds": [
+        "DrownedThrone"
+      ]
+    }
+  ],
+  "inputHashes": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN_RESULT.json",
+      "sha256": "e3dc2fc3c588c0fff846ca76585d13427124820f63e32d31ce10ad581053720d"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\GEOMETRY_APPROVALS.json",
+      "sha256": "429b396657a7c0ffb74a8c85927f26b40bc9bee53a8ef9b03b7f6efa8f669c50"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\MONSTER_REUSE_RESULT.json",
+      "sha256": "2e2b6c81bffb0756741e709805bdc74ae16f1a566a367cd76b4bb73d3d80da05"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\SERVER_REGISTRATION_RESULT.json",
+      "sha256": "bef8588567c650bcd549cbaaade9f195a91926bbca2633a41fa8ec249d5130f5"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\job.json",
+      "sha256": "de52a619b47548aa0c1abc47ad7b4a5d71e86b3ed454141a0368425d9443f2dc"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\REPORT.md",
+      "sha256": "f89ccc93c129231e56cc4a49deb1df7fdfd84483d16e4a37cb9ae7ab7b0b8c28"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\docs\\workflows\\DUNGEON_CREATION.md",
+      "sha256": "9e7f09edd81239580c0280424731db69462dae46c95f6d7b030fed73af7347e7"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+      "sha256": "dda6b619cb72a9b029938d233282d467816eda47501cd577c14da7cd29e1bd47"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\model.js",
+      "sha256": "fc04429caa98055ae9d9d2fa8b1fce712c8e342abefc4f35a476cf8017382587"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+      "sha256": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "d270872b8cb7c0e115c9c7a9273be87083e7719e218f0a75d2474dd2207af640"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+      "sha256": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "8d75dc75bbd11feedaa2ba59b8fcfb2877222137deb068b3380222c7614a3819"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+      "sha256": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "a48acb9946f78ea3e403a81041c1bb6cbe329dc7a096eedf88057da15ad5f844"
+    }
+  ],
+  "blockedRegionPolicy": "Complement of coordinator-approved dry-floor polygons within each world; conservative exclusion, not pixel segmentation.",
+  "notPerformed": [
+    "Installation",
+    "Client/server build",
+    "Game execution or functional tests",
+    "Git stage/commit/push"
+  ],
+  "project": {
+    "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\FloodedCitadel.dungeon-project.json",
+    "sha256": "db24c8bebd717c7643146da3414d6e8e3fd375ef413f94caf6852a4786c24a8d",
+    "schemaVersion": 3
+  },
+  "packageArchiveChecks": {
+    "status": "passed",
+    "zipCrcVerified": true,
+    "entryCount": 19,
+    "entries": [
+      "Dungeon.json",
+      "Minimap.svg",
+      "Icons/normal.svg",
+      "Icons/boss.svg",
+      "Maps/FloodedCitadel_Floodgate.json",
+      "Maps/FloodedCitadel_BrokenCauseway.json",
+      "Maps/FloodedCitadel_ReservoirCourt.json",
+      "Maps/FloodedCitadel_SupplyTerrace.json",
+      "Maps/FloodedCitadel_CollapsedGallery.json",
+      "Maps/FloodedCitadel_DrownedThrone.json",
+      "Assets/Images/Dungeons/FloodedCitadel_Causeway.png",
+      "Assets/Images/Dungeons/FloodedCitadel_Courtyard.png",
+      "Assets/Images/Dungeons/FloodedCitadel_Throne.png",
+      "Minimap.png",
+      "Icons/normal.png",
+      "Icons/boss.png",
+      "Assets/Images/Dungeons/FloodedCitadel_Editor_gate.png",
+      "Assets/Images/Dungeons/FloodedCitadel_Editor_pad.png",
+      "Assets/Images/Monsters/dummy.png"
+    ],
+    "jsonCount": 7,
+    "pngCount": 9,
+    "jsonParsed": true,
+    "pngDecoded": true,
+    "koreanNamesPreserved": true,
+    "nativeBackgroundBytesPreserved": true,
+    "previewArtifacts": [
+      {
+        "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.png",
+        "sha256": "ebddbe0c8d91da40df267ca8ae3ac69c3c2a2d436bea365837edb4b9590f01c5",
+        "bytes": 2158
+      },
+      {
+        "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.svg",
+        "sha256": "ac829965838b1391ef1bdc4e5d3b9d37a5a641b3b13f3db8035a60782536c4d8",
+        "bytes": 2899
+      }
+    ],
+    "minimapPixels": {
+      "width": 364,
+      "height": 148
+    },
+    "editorFallbackDummyImageIncluded": true,
+    "dummyImageNote": "Existing tool bundles its fallback dummy PNG; this is an image resource, not a placed monster."
+  },
+  "inputIntegrityAfterPackaging": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN_RESULT.json",
+      "sha256": "e3dc2fc3c588c0fff846ca76585d13427124820f63e32d31ce10ad581053720d",
+      "currentSha256": "e3dc2fc3c588c0fff846ca76585d13427124820f63e32d31ce10ad581053720d",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\GEOMETRY_APPROVALS.json",
+      "sha256": "429b396657a7c0ffb74a8c85927f26b40bc9bee53a8ef9b03b7f6efa8f669c50",
+      "currentSha256": "429b396657a7c0ffb74a8c85927f26b40bc9bee53a8ef9b03b7f6efa8f669c50",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\MONSTER_REUSE_RESULT.json",
+      "sha256": "2e2b6c81bffb0756741e709805bdc74ae16f1a566a367cd76b4bb73d3d80da05",
+      "currentSha256": "2e2b6c81bffb0756741e709805bdc74ae16f1a566a367cd76b4bb73d3d80da05",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\SERVER_REGISTRATION_RESULT.json",
+      "sha256": "bef8588567c650bcd549cbaaade9f195a91926bbca2633a41fa8ec249d5130f5",
+      "currentSha256": "bef8588567c650bcd549cbaaade9f195a91926bbca2633a41fa8ec249d5130f5",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\job.json",
+      "sha256": "de52a619b47548aa0c1abc47ad7b4a5d71e86b3ed454141a0368425d9443f2dc",
+      "currentSha256": "de52a619b47548aa0c1abc47ad7b4a5d71e86b3ed454141a0368425d9443f2dc",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\REPORT.md",
+      "sha256": "f89ccc93c129231e56cc4a49deb1df7fdfd84483d16e4a37cb9ae7ab7b0b8c28",
+      "currentSha256": "f89ccc93c129231e56cc4a49deb1df7fdfd84483d16e4a37cb9ae7ab7b0b8c28",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\docs\\workflows\\DUNGEON_CREATION.md",
+      "sha256": "9e7f09edd81239580c0280424731db69462dae46c95f6d7b030fed73af7347e7",
+      "currentSha256": "9e7f09edd81239580c0280424731db69462dae46c95f6d7b030fed73af7347e7",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+      "sha256": "dda6b619cb72a9b029938d233282d467816eda47501cd577c14da7cd29e1bd47",
+      "currentSha256": "dda6b619cb72a9b029938d233282d467816eda47501cd577c14da7cd29e1bd47",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\model.js",
+      "sha256": "fc04429caa98055ae9d9d2fa8b1fce712c8e342abefc4f35a476cf8017382587",
+      "currentSha256": "fc04429caa98055ae9d9d2fa8b1fce712c8e342abefc4f35a476cf8017382587",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+      "sha256": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094",
+      "currentSha256": "b0d4bb76f51f28e4046c23b7019f3f1d7d3bd119691d1ea1bf91c3b0ccac3094",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "d270872b8cb7c0e115c9c7a9273be87083e7719e218f0a75d2474dd2207af640",
+      "currentSha256": "d270872b8cb7c0e115c9c7a9273be87083e7719e218f0a75d2474dd2207af640",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Courtyard.png",
+      "sha256": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e",
+      "currentSha256": "a92360a012dd7c7a188611e6c7c402e210c00d030c9d18f6ba4209976835258e",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\courtyard\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "8d75dc75bbd11feedaa2ba59b8fcfb2877222137deb068b3380222c7614a3819",
+      "currentSha256": "8d75dc75bbd11feedaa2ba59b8fcfb2877222137deb068b3380222c7614a3819",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+      "sha256": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5",
+      "currentSha256": "74de31283326b46963e943a49f034cd5d3a76173f0dffa1b91b96138a6bba9d5",
+      "unchanged": true
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json",
+      "sha256": "a48acb9946f78ea3e403a81041c1bb6cbe329dc7a096eedf88057da15ad5f844",
+      "currentSha256": "a48acb9946f78ea3e403a81041c1bb6cbe329dc7a096eedf88057da15ad5f844",
+      "unchanged": true
+    }
+  ],
+  "packageToolChecks": {
+    "status": "package-generated",
+    "tool": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\tools\\dungeon-package.cjs",
+    "modelIssues": [],
+    "dependencyWarnings": [],
+    "dependencies": [
+      {
+        "dataId": 2,
+        "monsterId": "rusted_armor_soldier",
+        "definitionFile": "rusted_armor_soldier.ai.json",
+        "previewImage": "Images/Monsters/rusted_armor_soldier_idle.png",
+        "motions": [
+          "move",
+          "hit",
+          "airborne",
+          "attack",
+          "death"
+        ]
+      },
+      {
+        "dataId": 3,
+        "monsterId": "fallen_citadel_warden",
+        "definitionFile": "fallen_citadel_warden.ai.json",
+        "previewImage": "Images/Monsters/fallen_citadel_warden_idle.png",
+        "motions": [
+          "move",
+          "hit",
+          "airborne",
+          "attack",
+          "death"
+        ]
+      }
+    ],
+    "runtimeTargets": [],
+    "plannedChangeCount": 12,
+    "installationTargetFilesRemainAbsent": true
+  },
+  "minimapVisualReview": {
+    "performed": true,
+    "method": "Direct view of generated Minimap.png",
+    "result": "Five rooms along east/west main path; SupplyTerrace south of ReservoirCourt; one gold boss icon at eastern end."
+  }
+}

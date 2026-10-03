@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-09-10-compose-package",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "rulesVersion": "1.0.1",
+  "ruleAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\docs\\workflows\\DUNGEON_CREATION.md",
+  "stages": [
+    "09",
+    "10"
+  ],
+  "owner": "dungeon",
+  "status": "completed",
+  "completedAt": "2026-10-03T14:36:20.141Z",
+  "completionScope": "Editable DungeonEditor project, static validation and package/install plan only",
+  "dungeonId": "FloodedCitadel",
+  "dataId": 6,
+  "name": "침수된 성채",
+  "maxPlayers": 4,
+  "counts": {
+    "roomCount": 6,
+    "connectionCount": 5,
+    "warpZoneCount": 10,
+    "ordinary": 15,
+    "bosses": 1,
+    "dummies": 0,
+    "bossRooms": 1
+  },
+  "artifacts": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\FloodedCitadel.dungeon-project.json",
+      "bytes": 10994921,
+      "sha256": "db24c8bebd717c7643146da3414d6e8e3fd375ef413f94caf6852a4786c24a8d"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\STATIC_CHECKS.json",
+      "bytes": 21519,
+      "sha256": "8f9733de160c1f3b9ef938e60ea0ffdc4eff2f45028e4c3c8d60617d6a91e8dd"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\FloodedCitadel.zip",
+      "bytes": 8276902,
+      "sha256": "3016a0f824224dd98b3f46b8ac7449d84663eb6ad2dc5db660020304a6fd06cb"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\INSTALL_PLAN.json",
+      "bytes": 4278,
+      "sha256": "2e00a0427c9cf40b5c409d58da8251c8d95e4b4e9c08f49916bdc02a9519bc74"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\REPORT.json",
+      "bytes": 2186,
+      "sha256": "b7c1937b610e6f19850de4d829c317d0ec0f4b7a1fed2fdb09e3d928c99fe858"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.png",
+      "bytes": 2158,
+      "sha256": "ebddbe0c8d91da40df267ca8ae3ac69c3c2a2d436bea365837edb4b9590f01c5"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\preview\\Minimap.svg",
+      "bytes": 2899,
+      "sha256": "ac829965838b1391ef1bdc4e5d3b9d37a5a641b3b13f3db8035a60782536c4d8"
+    }
+  ],
+  "geometry": {
+    "coordinatorApprovalApplied": true,
+    "exitEntryAndMonsterPositionsPreserved": true,
+    "blockedRegions": "Conservative complement of approved dry floor; visual-only water/scenery remains outside walkable polygons",
+    "assetResampling": false
+  },
+  "tooling": {
+    "editorModel": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\model.js",
+    "packageCli": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\tools\\dungeon-package.cjs",
+    "editorUiUsed": false,
+    "newEditorOrRuntimeCode": false
+  },
+  "validation": {
+    "modelParse": true,
+    "modelIssues": [],
+    "footPositionCount": 30,
+    "footEllipseAnd8UnitNeighborhoodsPassed": true,
+    "imageDimensionAndHashChecksPassed": true,
+    "dependencyWarnings": [],
+    "monsterDependencies": [
+      {
+        "dataId": 2,
+        "monsterId": "rusted_armor_soldier",
+        "definitionFile": "rusted_armor_soldier.ai.json",
+        "previewImage": "Images/Monsters/rusted_armor_soldier_idle.png",
+        "motions": [
+          "move",
+          "hit",
+          "airborne",
+          "attack",
+          "death"
+        ]
+      },
+      {
+        "dataId": 3,
+        "monsterId": "fallen_citadel_warden",
+        "definitionFile": "fallen_citadel_warden.ai.json",
+        "previewImage": "Images/Monsters/fallen_citadel_warden_idle.png",
+        "motions": [
+          "move",
+          "hit",
+          "airborne",
+          "attack",
+          "death"
+        ]
+      }
+    ],
+    "zipEntryCount": 19,
+    "zipCrcPassed": true,
+    "jsonParsed": true,
+    "pngDecoded": true,
+    "koreanNamesPreserved": true,
+    "nativeBackgroundBytesPreserved": true,
+    "minimapVisualReviewPassed": true,
+    "inputFilesUnchanged": true
+  },
+  "package": {
+    "outputDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1",
+    "zipPath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1\\FloodedCitadel.zip",
+    "zipBytes": 8276902,
+    "manifestVersion": 3,
+    "roomVersion": 5,
+    "deploymentProfile": "server-json-client-assets",
+    "serverDungeonFiles": [
+      "Dungeon.json",
+      "Maps/FloodedCitadel_Floodgate.json",
+      "Maps/FloodedCitadel_BrokenCauseway.json",
+      "Maps/FloodedCitadel_ReservoirCourt.json",
+      "Maps/FloodedCitadel_SupplyTerrace.json",
+      "Maps/FloodedCitadel_CollapsedGallery.json",
+      "Maps/FloodedCitadel_DrownedThrone.json"
+    ],
+    "packageOnlyFiles": [
+      "Minimap.svg",
+      "Icons/normal.svg",
+      "Icons/boss.svg",
+      "Minimap.png",
+      "Icons/normal.png",
+      "Icons/boss.png"
+    ]
+  },
+  "registration": {
+    "sourceCatalogId6AlreadyRegistered": true,
+    "sourceCatalogModifiedByThisRequest": false
+  },
+  "installation": {
+    "performed": false,
+    "status": "not-installed",
+    "plannedChanges": 12,
+    "runtimeTargets": [],
+    "targetFilesRemainAbsent": true
+  },
+  "sourceRuntimeSupport": {
+    "reusedMonsterDataIds": [
+      2,
+      3
+    ],
+    "reusedSkills": [
+      "RustedArmorSlash",
+      "CitadelWardenSlash"
+    ],
+    "sourceSupportConfirmedBy": "MONSTER_REUSE_RESULT.json; CLI AI/motion dependencies",
+    "gameBuildOrPlayTestPerformed": false,
+    "playableVerified": false,
+    "genericCliRuntimeIntegrationNote": "ID 2/3 rendering, AI, battle and rewards are separate work; deployment does not verify playability.",
+    "note": "The CLI note is generic and is not the current source-support audit; current reuse evidence confirms rendering/AI/combat source support for IDs 2/3. It does not establish runtime playability."
+  },
+  "limitations": [
+    "Monster HP100 and attack/movement values remain integration placeholders",
+    "Frame-specific CharacterHurtRects are not connected to runtime; bodyHeight/hitRadius remain in use",
+    "Item drops and obstacle pathfinding are not implemented",
+    "No installation, build, game execution or functional tests were performed",
+    "Existing tool includes fallback dummy PNG as a resource, with zero dummy monster placements"
+  ],
+  "notModified": [
+    "job.json",
+    "coordinator REPORT.md",
+    "queue",
+    "Shared catalogs",
+    "Editor/runtime source",
+    "Original PNGs",
+    "Installed source/runtime dungeon data"
+  ],
+  "git": {
+    "stage": false,
+    "commit": false,
+    "push": false
+  }
+}

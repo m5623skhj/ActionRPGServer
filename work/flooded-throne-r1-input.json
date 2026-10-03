@@ -1,0 +1,253 @@
+{
+  "source": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-37cda76b-459b-479c-8f71-a42d858b06da.png",
+  "root": "C:\\Users\\KimHyeongJin\\Documents\\Codex\\2026-10-02\\actionrpg-art\\outputs\\flooded-citadel-throne-r1",
+  "request": {
+    "requestId": "flooded-citadel-20261003-01-05-bg-throne",
+    "revision": 1,
+    "requirementsRevision": 1,
+    "sequence": 3,
+    "status": "specification-only-not-dispatched",
+    "purpose": "보스 1마리를 배치하는 침수된 왕좌 배경",
+    "backgroundKey": "throne",
+    "roomIds": [
+      "DrownedThrone"
+    ],
+    "reuseCount": 1,
+    "requestedPixels": {
+      "width": 1600,
+      "height": 900
+    },
+    "designWorld": {
+      "left": 0,
+      "top": 0,
+      "right": 1600,
+      "bottom": 900
+    },
+    "nominalWorldUnitsPerRequestedPixel": {
+      "x": 1,
+      "y": 1
+    },
+    "actualPixels": null,
+    "referenceArtAbsolutePaths": [
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_Courtyard.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_ThroneRoom.png"
+    ],
+    "dryFloorPolygons": [
+      [
+        {
+          "x": 40,
+          "y": 340
+        },
+        {
+          "x": 1560,
+          "y": 340
+        },
+        {
+          "x": 1560,
+          "y": 820
+        },
+        {
+          "x": 40,
+          "y": 820
+        }
+      ]
+    ],
+    "decorativeWaterPolygons": [
+      [
+        {
+          "x": 40,
+          "y": 260
+        },
+        {
+          "x": 430,
+          "y": 260
+        },
+        {
+          "x": 430,
+          "y": 320
+        },
+        {
+          "x": 40,
+          "y": 320
+        }
+      ],
+      [
+        {
+          "x": 1170,
+          "y": 260
+        },
+        {
+          "x": 1560,
+          "y": 260
+        },
+        {
+          "x": 1560,
+          "y": 320
+        },
+        {
+          "x": 1170,
+          "y": 320
+        }
+      ],
+      [
+        {
+          "x": 0,
+          "y": 840
+        },
+        {
+          "x": 1600,
+          "y": 840
+        },
+        {
+          "x": 1600,
+          "y": 900
+        },
+        {
+          "x": 0,
+          "y": 900
+        }
+      ]
+    ],
+    "blockedRegions": [
+      [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1600,
+          "y": 0
+        },
+        {
+          "x": 1600,
+          "y": 320
+        },
+        {
+          "x": 0,
+          "y": 320
+        }
+      ],
+      [
+        {
+          "x": 0,
+          "y": 840
+        },
+        {
+          "x": 1600,
+          "y": 840
+        },
+        {
+          "x": 1600,
+          "y": 900
+        },
+        {
+          "x": 0,
+          "y": 900
+        }
+      ]
+    ],
+    "activeExitDirectionsByRoom": [
+      {
+        "roomId": "DrownedThrone",
+        "directions": [
+          "west"
+        ]
+      }
+    ],
+    "transitionRegions": [
+      {
+        "roomId": "DrownedThrone",
+        "direction": "west",
+        "polygon": [
+          {
+            "x": 40,
+            "y": 510
+          },
+          {
+            "x": 80,
+            "y": 510
+          },
+          {
+            "x": 80,
+            "y": 630
+          },
+          {
+            "x": 40,
+            "y": 630
+          }
+        ],
+        "visualCenter": {
+          "x": 60,
+          "y": 570
+        },
+        "targetRoomId": "CollapsedGallery",
+        "targetEntryPointId": "Entry_east"
+      }
+    ],
+    "monsterFootPositions": [
+      {
+        "roomId": "DrownedThrone",
+        "positions": [
+          [
+            1080,
+            600
+          ]
+        ]
+      }
+    ],
+    "decorations": {
+      "allowed": "outside dryFloorPolygons only; north scenery, outer walls, muted banners, reeds on water borders",
+      "forbidden": "water, pillars, rubble, chests, monsters or gates on playable dry floor"
+    },
+    "camera": "fixed oblique 2D belt-scroll view matching source game; no rotated isometric view",
+    "transparency": "opaque full background; no transparent holes",
+    "tileBoundariesRequired": false,
+    "outputAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
+    "originalsAbsoluteDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\originals",
+    "deliveryMetadataAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json",
+    "pixelSizePolicy": {
+      "exactSizeGuaranteed": false,
+      "preserveOriginal": true,
+      "reportActualWidthHeight": true,
+      "nextStep": "Before stage 09 reconcile original dimensions and image/world mapping using the existing model; do not report requested size as actual size.",
+      "smallAspectMismatch": "If aspect ratio differs by at most 1%, place original image at the requested world rectangle and record scaleX=requestedWidth/actualWidth and scaleY=requestedHeight/actualHeight; no asset resampling or pixel-file overwrite is needed.",
+      "largeAspectMismatch": "If aspect ratio differs by more than 1%, use uniform placement scale and revise world/dry masks/positions; rederive exit/arrival bands using min(128,axisSize*0.2), then validate. Coordinator must confirm the revised geometry before stage 09."
+    },
+    "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1600 x 900 pixels; actual output resolution must be reported. Purpose: 보스 1마리를 배치하는 침수된 왕좌 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":340},{\"x\":1560,\"y\":340},{\"x\":1560,\"y\":820},{\"x\":40,\"y\":820}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":430,\"y\":260},{\"x\":430,\"y\":320},{\"x\":40,\"y\":320}],[{\"x\":1170,\"y\":260},{\"x\":1560,\"y\":260},{\"x\":1560,\"y\":320},{\"x\":1170,\"y\":320}],[{\"x\":0,\"y\":840},{\"x\":1600,\"y\":840},{\"x\":1600,\"y\":900},{\"x\":0,\"y\":900}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"DrownedThrone\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":510},{\"x\":80,\"y\":510},{\"x\":80,\"y\":630},{\"x\":40,\"y\":630}],\"visualCenter\":{\"x\":60,\"y\":570},\"targetRoomId\":\"CollapsedGallery\",\"targetEntryPointId\":\"Entry_east\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. Broken throne and drowned royal remnants only in north-side scenery above y=260, leave the arena x=40..1560,y=340..820 clear, boss foot at (1080,600); avoid foreground decoration covering the boss. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.",
+    "completionCriteria": [
+      "actual image file and measured dimensions",
+      "no water or solid scenery in the designated dry floor",
+      "exit/entry rectangles unobstructed",
+      "all reuse rooms can use the same image without extra warp symbols",
+      "original and metadata preserved"
+    ]
+  },
+  "prompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1600 x 900 pixels; actual output resolution must be reported. Purpose: 보스 1마리를 배치하는 침수된 왕좌 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":340},{\"x\":1560,\"y\":340},{\"x\":1560,\"y\":820},{\"x\":40,\"y\":820}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":430,\"y\":260},{\"x\":430,\"y\":320},{\"x\":40,\"y\":320}],[{\"x\":1170,\"y\":260},{\"x\":1560,\"y\":260},{\"x\":1560,\"y\":320},{\"x\":1170,\"y\":320}],[{\"x\":0,\"y\":840},{\"x\":1600,\"y\":840},{\"x\":1600,\"y\":900},{\"x\":0,\"y\":900}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"DrownedThrone\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":510},{\"x\":80,\"y\":510},{\"x\":80,\"y\":630},{\"x\":40,\"y\":630}],\"visualCenter\":{\"x\":60,\"y\":570},\"targetRoomId\":\"CollapsedGallery\",\"targetEntryPointId\":\"Entry_east\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. Broken throne and drowned royal remnants only in north-side scenery above y=260, leave the arena x=40..1560,y=340..820 clear, boss foot at (1080,600); avoid foreground decoration covering the boss. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.\nCRITICAL NORMALIZED SCREEN LAYOUT: opaque single wide 16:9 boss background. North throne, damaged walls, faded navy royal textiles and drowned ruined remnants occupy ONLY top 27% of canvas. The empty ruined stone throne is a background structure, no person sitting on it. North left/right blue-green shallow pools may occupy the band y29%..35%, separated by the north throne backdrop. All terrain across FULL canvas width from y37% through y92% must be flat, completely DRY quiet gray stone paving. No parapet, standing wall, vertical embankment face, loose rubble or puddle anywhere in that dry horizontal strip. For safety leave dry floor through y93%. Lower decorative water must be a thin band only in bottom 5%, y95%..100%. No stairs descending onto arena; any throne platform above y28%.\nLeft exit/arrival at x3.75%/x7%,y63.33% must connect horizontally through the left image edge. Future boss foot point x67.5%,y66.67% is featureless dry paving, no boss/marker. Empty broad rectangular combat arena, no camera rotation, no deep vanishing-point hallway, no floor taper. Match earlier FloodedCitadel_Causeway and Courtyard gray stone pixel clusters, desaturated blue-green water, pale cool misty daylight, faded navy banners; little warm light only on north wall. No central carpet across arena, no columns or foreground rubble. No gates, characters, text, UI, loot or portals.",
+  "recommendedDryFloorPolygons": [
+    [
+      {
+        "x": 40,
+        "y": 360
+      },
+      {
+        "x": 1560,
+        "y": 360
+      },
+      {
+        "x": 1560,
+        "y": 780
+      },
+      {
+        "x": 40,
+        "y": 780
+      }
+    ]
+  ],
+  "arrivalPoint": {
+    "x": 112,
+    "y": 570
+  }
+}

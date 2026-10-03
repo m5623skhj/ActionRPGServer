@@ -1,0 +1,220 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FloodedCitadel_SupplyTerrace",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1280,
+    "bottom": 720
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 640,
+    "y": 112
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Courtyard.png",
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Editor_pad.png",
+      "x": 600,
+      "y": 36,
+      "width": 80,
+      "height": 48
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 520,
+        "y": 30
+      },
+      {
+        "x": 760,
+        "y": 30
+      },
+      {
+        "x": 1240,
+        "y": 380
+      },
+      {
+        "x": 1240,
+        "y": 700
+      },
+      {
+        "x": 40,
+        "y": 700
+      },
+      {
+        "x": 40,
+        "y": 380
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 30
+      },
+      {
+        "x": 0,
+        "y": 30
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 30
+      },
+      {
+        "x": 520,
+        "y": 30
+      },
+      {
+        "x": 40,
+        "y": 380
+      },
+      {
+        "x": 40,
+        "y": 700
+      },
+      {
+        "x": 0,
+        "y": 700
+      }
+    ],
+    [
+      {
+        "x": 760,
+        "y": 30
+      },
+      {
+        "x": 1280,
+        "y": 30
+      },
+      {
+        "x": 1280,
+        "y": 700
+      },
+      {
+        "x": 1240,
+        "y": 700
+      },
+      {
+        "x": 1240,
+        "y": 380
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 700
+      },
+      {
+        "x": 1280,
+        "y": 700
+      },
+      {
+        "x": 1280,
+        "y": 720
+      },
+      {
+        "x": 0,
+        "y": 720
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_north",
+      "position": {
+        "x": 640,
+        "y": 112
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [
+    {
+      "id": "Soldier1",
+      "dataId": 2,
+      "position": {
+        "x": 490,
+        "y": 460
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier2",
+      "dataId": 2,
+      "position": {
+        "x": 660,
+        "y": 550
+      },
+      "facingLeft": true
+    },
+    {
+      "id": "Soldier3",
+      "dataId": 2,
+      "position": {
+        "x": 840,
+        "y": 460
+      },
+      "facingLeft": true
+    }
+  ],
+  "transitionZones": [
+    {
+      "id": "Gate_ReservoirCourt",
+      "polygon": [
+        {
+          "x": 600,
+          "y": 40
+        },
+        {
+          "x": 680,
+          "y": 40
+        },
+        {
+          "x": 680,
+          "y": 80
+        },
+        {
+          "x": 600,
+          "y": 80
+        }
+      ],
+      "connectionId": "ReservoirCourt_SupplyTerrace",
+      "direction": "north",
+      "visual": {
+        "kind": "pad",
+        "asset": "Images/Dungeons/FloodedCitadel_Editor_pad.png",
+        "x": 600,
+        "y": 36,
+        "width": 80,
+        "height": 48
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FloodedCitadel_ReservoirCourt",
+        "targetEntryPointId": "Entry_south"
+      }
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "requirementsRevision": 1,
+  "confirmedBy": "coordinator",
+  "backgrounds": {
+    "causeway": {
+      "graphicsRequestId": "flooded-citadel-20261003-01-05-bg-causeway",
+      "graphicsRevision": 1,
+      "approved": true,
+      "actualPixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "walkablePolygons": [
+        [
+          {
+            "x": 40,
+            "y": 330
+          },
+          {
+            "x": 1240,
+            "y": 330
+          },
+          {
+            "x": 1240,
+            "y": 625
+          },
+          {
+            "x": 40,
+            "y": 625
+          }
+        ]
+      ],
+      "retainExitEntryAndMonsterPositions": true,
+      "reason": "Actual selected image was visually reviewed. The reduced dry-floor rectangle leaves a margin above the lower embankment; all existing exits and feet remain on dry paving.",
+      "assetResampling": false,
+      "staticValidationRequiredAfterComposition": true
+    },
+    "courtyard": {
+      "graphicsRequestId": "flooded-citadel-20261003-01-05-bg-courtyard",
+      "graphicsRevision": 1,
+      "approved": true,
+      "actualPixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 720
+      },
+      "walkablePolygons": [
+        [
+          {
+            "x": 520,
+            "y": 30
+          },
+          {
+            "x": 760,
+            "y": 30
+          },
+          {
+            "x": 1240,
+            "y": 380
+          },
+          {
+            "x": 1240,
+            "y": 700
+          },
+          {
+            "x": 40,
+            "y": 700
+          },
+          {
+            "x": 40,
+            "y": 380
+          }
+        ]
+      ],
+      "retainExitEntryAndMonsterPositions": true,
+      "reason": "Actual image reviewed; narrow upper hexagon excludes water and debris while keeping the north arrival, south warp and all monster feet on dry paving.",
+      "assetResampling": false,
+      "staticValidationRequiredAfterComposition": true
+    },
+    "throne": {
+      "graphicsRequestId": "flooded-citadel-20261003-01-05-bg-throne",
+      "graphicsRevision": 1,
+      "approved": true,
+      "actualPixels": {
+        "width": 1672,
+        "height": 941
+      },
+      "world": {
+        "left": 0,
+        "top": 0,
+        "right": 1600,
+        "bottom": 900
+      },
+      "walkablePolygons": [
+        [
+          {
+            "x": 40,
+            "y": 360
+          },
+          {
+            "x": 1560,
+            "y": 360
+          },
+          {
+            "x": 1560,
+            "y": 780
+          },
+          {
+            "x": 40,
+            "y": 780
+          }
+        ]
+      ],
+      "retainExitEntryAndMonsterPositions": true,
+      "reason": "Actual image reviewed. Floor y360..780 excludes north pool rim and lower parapet; west warp, arrival and boss feet remain dry.",
+      "assetResampling": false,
+      "staticValidationRequiredAfterComposition": true
+    }
+  },
+  "otherBackgrounds": "All three backgrounds visually reviewed; final shared model validation pending"
+}

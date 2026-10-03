@@ -1,0 +1,309 @@
+{
+  "jobId": "flooded-citadel-20261003-01",
+  "ruleVersion": "1.0.1",
+  "request": {
+    "requestId": "flooded-citadel-20261003-01-05-bg-causeway",
+    "revision": 1,
+    "requirementsRevision": 1,
+    "sequence": 1,
+    "status": "specification-only-not-dispatched",
+    "purpose": "성문과 제방길의 공통 배경",
+    "backgroundKey": "causeway",
+    "roomIds": [
+      "Floodgate",
+      "BrokenCauseway"
+    ],
+    "reuseCount": 2,
+    "requestedPixels": {
+      "width": 1280,
+      "height": 720
+    },
+    "designWorld": {
+      "left": 0,
+      "top": 0,
+      "right": 1280,
+      "bottom": 720
+    },
+    "nominalWorldUnitsPerRequestedPixel": {
+      "x": 1,
+      "y": 1
+    },
+    "actualPixels": null,
+    "referenceArtAbsolutePaths": [
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\rusted_armor_soldier_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\fallen_citadel_warden_idle.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_Courtyard.png",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Dungeons\\FallenCitadel_ThroneRoom.png"
+    ],
+    "dryFloorPolygons": [
+      [
+        {
+          "x": 40,
+          "y": 320
+        },
+        {
+          "x": 1240,
+          "y": 320
+        },
+        {
+          "x": 1240,
+          "y": 650
+        },
+        {
+          "x": 40,
+          "y": 650
+        }
+      ]
+    ],
+    "decorativeWaterPolygons": [
+      [
+        {
+          "x": 40,
+          "y": 260
+        },
+        {
+          "x": 460,
+          "y": 260
+        },
+        {
+          "x": 460,
+          "y": 300
+        },
+        {
+          "x": 40,
+          "y": 300
+        }
+      ],
+      [
+        {
+          "x": 820,
+          "y": 260
+        },
+        {
+          "x": 1240,
+          "y": 260
+        },
+        {
+          "x": 1240,
+          "y": 300
+        },
+        {
+          "x": 820,
+          "y": 300
+        }
+      ],
+      [
+        {
+          "x": 0,
+          "y": 670
+        },
+        {
+          "x": 1280,
+          "y": 670
+        },
+        {
+          "x": 1280,
+          "y": 720
+        },
+        {
+          "x": 0,
+          "y": 720
+        }
+      ]
+    ],
+    "blockedRegions": [
+      [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1280,
+          "y": 0
+        },
+        {
+          "x": 1280,
+          "y": 300
+        },
+        {
+          "x": 0,
+          "y": 300
+        }
+      ],
+      [
+        {
+          "x": 0,
+          "y": 670
+        },
+        {
+          "x": 1280,
+          "y": 670
+        },
+        {
+          "x": 1280,
+          "y": 720
+        },
+        {
+          "x": 0,
+          "y": 720
+        }
+      ]
+    ],
+    "activeExitDirectionsByRoom": [
+      {
+        "roomId": "Floodgate",
+        "directions": [
+          "east"
+        ]
+      },
+      {
+        "roomId": "BrokenCauseway",
+        "directions": [
+          "west",
+          "east"
+        ]
+      }
+    ],
+    "transitionRegions": [
+      {
+        "roomId": "Floodgate",
+        "direction": "east",
+        "polygon": [
+          {
+            "x": 1200,
+            "y": 420
+          },
+          {
+            "x": 1240,
+            "y": 420
+          },
+          {
+            "x": 1240,
+            "y": 540
+          },
+          {
+            "x": 1200,
+            "y": 540
+          }
+        ],
+        "visualCenter": {
+          "x": 1220,
+          "y": 480
+        },
+        "targetRoomId": "BrokenCauseway",
+        "targetEntryPointId": "Entry_west"
+      },
+      {
+        "roomId": "BrokenCauseway",
+        "direction": "west",
+        "polygon": [
+          {
+            "x": 40,
+            "y": 420
+          },
+          {
+            "x": 80,
+            "y": 420
+          },
+          {
+            "x": 80,
+            "y": 540
+          },
+          {
+            "x": 40,
+            "y": 540
+          }
+        ],
+        "visualCenter": {
+          "x": 60,
+          "y": 480
+        },
+        "targetRoomId": "Floodgate",
+        "targetEntryPointId": "Entry_east"
+      },
+      {
+        "roomId": "BrokenCauseway",
+        "direction": "east",
+        "polygon": [
+          {
+            "x": 1200,
+            "y": 420
+          },
+          {
+            "x": 1240,
+            "y": 420
+          },
+          {
+            "x": 1240,
+            "y": 540
+          },
+          {
+            "x": 1200,
+            "y": 540
+          }
+        ],
+        "visualCenter": {
+          "x": 1220,
+          "y": 480
+        },
+        "targetRoomId": "ReservoirCourt",
+        "targetEntryPointId": "Entry_west"
+      }
+    ],
+    "monsterFootPositions": [
+      {
+        "roomId": "Floodgate",
+        "positions": []
+      },
+      {
+        "roomId": "BrokenCauseway",
+        "positions": [
+          [
+            480,
+            420
+          ],
+          [
+            750,
+            540
+          ],
+          [
+            1000,
+            430
+          ]
+        ]
+      }
+    ],
+    "decorations": {
+      "allowed": "outside dryFloorPolygons only; north scenery, outer walls, muted banners, reeds on water borders",
+      "forbidden": "water, pillars, rubble, chests, monsters or gates on playable dry floor"
+    },
+    "camera": "fixed oblique 2D belt-scroll view matching source game; no rotated isometric view",
+    "transparency": "opaque full background; no transparent holes",
+    "tileBoundariesRequired": false,
+    "outputAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Causeway.png",
+    "originalsAbsoluteDirectory": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\originals",
+    "deliveryMetadataAbsolutePath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\causeway\\r1\\GRAPHICS_RESULT.json",
+    "pixelSizePolicy": {
+      "exactSizeGuaranteed": false,
+      "preserveOriginal": true,
+      "reportActualWidthHeight": true,
+      "nextStep": "Before stage 09 reconcile original dimensions and image/world mapping using the existing model; do not report requested size as actual size.",
+      "smallAspectMismatch": "If aspect ratio differs by at most 1%, place original image at the requested world rectangle and record scaleX=requestedWidth/actualWidth and scaleY=requestedHeight/actualHeight; no asset resampling or pixel-file overwrite is needed.",
+      "largeAspectMismatch": "If aspect ratio differs by more than 1%, use uniform placement scale and revise world/dry masks/positions; rederive exit/arrival bands using min(128,axisSize*0.2), then validate. Coordinator must confirm the revised geometry before stage 09."
+    },
+    "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1280 x 720 pixels; actual output resolution must be reported. Purpose: 성문과 제방길의 공통 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":320},{\"x\":1240,\"y\":320},{\"x\":1240,\"y\":650},{\"x\":40,\"y\":650}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":460,\"y\":260},{\"x\":460,\"y\":300},{\"x\":40,\"y\":300}],[{\"x\":820,\"y\":260},{\"x\":1240,\"y\":260},{\"x\":1240,\"y\":300},{\"x\":820,\"y\":300}],[{\"x\":0,\"y\":670},{\"x\":1280,\"y\":670},{\"x\":1280,\"y\":720},{\"x\":0,\"y\":720}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"Floodgate\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"BrokenCauseway\",\"targetEntryPointId\":\"Entry_west\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":420},{\"x\":80,\"y\":420},{\"x\":80,\"y\":540},{\"x\":40,\"y\":540}],\"visualCenter\":{\"x\":60,\"y\":480},\"targetRoomId\":\"Floodgate\",\"targetEntryPointId\":\"Entry_east\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"ReservoirCourt\",\"targetEntryPointId\":\"Entry_west\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. North wall rubble only above y=260 and side edges; playable strip x=40..1240,y=320..650 clear; water below y=670 and selected north pockets only. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.",
+    "completionCriteria": [
+      "actual image file and measured dimensions",
+      "no water or solid scenery in the designated dry floor",
+      "exit/entry rectangles unobstructed",
+      "all reuse rooms can use the same image without extra warp symbols",
+      "original and metadata preserved"
+    ]
+  },
+  "originalSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-a84b42de-015c-4d7e-8b52-e106f03fe6dc.png",
+  "selectedSource": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-71c697b0-11a7-4ea7-8730-309ef89d33e9.png",
+  "generationPrompt": "Create one production background for a Korean pixel-art 2D belt-scrolling action RPG, matching the supplied player, armored monsters and existing citadel references. Theme: flooded ruined medieval citadel, broken gray stone walls, muted blue-green standing water, damp stone, faded navy banners and subtle cool daylight. Fixed oblique side view of the floor and north-side scenery, no isometric camera rotation, crisp pixel clusters, no smoothing. Requested canvas 1280 x 720 pixels; actual output resolution must be reported. Purpose: 성문과 제방길의 공통 배경. Coordinates are left-top-origin design-world pixels. Keep this entire continuous DRY raised stone floor visibly above water and free of walls, rubble, pillars and props: [[{\"x\":40,\"y\":320},{\"x\":1240,\"y\":320},{\"x\":1240,\"y\":650},{\"x\":40,\"y\":650}]]. Standing-water decorative masks, entirely outside playable dry floor: [[{\"x\":40,\"y\":260},{\"x\":460,\"y\":260},{\"x\":460,\"y\":300},{\"x\":40,\"y\":300}],[{\"x\":820,\"y\":260},{\"x\":1240,\"y\":260},{\"x\":1240,\"y\":300},{\"x\":820,\"y\":300}],[{\"x\":0,\"y\":670},{\"x\":1280,\"y\":670},{\"x\":1280,\"y\":720},{\"x\":0,\"y\":720}]]. Water must not appear under any playable-floor point, entry or monster; damp stone is allowed but no puddles on dry floor. Keep all planned transition regions unobstructed: [{\"roomId\":\"Floodgate\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"BrokenCauseway\",\"targetEntryPointId\":\"Entry_west\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"west\",\"polygon\":[{\"x\":40,\"y\":420},{\"x\":80,\"y\":420},{\"x\":80,\"y\":540},{\"x\":40,\"y\":540}],\"visualCenter\":{\"x\":60,\"y\":480},\"targetRoomId\":\"Floodgate\",\"targetEntryPointId\":\"Entry_east\"},{\"roomId\":\"BrokenCauseway\",\"direction\":\"east\",\"polygon\":[{\"x\":1200,\"y\":420},{\"x\":1240,\"y\":420},{\"x\":1240,\"y\":540},{\"x\":1200,\"y\":540}],\"visualCenter\":{\"x\":1220,\"y\":480},\"targetRoomId\":\"ReservoirCourt\",\"targetEntryPointId\":\"Entry_west\"}]. Do not paint gates, glowing portals, characters, monsters, loot, UI or text; the editor adds gate/pad markers separately. North wall rubble only above y=260 and side edges; playable strip x=40..1240,y=320..650 clear; water below y=670 and selected north pockets only. Maintain medium-value, low-contrast combat floor so gray armor and dark blue/red boss remain readable. Independent single-image background, no tiling or seamless edges required. Preserve the unedited generator original and record exact source dimensions and any transformation. One background request at a time through the coordinator.\nCRITICAL normalized layout for this ONE image: north ruin scenery confined to upper 35%; two horizontal blue-green water pockets only within approximately y36%..41%, left x3%..36% and right x64%..97%; below them a completely flat DRY raised stone causeway extends ALL THE WAY across both left and right image edges. Every point between y44% and y90.3%, across x3%..97%, must be solid quiet DRY gray stone with no pooled water, no parapets, posts or debris. For extra margin keep dry floor y42%..92.5%, entire canvas width. Bottom water is a THIN 5% strip starting at y94%, horizontal shoreline, never a diagonal cut into the dry floor. Side exits at x4.7% and x95.3%, y66.7%, plain unobstructed floor connected to image edges, no doorway/edge barrier. Do not show perspective taper; essentially parallel horizontal floor bands, fixed 2D belt-scroll camera. Match the crisp pixel stone rendering and muted background values of the citadel reference images previously viewed. Characters/monsters are STYLE references only, never depict them. No painted gate, portcullis across walkable floor or glowing gate. No text or labels.",
+  "editPrompt": "Use case: precise-object-edit. Existing flooded citadel causeway image is the edit target. Preserve the image dimensions, all upper castle scenery, art style, lighting, muted pixel palette, left/right horizontal exits and most stone paving. Correct ONLY raised-floor boundary placement. On the 1672x941 original canvas, the entire rectangle x52..1620,y418..850 must be UNOBSTRUCTED FLAT DRY STONE FLOOR, no parapet cap, vertical retaining-wall face or water. For safety extend flat floor over full width from y405 through y875. Northern pool and any raised boundary must end before original y400; lower its rim into the same flat floor level or move it above y400. At bottom currently horizontal vertical embankment face begins around y795: move that embankment face and lower water DOWN by about 100 pixels. Continue existing flat cobblestones uninterrupted through y875, embankment face if needed only y877..900, standing water only y901..941. No parapet standing on floor, no obstacle, no puddles on floor. Dry floor must reach BOTH left/right image edges in midsection. Keep a thin blue-green water band at bottom and the existing pools at north. No added gates, monsters, labels or objects. Critical screen-space composition, no crop and no resize.",
+  "stagingRoot": "C:\\Users\\KimHyeongJin\\Documents\\Codex\\2026-10-02\\actionrpg-art\\outputs\\flooded-citadel-causeway-r1"
+}

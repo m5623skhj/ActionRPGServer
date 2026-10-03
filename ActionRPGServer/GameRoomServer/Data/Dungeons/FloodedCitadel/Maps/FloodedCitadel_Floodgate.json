@@ -1,0 +1,176 @@
+{
+  "version": 5,
+  "format": "DungeonRoom",
+  "mapId": "FloodedCitadel_Floodgate",
+  "world": {
+    "left": 0,
+    "top": 0,
+    "right": 1280,
+    "bottom": 720
+  },
+  "sectorWidth": 480,
+  "sectorHeight": 480,
+  "spawn": {
+    "x": 240,
+    "y": 420
+  },
+  "images": [
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Causeway.png",
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+      "x": 1188,
+      "y": 424,
+      "width": 64,
+      "height": 112
+    }
+  ],
+  "walkablePolygons": [
+    [
+      {
+        "x": 40,
+        "y": 330
+      },
+      {
+        "x": 1240,
+        "y": 330
+      },
+      {
+        "x": 1240,
+        "y": 625
+      },
+      {
+        "x": 40,
+        "y": 625
+      }
+    ]
+  ],
+  "blockedPolygons": [
+    [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 0
+      },
+      {
+        "x": 1280,
+        "y": 330
+      },
+      {
+        "x": 0,
+        "y": 330
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 625
+      },
+      {
+        "x": 1280,
+        "y": 625
+      },
+      {
+        "x": 1280,
+        "y": 720
+      },
+      {
+        "x": 0,
+        "y": 720
+      }
+    ],
+    [
+      {
+        "x": 0,
+        "y": 330
+      },
+      {
+        "x": 40,
+        "y": 330
+      },
+      {
+        "x": 40,
+        "y": 625
+      },
+      {
+        "x": 0,
+        "y": 625
+      }
+    ],
+    [
+      {
+        "x": 1240,
+        "y": 330
+      },
+      {
+        "x": 1280,
+        "y": 330
+      },
+      {
+        "x": 1280,
+        "y": 625
+      },
+      {
+        "x": 1240,
+        "y": 625
+      }
+    ]
+  ],
+  "entryPoints": [
+    {
+      "id": "Entry_east",
+      "position": {
+        "x": 1168,
+        "y": 480
+      }
+    }
+  ],
+  "objects": [],
+  "monsters": [],
+  "transitionZones": [
+    {
+      "id": "Gate_BrokenCauseway",
+      "polygon": [
+        {
+          "x": 1200,
+          "y": 420
+        },
+        {
+          "x": 1240,
+          "y": 420
+        },
+        {
+          "x": 1240,
+          "y": 540
+        },
+        {
+          "x": 1200,
+          "y": 540
+        }
+      ],
+      "connectionId": "Floodgate_BrokenCauseway",
+      "direction": "east",
+      "visual": {
+        "kind": "gate",
+        "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
+        "x": 1188,
+        "y": 424,
+        "width": 64,
+        "height": 112
+      },
+      "action": {
+        "type": "MapTransfer",
+        "targetMapId": "FloodedCitadel_BrokenCauseway",
+        "targetEntryPointId": "Entry_west"
+      }
+    }
+  ]
+}

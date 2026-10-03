@@ -1,0 +1,1494 @@
+{
+  "version": 1,
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-02-design",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "rulesVersion": "1.0.1",
+  "result": "completed",
+  "scope": "design-and-graphics-specifications-only",
+  "dungeon": {
+    "dungeonId": "FloodedCitadel",
+    "dataId": 6,
+    "name": "침수된 성채",
+    "maxPlayers": 4,
+    "roomCount": 6,
+    "ordinaryMonsterCount": 15,
+    "bossCount": 1,
+    "newBackgroundCount": 3
+  },
+  "geometryDraft": {
+    "format": "design-draft-using-DungeonEditor-model-not-final-project",
+    "project": {
+      "schemaVersion": 3,
+      "dataId": 6,
+      "dungeonId": "FloodedCitadel",
+      "name": "침수된 성채",
+      "maxPlayers": 4,
+      "entryRoomId": "Floodgate",
+      "rooms": [
+        {
+          "id": "Floodgate",
+          "name": "물막이 성문",
+          "kind": "normal",
+          "layout": {
+            "x": 0,
+            "y": 0
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 40,
+                "y": 320
+              },
+              {
+                "x": 1240,
+                "y": 320
+              },
+              {
+                "x": 1240,
+                "y": 650
+              },
+              {
+                "x": 40,
+                "y": 650
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1280,
+                "y": 0
+              },
+              {
+                "x": 1280,
+                "y": 300
+              },
+              {
+                "x": 0,
+                "y": 300
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 670
+              },
+              {
+                "x": 1280,
+                "y": 670
+              },
+              {
+                "x": 1280,
+                "y": 720
+              },
+              {
+                "x": 0,
+                "y": 720
+              }
+            ]
+          ],
+          "playerSpawns": [
+            {
+              "id": "Party1",
+              "position": {
+                "x": 240,
+                "y": 420
+              }
+            },
+            {
+              "id": "Party2",
+              "position": {
+                "x": 340,
+                "y": 420
+              }
+            },
+            {
+              "id": "Party3",
+              "position": {
+                "x": 240,
+                "y": 540
+              }
+            },
+            {
+              "id": "Party4",
+              "position": {
+                "x": 340,
+                "y": 540
+              }
+            }
+          ],
+          "entryPoints": [
+            {
+              "id": "Entry_east",
+              "position": {
+                "x": 1168,
+                "y": 480
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_east",
+          "warpZones": [
+            {
+              "id": "Gate_BrokenCauseway",
+              "connectionId": "Floodgate_BrokenCauseway",
+              "targetRoomId": "BrokenCauseway",
+              "targetEntryPointId": "Entry_west",
+              "direction": "east",
+              "polygon": [
+                {
+                  "x": 1200,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 540
+                },
+                {
+                  "x": 1200,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 1188,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": []
+        },
+        {
+          "id": "BrokenCauseway",
+          "name": "무너진 제방길",
+          "kind": "normal",
+          "layout": {
+            "x": 1,
+            "y": 0
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 40,
+                "y": 320
+              },
+              {
+                "x": 1240,
+                "y": 320
+              },
+              {
+                "x": 1240,
+                "y": 650
+              },
+              {
+                "x": 40,
+                "y": 650
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1280,
+                "y": 0
+              },
+              {
+                "x": 1280,
+                "y": 300
+              },
+              {
+                "x": 0,
+                "y": 300
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 670
+              },
+              {
+                "x": 1280,
+                "y": 670
+              },
+              {
+                "x": 1280,
+                "y": 720
+              },
+              {
+                "x": 0,
+                "y": 720
+              }
+            ]
+          ],
+          "playerSpawns": [],
+          "entryPoints": [
+            {
+              "id": "Entry_west",
+              "position": {
+                "x": 112,
+                "y": 480
+              }
+            },
+            {
+              "id": "Entry_east",
+              "position": {
+                "x": 1168,
+                "y": 480
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_west",
+          "warpZones": [
+            {
+              "id": "Gate_Floodgate",
+              "connectionId": "Floodgate_BrokenCauseway",
+              "targetRoomId": "Floodgate",
+              "targetEntryPointId": "Entry_east",
+              "direction": "west",
+              "polygon": [
+                {
+                  "x": 40,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 540
+                },
+                {
+                  "x": 40,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 28,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            },
+            {
+              "id": "Gate_ReservoirCourt",
+              "connectionId": "BrokenCauseway_ReservoirCourt",
+              "targetRoomId": "ReservoirCourt",
+              "targetEntryPointId": "Entry_west",
+              "direction": "east",
+              "polygon": [
+                {
+                  "x": 1200,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 540
+                },
+                {
+                  "x": 1200,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 1188,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": [
+            {
+              "id": "Soldier1",
+              "dataId": 2,
+              "position": {
+                "x": 480,
+                "y": 420
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier2",
+              "dataId": 2,
+              "position": {
+                "x": 750,
+                "y": 540
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier3",
+              "dataId": 2,
+              "position": {
+                "x": 1000,
+                "y": 430
+              },
+              "facingLeft": true
+            }
+          ]
+        },
+        {
+          "id": "ReservoirCourt",
+          "name": "침수된 중앙 안뜰",
+          "kind": "normal",
+          "layout": {
+            "x": 2,
+            "y": 0
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 480,
+                "y": 30
+              },
+              {
+                "x": 800,
+                "y": 30
+              },
+              {
+                "x": 1240,
+                "y": 360
+              },
+              {
+                "x": 1240,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 360
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 40,
+                "y": 40
+              },
+              {
+                "x": 440,
+                "y": 40
+              },
+              {
+                "x": 40,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 840,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 720
+              },
+              {
+                "x": 0,
+                "y": 720
+              }
+            ]
+          ],
+          "playerSpawns": [],
+          "entryPoints": [
+            {
+              "id": "Entry_west",
+              "position": {
+                "x": 112,
+                "y": 480
+              }
+            },
+            {
+              "id": "Entry_east",
+              "position": {
+                "x": 1168,
+                "y": 480
+              }
+            },
+            {
+              "id": "Entry_south",
+              "position": {
+                "x": 640,
+                "y": 620
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_west",
+          "warpZones": [
+            {
+              "id": "Gate_BrokenCauseway",
+              "connectionId": "BrokenCauseway_ReservoirCourt",
+              "targetRoomId": "BrokenCauseway",
+              "targetEntryPointId": "Entry_east",
+              "direction": "west",
+              "polygon": [
+                {
+                  "x": 40,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 540
+                },
+                {
+                  "x": 40,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 28,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            },
+            {
+              "id": "Gate_CollapsedGallery",
+              "connectionId": "ReservoirCourt_CollapsedGallery",
+              "targetRoomId": "CollapsedGallery",
+              "targetEntryPointId": "Entry_west",
+              "direction": "east",
+              "polygon": [
+                {
+                  "x": 1200,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 540
+                },
+                {
+                  "x": 1200,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 1188,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            },
+            {
+              "id": "Gate_SupplyTerrace",
+              "connectionId": "ReservoirCourt_SupplyTerrace",
+              "targetRoomId": "SupplyTerrace",
+              "targetEntryPointId": "Entry_north",
+              "direction": "south",
+              "polygon": [
+                {
+                  "x": 600,
+                  "y": 660
+                },
+                {
+                  "x": 680,
+                  "y": 660
+                },
+                {
+                  "x": 680,
+                  "y": 700
+                },
+                {
+                  "x": 600,
+                  "y": 700
+                }
+              ],
+              "visual": {
+                "kind": "pad",
+                "asset": "",
+                "x": 600,
+                "y": 656,
+                "width": 80,
+                "height": 48
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": [
+            {
+              "id": "Soldier1",
+              "dataId": 2,
+              "position": {
+                "x": 360,
+                "y": 450
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier2",
+              "dataId": 2,
+              "position": {
+                "x": 500,
+                "y": 590
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier3",
+              "dataId": 2,
+              "position": {
+                "x": 750,
+                "y": 430
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier4",
+              "dataId": 2,
+              "position": {
+                "x": 920,
+                "y": 590
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier5",
+              "dataId": 2,
+              "position": {
+                "x": 1080,
+                "y": 470
+              },
+              "facingLeft": true
+            }
+          ]
+        },
+        {
+          "id": "SupplyTerrace",
+          "name": "버려진 보급대",
+          "kind": "normal",
+          "layout": {
+            "x": 2,
+            "y": 1
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 480,
+                "y": 30
+              },
+              {
+                "x": 800,
+                "y": 30
+              },
+              {
+                "x": 1240,
+                "y": 360
+              },
+              {
+                "x": 1240,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 360
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 40,
+                "y": 40
+              },
+              {
+                "x": 440,
+                "y": 40
+              },
+              {
+                "x": 40,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 840,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 720
+              },
+              {
+                "x": 0,
+                "y": 720
+              }
+            ]
+          ],
+          "playerSpawns": [],
+          "entryPoints": [
+            {
+              "id": "Entry_north",
+              "position": {
+                "x": 640,
+                "y": 112
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_north",
+          "warpZones": [
+            {
+              "id": "Gate_ReservoirCourt",
+              "connectionId": "ReservoirCourt_SupplyTerrace",
+              "targetRoomId": "ReservoirCourt",
+              "targetEntryPointId": "Entry_south",
+              "direction": "north",
+              "polygon": [
+                {
+                  "x": 600,
+                  "y": 40
+                },
+                {
+                  "x": 680,
+                  "y": 40
+                },
+                {
+                  "x": 680,
+                  "y": 80
+                },
+                {
+                  "x": 600,
+                  "y": 80
+                }
+              ],
+              "visual": {
+                "kind": "pad",
+                "asset": "",
+                "x": 600,
+                "y": 36,
+                "width": 80,
+                "height": 48
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": [
+            {
+              "id": "Soldier1",
+              "dataId": 2,
+              "position": {
+                "x": 490,
+                "y": 460
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier2",
+              "dataId": 2,
+              "position": {
+                "x": 660,
+                "y": 550
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier3",
+              "dataId": 2,
+              "position": {
+                "x": 840,
+                "y": 460
+              },
+              "facingLeft": true
+            }
+          ]
+        },
+        {
+          "id": "CollapsedGallery",
+          "name": "무너진 성벽 회랑",
+          "kind": "normal",
+          "layout": {
+            "x": 3,
+            "y": 0
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1280,
+            "bottom": 720
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 480,
+                "y": 30
+              },
+              {
+                "x": 800,
+                "y": 30
+              },
+              {
+                "x": 1240,
+                "y": 360
+              },
+              {
+                "x": 1240,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 700
+              },
+              {
+                "x": 40,
+                "y": 360
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 40,
+                "y": 40
+              },
+              {
+                "x": 440,
+                "y": 40
+              },
+              {
+                "x": 40,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 840,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 40
+              },
+              {
+                "x": 1240,
+                "y": 340
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 702
+              },
+              {
+                "x": 1280,
+                "y": 720
+              },
+              {
+                "x": 0,
+                "y": 720
+              }
+            ]
+          ],
+          "playerSpawns": [],
+          "entryPoints": [
+            {
+              "id": "Entry_west",
+              "position": {
+                "x": 112,
+                "y": 480
+              }
+            },
+            {
+              "id": "Entry_east",
+              "position": {
+                "x": 1168,
+                "y": 480
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_west",
+          "warpZones": [
+            {
+              "id": "Gate_ReservoirCourt",
+              "connectionId": "ReservoirCourt_CollapsedGallery",
+              "targetRoomId": "ReservoirCourt",
+              "targetEntryPointId": "Entry_east",
+              "direction": "west",
+              "polygon": [
+                {
+                  "x": 40,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 420
+                },
+                {
+                  "x": 80,
+                  "y": 540
+                },
+                {
+                  "x": 40,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 28,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            },
+            {
+              "id": "Gate_DrownedThrone",
+              "connectionId": "CollapsedGallery_DrownedThrone",
+              "targetRoomId": "DrownedThrone",
+              "targetEntryPointId": "Entry_west",
+              "direction": "east",
+              "polygon": [
+                {
+                  "x": 1200,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 420
+                },
+                {
+                  "x": 1240,
+                  "y": 540
+                },
+                {
+                  "x": 1200,
+                  "y": 540
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 1188,
+                "y": 424,
+                "width": 64,
+                "height": 112
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": [
+            {
+              "id": "Soldier1",
+              "dataId": 2,
+              "position": {
+                "x": 360,
+                "y": 460
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier2",
+              "dataId": 2,
+              "position": {
+                "x": 560,
+                "y": 590
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier3",
+              "dataId": 2,
+              "position": {
+                "x": 820,
+                "y": 440
+              },
+              "facingLeft": true
+            },
+            {
+              "id": "Soldier4",
+              "dataId": 2,
+              "position": {
+                "x": 1040,
+                "y": 580
+              },
+              "facingLeft": true
+            }
+          ]
+        },
+        {
+          "id": "DrownedThrone",
+          "name": "침수된 왕좌",
+          "kind": "boss",
+          "layout": {
+            "x": 4,
+            "y": 0
+          },
+          "world": {
+            "left": 0,
+            "top": 0,
+            "right": 1600,
+            "bottom": 900
+          },
+          "sectorWidth": 480,
+          "sectorHeight": 480,
+          "images": [],
+          "walkablePolygons": [
+            [
+              {
+                "x": 40,
+                "y": 340
+              },
+              {
+                "x": 1560,
+                "y": 340
+              },
+              {
+                "x": 1560,
+                "y": 820
+              },
+              {
+                "x": 40,
+                "y": 820
+              }
+            ]
+          ],
+          "blockedPolygons": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1600,
+                "y": 0
+              },
+              {
+                "x": 1600,
+                "y": 320
+              },
+              {
+                "x": 0,
+                "y": 320
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 840
+              },
+              {
+                "x": 1600,
+                "y": 840
+              },
+              {
+                "x": 1600,
+                "y": 900
+              },
+              {
+                "x": 0,
+                "y": 900
+              }
+            ]
+          ],
+          "playerSpawns": [],
+          "entryPoints": [
+            {
+              "id": "Entry_west",
+              "position": {
+                "x": 112,
+                "y": 570
+              }
+            }
+          ],
+          "defaultEntryPointId": "Entry_west",
+          "warpZones": [
+            {
+              "id": "Gate_CollapsedGallery",
+              "connectionId": "CollapsedGallery_DrownedThrone",
+              "targetRoomId": "CollapsedGallery",
+              "targetEntryPointId": "Entry_east",
+              "direction": "west",
+              "polygon": [
+                {
+                  "x": 40,
+                  "y": 510
+                },
+                {
+                  "x": 80,
+                  "y": 510
+                },
+                {
+                  "x": 80,
+                  "y": 630
+                },
+                {
+                  "x": 40,
+                  "y": 630
+                }
+              ],
+              "visual": {
+                "kind": "gate",
+                "asset": "",
+                "x": 28,
+                "y": 514,
+                "width": 64,
+                "height": 112
+              }
+            }
+          ],
+          "objects": [],
+          "monsters": [
+            {
+              "id": "Warden1",
+              "dataId": 3,
+              "position": {
+                "x": 1080,
+                "y": 600
+              },
+              "facingLeft": true
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "Floodgate_BrokenCauseway",
+          "fromRoomId": "Floodgate",
+          "toRoomId": "BrokenCauseway",
+          "bidirectional": true
+        },
+        {
+          "id": "BrokenCauseway_ReservoirCourt",
+          "fromRoomId": "BrokenCauseway",
+          "toRoomId": "ReservoirCourt",
+          "bidirectional": true
+        },
+        {
+          "id": "ReservoirCourt_CollapsedGallery",
+          "fromRoomId": "ReservoirCourt",
+          "toRoomId": "CollapsedGallery",
+          "bidirectional": true
+        },
+        {
+          "id": "CollapsedGallery_DrownedThrone",
+          "fromRoomId": "CollapsedGallery",
+          "toRoomId": "DrownedThrone",
+          "bidirectional": true
+        },
+        {
+          "id": "ReservoirCourt_SupplyTerrace",
+          "fromRoomId": "ReservoirCourt",
+          "toRoomId": "SupplyTerrace",
+          "bidirectional": true
+        }
+      ],
+      "assets": []
+    }
+  },
+  "checks": {
+    "sharedDungeonModelUsed": true,
+    "parseSucceeded": true,
+    "nonBackgroundErrors": 0,
+    "geometryWarnings": 0,
+    "fullEditorValidationPassed": false,
+    "expectedUnresolvedBackgroundErrors": [
+      {
+        "message": "물막이 성문 (Floodgate) · 배경 이미지를 추가하세요.",
+        "roomId": "Floodgate",
+        "severity": "error"
+      },
+      {
+        "message": "무너진 제방길 (BrokenCauseway) · 배경 이미지를 추가하세요.",
+        "roomId": "BrokenCauseway",
+        "severity": "error"
+      },
+      {
+        "message": "침수된 중앙 안뜰 (ReservoirCourt) · 배경 이미지를 추가하세요.",
+        "roomId": "ReservoirCourt",
+        "severity": "error"
+      },
+      {
+        "message": "버려진 보급대 (SupplyTerrace) · 배경 이미지를 추가하세요.",
+        "roomId": "SupplyTerrace",
+        "severity": "error"
+      },
+      {
+        "message": "무너진 성벽 회랑 (CollapsedGallery) · 배경 이미지를 추가하세요.",
+        "roomId": "CollapsedGallery",
+        "severity": "error"
+      },
+      {
+        "message": "침수된 왕좌 (DrownedThrone) · 배경 이미지를 추가하세요.",
+        "roomId": "DrownedThrone",
+        "severity": "error"
+      }
+    ],
+    "roomCount": 6,
+    "uniqueAdjacentConnections": 5,
+    "warpZoneCount": 10,
+    "allLocationsMovable": true,
+    "noLocationsInWater": true,
+    "noArrivalInWarp": true,
+    "bossOnlyInBossRoom": true,
+    "waterIsVisualOnly": true,
+    "sourceTownCatalogIds": [
+      5
+    ],
+    "dataId6SourceConflict": false,
+    "sourceInstalledManifestConflicts": false,
+    "installedManifestsReviewed": [
+      {
+        "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FallenCitadel\\Dungeon.json",
+        "dataId": 5,
+        "dungeonId": "FallenCitadel"
+      }
+    ],
+    "monsterAiSharedValidationUsed": true,
+    "animationSharedValidationUsed": true
+  },
+  "reuseMonsters": [
+    {
+      "dataId": 2,
+      "monsterId": "rusted_armor_soldier",
+      "name": "녹슨 갑옷병",
+      "maxHp": 100,
+      "aiNodeCount": 6,
+      "aiStaticErrors": 0,
+      "aiStaticWarnings": [],
+      "skills": [
+        {
+          "id": "RustedArmorSlash",
+          "label": "녹슨 검 베기",
+          "animationId": "attack",
+          "durationSeconds": 0.5714285714285714,
+          "cooldownSeconds": 1.2,
+          "minRange": 0,
+          "maxRange": 80,
+          "hitType": "Normal"
+        }
+      ],
+      "combatProfile": {
+        "dataId": 2,
+        "walkSpeed": 140,
+        "runSpeed": 220,
+        "detectionRange": 600,
+        "bodyHeight": 96,
+        "hitRadius": 24,
+        "skills": [
+          {
+            "id": "RustedArmorSlash",
+            "damage": 10,
+            "hitSeconds": 0.2857142857142857,
+            "reachHeight": 80
+          }
+        ]
+      },
+      "clientRenderHeight": 200,
+      "clientMetadata": "Images/Monsters/animations.json",
+      "aiStatus": "draft",
+      "runtimeSourceSupport": "present-static-read-only",
+      "playVerified": false
+    },
+    {
+      "dataId": 3,
+      "monsterId": "fallen_citadel_warden",
+      "name": "몰락한 성채 수호자",
+      "maxHp": 100,
+      "aiNodeCount": 6,
+      "aiStaticErrors": 0,
+      "aiStaticWarnings": [],
+      "skills": [
+        {
+          "id": "CitadelWardenSlash",
+          "label": "수호자의 검 베기",
+          "animationId": "attack",
+          "durationSeconds": 0.8,
+          "cooldownSeconds": 1.8,
+          "minRange": 0,
+          "maxRange": 120,
+          "hitType": "Normal"
+        }
+      ],
+      "combatProfile": {
+        "dataId": 3,
+        "walkSpeed": 110,
+        "runSpeed": 180,
+        "detectionRange": 800,
+        "bodyHeight": 158,
+        "hitRadius": 36,
+        "skills": [
+          {
+            "id": "CitadelWardenSlash",
+            "damage": 20,
+            "hitSeconds": 0.4,
+            "reachHeight": 100
+          }
+        ]
+      },
+      "clientRenderHeight": 330,
+      "clientMetadata": "Images/Monsters/animations.json",
+      "aiStatus": "draft",
+      "runtimeSourceSupport": "present-static-read-only",
+      "playVerified": false
+    }
+  ],
+  "developmentNeeds": {
+    "serverNewRuntimeCode": false,
+    "clientNewRuntimeCode": false,
+    "editorNewCode": false,
+    "newMonsterType": false,
+    "newSkillType": false,
+    "newInteraction": false,
+    "serverContentCatalogRegistrationRequired": true,
+    "registration": {
+      "owner": "server-via-coordinator",
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+      "groupId": "west_coast_dungeons",
+      "entry": {
+        "id": 6,
+        "name": "침수된 성채",
+        "levelRange": "제작용 초안",
+        "description": "물이 고인 성채 폐허의 마른 제방을 따라 수호자의 왕좌에 도달한다."
+      },
+      "installExecutableData": false,
+      "reason": "dungeon-package.cjs Dependencies requires original Town dungeon ID registration even for package-only generation",
+      "status": "pending-separate-request"
+    },
+    "combatDataModificationRequired": false,
+    "monsterRegistryModificationRequired": false
+  },
+  "compositionPlan": {
+    "stage09": "Create and save schemaVersion 3 work file using existing DungeonEditor createDocument/createRoom/parse/validate and existing UI where available; embed measured final background originals once per shared asset.",
+    "stage10": "Use existing DungeonPackage.Build and DungeonEditor/tools/dungeon-package.cjs without --install; write ZIP and plans to client-side or external output, not server image folders.",
+    "serverOutputContract": {
+      "manifestVersion": 3,
+      "roomVersion": 5,
+      "format": "DungeonRoom"
+    },
+    "proposedWorkFile": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\FloodedCitadel.dungeon-project.json",
+    "proposedPackageOutput": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\package-r1",
+    "installRequiresSeparateApproval": true
+  },
+  "sourceReferences": [
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\docs\\workflows\\DUNGEON_CREATION.md",
+      "sha256": "9e7f09edd81239580c0280424731db69462dae46c95f6d7b030fed73af7347e7"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\job.json",
+      "sha256": "0b75fcf39bb7b5f2203ca487496e06af3aea7aa113619db1fbad81c1111d02fa"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeons\\FallenCitadel\\README.md",
+      "sha256": "d7485fd6ba9f526f17105c6fffafc0056e4c6b6be523dd2e5f0a28ec77314bb7"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\combat-integration\\INTEGRATION_REPORT.md",
+      "sha256": "fb06507bc15eae6dc8a94769733579a6bb8e163f50415e174c5d1d6c8db91449"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+      "sha256": "06933eea7357d3f01a84fd9742543c4853a0b09672493b0e69924dd3fa16c99b"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Monsters\\MonsterCatalog.json",
+      "sha256": "280e7ef8990bd2778772a46fdf52be49e32e23dffed67f7e9312296aedfd8064"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Monsters\\rusted_armor_soldier.ai.json",
+      "sha256": "77d78fd3a6f013abc84b226cd53c1e18c0954c52f754ff54d22b770c7610fd32"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Monsters\\fallen_citadel_warden.ai.json",
+      "sha256": "6b2d52f61ea7e0b1f92b347c23e649fe028a1596cb9e8e5b127361c8ea10b2f7"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Combat.json",
+      "sha256": "e7901ad1cb1a7bbc65ab00a375447d4a7621a0db285304b4de6671c40e180333"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\GameRoom.cpp",
+      "sha256": "98f304a3208f32ba3eacce64b317c429f3cae8a0654f0c3ad26c4aef172d9928"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\GameRoomCombat.cpp",
+      "sha256": "11af9f2c53acdfc78e9a6a55314692e4160bd5994916a7fab3c330b938c318e2"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\model.js",
+      "sha256": "fc04429caa98055ae9d9d2fa8b1fce712c8e342abefc4f35a476cf8017382587"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\package.js",
+      "sha256": "731debeaaf85dc9b60768ab0f11ec65ed52df82ca69ecc0272daf6c973445472"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\tools\\dungeon-package.cjs",
+      "sha256": "210e96b2abb975ed5625dd3cf140e2985193df3d392b2eaafda4ebee27eead9c"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\AUTOMATION.md",
+      "sha256": "3ea1f54f5abe2fcd025015cd61bf00b9d4011dfe28eb20e47be7cc6c78fe8c0d"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\MonsterEditor\\model.js",
+      "sha256": "af350da5bd5d2aa8f54b9136dd5a9e6f4cffd9568187fb0f8f759a0d90604206"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\CharacterEditor\\model.js",
+      "sha256": "c648b84ec6a3a3a3cffa0141d4c5ea756f7757f2b9e7b3453d327300789eb764"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Data\\monsters.json",
+      "sha256": "9ac8e4bdf87efb1ef29a3c3eed7d1d346461c5221fc9da92facb3f66a118b537"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Data\\MONSTERS.md",
+      "sha256": "63b37797a20d4d048d7952b2403c7e8f06628e4d22910ca50dd13579a3c96274"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Monsters\\animations.json",
+      "sha256": "c405bd413310cf081f7dded7ffd88c92daa81bec8a816e417d875c35e3f88f51"
+    },
+    {
+      "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\ActionRPGClient\\Game\\Monster.cpp",
+      "sha256": "a1af7302d8aa2b8391a9e688fdb698f14e3112acc5b312f4c28a9dbb42d55a92"
+    }
+  ],
+  "limitations": [
+    "Town original Data ID 6 is not yet registered; coordinator will request server registration before package output.",
+    "Three background requests are specifications only, not dispatched and not generated.",
+    "Full editor validation is pending real backgrounds; geometry validation has only six expected missing-background errors.",
+    "Monster HP/speeds/damage and render sizes reuse current provisional integration values; no new balance tuning.",
+    "Current source has AI/combat/render support; executable build parity and gameplay are not verified.",
+    "Current room-clear warp lock makes SupplyTerrace optional to enter but requires defeating its three soldiers before returning.",
+    "Boss death clears the dungeon through existing logic; no reward, loot or extra interactions are promised."
+  ],
+  "notPerformed": {
+    "imageGeneration": true,
+    "otherSessionMessages": true,
+    "sharedCodeModification": true,
+    "catalogModification": true,
+    "jobJsonModification": true,
+    "packageGeneration": true,
+    "installation": true,
+    "build": true,
+    "gameExecution": true,
+    "functionalTests": true
+  },
+  "nextStep": "Coordinator checks this result, requests original Town catalog ID 6 registration and monster/skill reuse confirmation sequentially, then dispatches the three graphics requests one at a time."
+}

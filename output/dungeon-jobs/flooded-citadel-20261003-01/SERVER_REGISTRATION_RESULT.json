@@ -1,0 +1,89 @@
+{
+  "jobId": "flooded-citadel-20261003-01",
+  "requestId": "flooded-citadel-20261003-01-06-server-catalog",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "rulesVersion": "1.0.1",
+  "stage": "06",
+  "owner": "server",
+  "status": "completed",
+  "result": "source-catalog-registration-completed",
+  "completedAt": "2026-10-03T14:23:00.457035+00:00",
+  "scope": "Approved original Town content catalog registration only; no runtime code or installation.",
+  "registration": {
+    "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+    "catalogVersion": 1,
+    "groupId": "west_coast_dungeons",
+    "dungeonId": "FloodedCitadel",
+    "dataId": 6,
+    "entry": {
+      "id": 6,
+      "name": "침수된 성채",
+      "levelRange": "제작용 초안",
+      "description": "물이 고인 성채 폐허의 마른 제방을 따라 수호자의 왕좌에 도달한다."
+    }
+  },
+  "artifacts": [
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\DungeonCatalog.json",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\SERVER_REGISTRATION_RESULT.json"
+  ],
+  "sourceEvidence": {
+    "designResultPath": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\output\\dungeon-jobs\\flooded-citadel-20261003-01\\DESIGN_RESULT.json",
+    "designResultSha256": "e3dc2fc3c588c0fff846ca76585d13427124820f63e32d31ce10ad581053720d",
+    "catalogBeforeSha256": "06933eea7357d3f01a84fd9742543c4853a0b09672493b0e69924dd3fa16c99b",
+    "catalogAfterSha256": "dda6b619cb72a9b029938d233282d467816eda47501cd577c14da7cd29e1bd47"
+  },
+  "staticChecks": {
+    "jsonParsed": true,
+    "loaderConstraintsCheckedFromSource": true,
+    "originalSourceId6Collision": false,
+    "sourceManifestId6Collision": false,
+    "existingCatalogEntriesPreserved": true,
+    "onlyRequestedEntryAdded": true,
+    "catalogVersionPreserved": true,
+    "uint32IdsAndUtf8ByteLimitsValid": true,
+    "dungeonIdsUnique": true,
+    "groupReferencesValid": true,
+    "townGroupReferenceFiles": [
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\TownMap.json",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\TownMapCapital.json",
+      "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\TownServer\\Data\\TownMapHarbor.json"
+    ],
+    "reviewedSourceManifests": [
+      {
+        "path": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGServer\\ActionRPGServer\\GameRoomServer\\Data\\Dungeons\\FallenCitadel\\Dungeon.json",
+        "dataId": 5,
+        "dungeonId": "FallenCitadel"
+      }
+    ]
+  },
+  "notPerformed": {
+    "runtimeCodeChanges": true,
+    "combatDataChanges": true,
+    "monsterCatalogChanges": true,
+    "sourceDungeonPackageInstallation": true,
+    "runtimeExecutableDataInstallation": true,
+    "packageGeneration": true,
+    "build": true,
+    "gameExecution": true,
+    "functionalTests": true,
+    "playVerification": true,
+    "gitStage": true,
+    "gitCommit": true,
+    "gitPush": true,
+    "otherSessionMessages": true,
+    "jobJsonModification": true
+  },
+  "remainingItems": [
+    "Existing package CLI may now resolve original Town Data ID 6; package generation and its shared validation are still pending.",
+    "FloodedCitadel dungeon package/source manifest and executable data have not been installed.",
+    "Original catalog registration does not establish dungeon enterability or combat/play verification.",
+    "Balance, rewards and existing reused monster runtime limitations remain as recorded in the design/reuse results."
+  ],
+  "nextStep": "Coordinator consumes this result, updates job.json, and continues approved editor composition and package-only output.",
+  "commitLog": [
+    "* 침수된 성채 원본 던전 카탈로그 등록",
+    "  * west_coast_dungeons에 Data ID 6과 제작용 초안 설명 추가",
+    "  * 원본 등록 정적 확인 및 설치·플레이 미실시 결과 기록"
+  ]
+}
