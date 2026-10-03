@@ -48,7 +48,7 @@ namespace GameRoomServer
                 {
                     player.actionSequence = inInput.sequence;
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
-                        && player.actor.reaction == Reaction::None)
+                        && player.actor.reaction == Reaction::None && !player.skill)
                     {
                         if (inInput.action == 1 && inInput.facingLeft <= 1
                             && player.shotCount + player.pendingShots < MAX_SHOTS
@@ -56,6 +56,7 @@ namespace GameRoomServer
                         {
                             if (player.shotPhase == ShotPhase::None)
                             {
+                                ++player.shotSequence;
                                 player.facingLeft = inInput.facingLeft != 0;
                                 player.airAttack = player.jumpPreparing || player.actor.height > 0;
                                 player.shotCount = 0;
@@ -70,6 +71,7 @@ namespace GameRoomServer
                             && player.shotPhase == ShotPhase::None)
                         {
                             player.jumpPreparing = true;
+                            ++player.jumpSequence;
                             player.jumpSeconds = 0;
                             player.airShotCount = 0;
                             player.directionX = player.directionY = 0;
@@ -112,6 +114,7 @@ namespace GameRoomServer
     void GameRoom::ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne)
     {
         if (inActor.hp == 0) return;
+        ++inActor.reactionSequence;
         inActor.hp -= std::min(inActor.hp, inDamage);
         if (inActor.hp == 0)
         {
@@ -167,6 +170,7 @@ namespace GameRoomServer
     void GameRoom::EnterNode(MonsterState& inMonster, const std::string& inNodeId)
     {
         inMonster.aiNodeId = inNodeId;
+        ++inMonster.actionSequence;
         inMonster.stateSeconds = inMonster.actionSeconds = 0;
         inMonster.actionStarted = inMonster.actionComplete = inMonster.hitApplied = false;
         inMonster.skillTargetId = 0;
@@ -364,6 +368,10 @@ namespace GameRoomServer
             projectiles.push_back({ nextProjectileId++, inPlayerId, inPlayer.mapId, inPlayer.position,
                 inPlayer.actor.height + combatDefinition->muzzleHeight, direction * axisScale,
                 inPlayer.airAttack ? -axisScale : 0.0f, combatDefinition->projectileRange });
+            auto& spawned = projectiles.back();
+            spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
+            spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
+                combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
             --inPlayer.pendingShots;
             ++inPlayer.shotCount;
             if (inPlayer.airAttack)
@@ -377,19 +385,22 @@ namespace GameRoomServer
         inPlayer.shotPhase = inPlayer.pendingShots > 0 ? ShotPhase::Fire : ShotPhase::Recover;
     }
 
-    // Use the room's four-unit geometry checks and a swept horizontal hit segment between ticks.
+    // Sweep against vertical cylinders in ground X/Y and height, with four-unit map geometry checks.
     void GameRoom::UpdateProjectiles(float inDeltaSeconds)
     {
         for (auto& projectile : projectiles)
         {
-            const float distance = std::min(projectile.remainingDistance, combatDefinition->projectileSpeed * inDeltaSeconds);
+            projectile.ageSeconds += inDeltaSeconds;
+            const float distance = std::min(projectile.remainingDistance, projectile.speed * inDeltaSeconds);
             const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
             const float stepDistance = distance / steps;
             const auto& map = dungeonWorld.at("maps").at(projectile.mapId);
             for (int step = 0; step < steps && projectile.remainingDistance > 0; ++step)
             {
-                const float startX = projectile.position.x;
+                const DungeonPoint start = projectile.position;
+                const float startHeight = projectile.height;
                 projectile.position.x += projectile.direction * stepDistance;
+                projectile.position.y += projectile.directionY * stepDistance;
                 projectile.height += projectile.heightDirection * stepDistance;
                 projectile.remainingDistance = std::max(0.0f, projectile.remainingDistance - stepDistance);
                 if (projectile.height < 0 || !DungeonDefinition::Movable(map, projectile.position))
@@ -403,19 +414,38 @@ namespace GameRoomServer
                     const auto& monster = monsters.at(id);
                     if (monster.actor.hp == 0) continue;
                     const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
-                    const float radius = profile.hitRadius + combatDefinition->projectileRadius;
-                    const float dx = monster.position.x - std::clamp(monster.position.x,
-                        std::min(startX, projectile.position.x), std::max(startX, projectile.position.x));
-                    const float dy = monster.position.y - projectile.position.y;
-                    if (dx * dx + dy * dy > radius * radius || projectile.height < monster.actor.height - combatDefinition->projectileRadius
-                        || projectile.height > monster.actor.height + profile.bodyHeight + combatDefinition->projectileRadius) continue;
-                    const float along = std::abs(monster.position.x - startX);
+                    const float radius = profile.hitRadius + projectile.radius;
+                    const float dx = projectile.position.x - start.x, dy = projectile.position.y - start.y;
+                    const float ox = start.x - monster.position.x, oy = start.y - monster.position.y;
+                    const float a = dx * dx + dy * dy, b = 2 * (ox * dx + oy * dy);
+                    const float c = ox * ox + oy * oy - radius * radius;
+                    float first = 0, last = 1;
+                    if (a <= 0.000001f) { if (c > 0) continue; }
+                    else
+                    {
+                        const float discriminant = b * b - 4 * a * c;
+                        if (discriminant < 0) continue;
+                        const float root = std::sqrt(discriminant);
+                        first = std::max(first, (-b - root) / (2 * a));
+                        last = std::min(last, (-b + root) / (2 * a));
+                    }
+                    const float dz = projectile.height - startHeight;
+                    const float lower = monster.actor.height - projectile.radius;
+                    const float upper = monster.actor.height + profile.bodyHeight + projectile.radius;
+                    if (std::abs(dz) <= 0.000001f) { if (startHeight < lower || startHeight > upper) continue; }
+                    else
+                    {
+                        const float t1 = (lower - startHeight) / dz, t2 = (upper - startHeight) / dz;
+                        first = std::max(first, std::min(t1, t2)); last = std::min(last, std::max(t1, t2));
+                    }
+                    if (first > last) continue;
+                    const float along = first;
                     if (along < nearest || (along == nearest && id < nearestId)) { nearest = along; nearestId = id; }
                 }
                 if (nearestId != 0)
                 {
                     auto& victim = monsters.at(nearestId);
-                    ApplyDamage(victim.actor, combatDefinition->shotDamage, false);
+                    ApplyDamage(victim.actor, projectile.damage, false);
                     victim.actionStarted = victim.actionComplete = false;
                     projectile.remainingDistance = 0;
                 }
@@ -458,6 +488,7 @@ namespace GameRoomServer
             UpdateActor(player.actor, inDeltaSeconds);
             if (height > 0 && player.actor.height == 0) player.airShotCount = 0;
             UpdateShots(id, player, inDeltaSeconds);
+            UpdateSkills(id, player, inDeltaSeconds);
         }
         UpdateProjectiles(inDeltaSeconds);
         for (auto& [id, monster] : monsters)
@@ -482,6 +513,10 @@ namespace GameRoomServer
             found->second.worldReady = true;
             const auto& mapId = found->second.mapId;
             nlohmann::json snapshot{ { "version", 1 }, { "serverTick", self->serverTick }, { "mapId", mapId },
+                { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
+                { "serverTimeMs", static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count()) },
+                { "mapEpoch", found->second.mapEpoch },
                 { "roomId", self->roomId },
                 { "state", self->state == State::WaitingForPlayers ? "WaitingForPlayers"
                     : self->state == State::Running ? "Running" : self->state == State::Cleared ? "Cleared" : "Stopped" },
@@ -497,11 +532,22 @@ namespace GameRoomServer
                     { "hp", player.actor.hp }, { "maxHp", self->combatDefinition->playerMaxHp }, { "height", player.actor.height },
                     { "verticalSpeed", player.actor.verticalSpeed }, { "reactionSeconds", player.actor.reactionSeconds },
                     { "facingLeft", player.facingLeft }, { "reaction", ReactionName(player.actor.reaction) },
+                    { "reactionSequence", player.actor.reactionSequence },
                     { "shotPhase", shot }, { "airAttack", player.airAttack }, { "actionSequence", player.actionSequence },
+                    { "shotSequence", player.shotSequence }, { "jumpSequence", player.jumpSequence },
                     { "shotSeconds", player.shotSeconds }, { "shotCount", player.shotCount }, { "airShotCount", player.airShotCount },
                     { "jumpPhase", player.jumpPreparing ? "Prepare" : player.actor.height > 0 ? "Airborne" : "Grounded" },
                     { "jumpSeconds", player.jumpSeconds },
                     { "moveSequence", player.sequence } });
+                auto& record = snapshot["players"].back();
+                record["characterId"] = player.characterId; record["skillSequence"] = player.skillSequence;
+                record["skillId"] = player.lastSkillId;
+                record["skillActive"] = player.skill.has_value();
+                record["skillAirborne"] = player.lastSkillAirborne;
+                record["skillSeconds"] = player.lastSkillSeconds;
+                record["movementMultiplier"] = BuffMultiplier(player, "movementMultiplier");
+                record["buffs"] = nlohmann::json::array();
+                for (const auto& buff : player.buffs) record["buffs"].push_back({ { "skillId", buff.id }, { "remainingSeconds", buff.remainingSeconds } });
             }
             for (const auto& [id, monster] : self->monsters)
             {
@@ -516,13 +562,16 @@ namespace GameRoomServer
                     { "maxHp", monster.definition->maxHp }, { "height", monster.actor.height }, { "facingLeft", monster.facingLeft },
                     { "verticalSpeed", monster.actor.verticalSpeed }, { "reactionSeconds", monster.actor.reactionSeconds },
                     { "reaction", ReactionName(monster.actor.reaction) }, { "aiNodeId", monster.aiNodeId },
+                    { "reactionSequence", monster.actor.reactionSequence }, { "actionSequence", monster.actionSequence },
                     { "actionType", type }, { "actionStarted", monster.actionStarted }, { "actionComplete", monster.actionComplete },
                     { "actionSeconds", monster.actionSeconds }, { "animationId", animationId } });
             }
             for (const auto& projectile : self->projectiles)
                 if (projectile.mapId == mapId) snapshot["projectiles"].push_back({ { "id", projectile.id }, { "ownerId", projectile.ownerId },
                     { "x", projectile.position.x }, { "y", projectile.position.y }, { "height", projectile.height },
-                    { "direction", projectile.direction }, { "heightDirection", projectile.heightDirection } });
+                    { "direction", projectile.direction }, { "heightDirection", projectile.heightDirection },
+                    { "directionY", projectile.directionY }, { "speed", projectile.speed }, { "radius", projectile.radius },
+                    { "skillId", projectile.skillId }, { "ageSeconds", projectile.ageSeconds } });
             auto value = std::make_shared<const std::string>(snapshot.dump());
             handler(value->size() <= MAX_SNAPSHOT_BYTES ? std::move(value) : nullptr);
         });

@@ -31,8 +31,10 @@ namespace GameRoomServer
     {
         dungeonWorld = definition->world;
         dungeonWorld["roomId"] = roomId;
+        dungeonWorld["playerSkills"] = combatDefinition->playerSkills.source;
         dungeonWorld["combatRules"] = {
             { "version", 1 }, { "maxHp", combatDefinition->playerMaxHp },
+            { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
             { "walkSpeed", combatDefinition->walkSpeed }, { "runSpeed", combatDefinition->runSpeed },
             { "shotPrepareSeconds", combatDefinition->shotPrepareSeconds },
             { "shotIntervalSeconds", combatDefinition->shotIntervalSeconds },
@@ -109,7 +111,7 @@ namespace GameRoomServer
             player.worldReady = true;
             player.directionX = inInput.directionX;
             player.directionY = inInput.directionY;
-            if (player.shotPhase == ShotPhase::None && player.actor.reaction == Reaction::None
+            if (!player.skill && player.shotPhase == ShotPhase::None && player.actor.reaction == Reaction::None
                 && inInput.directionX != 0) player.facingLeft = inInput.directionX < 0;
             player.running = inInput.running != 0;
             player.lastInput = std::chrono::steady_clock::now();
@@ -139,12 +141,13 @@ namespace GameRoomServer
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
             if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
-                || player.shotPhase != ShotPhase::None || player.actor.height > 0 || player.jumpPreparing) continue;
+                || player.skill || player.shotPhase != ShotPhase::None || player.actor.height > 0 || player.jumpPreparing) continue;
             const auto& map = dungeonWorld.at("maps").at(player.mapId);
             float dx = static_cast<float>(player.directionX), dy = static_cast<float>(player.directionY);
             if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
             const float length = std::hypot(dx, dy);
-            const float distance = (player.running ? player.runSpeed : player.walkSpeed) * inDeltaSeconds;
+            const float distance = (player.running ? player.runSpeed : player.walkSpeed)
+                * BuffMultiplier(player, "movementMultiplier") * inDeltaSeconds;
             const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
             if (length > 0)
             {
@@ -173,8 +176,11 @@ namespace GameRoomServer
                         const auto entry = std::find_if(entries.begin(), entries.end(), [&action](const auto& value)
                             { return value.at("id") == action.at("targetEntryPointId"); });
                         player.mapId = targetMapId;
+                        ++player.mapEpoch;
                         player.position = DungeonDefinition::Point(entry->at("position"));
                         player.warpArmed = false;
+                        player.skill.reset();
+                        player.lastSkillId.clear();
                         player.directionX = player.directionY = 0;
                         break;
                     }
@@ -205,20 +211,24 @@ namespace GameRoomServer
         asio::dispatch(strand, [self]()
         {
             self->state = State::Stopped;
+            self->PublishRealtime();
+            self->realtimeSubscribers.clear();
             asio::error_code ignoredError;
             self->enterTimer.cancel(ignoredError);
             self->tickTimer.cancel(ignoredError);
         });
     }
 
-    void GameRoom::TryEnter(const PlayerId inPlayerId, EnterResultHandler inResultHandler)
+    void GameRoom::TryEnter(const PlayerId inPlayerId, std::uint32_t inCharacterId, EnterResultHandler inResultHandler)
     {
         const std::shared_ptr<GameRoom> self = shared_from_this();
-        asio::dispatch(strand, [self, inPlayerId, resultHandler = std::move(inResultHandler)]() mutable
+        asio::dispatch(strand, [self, inPlayerId, inCharacterId, resultHandler = std::move(inResultHandler)]() mutable
         {
             const bool accepted = self->state == State::WaitingForPlayers
+                && inCharacterId != 0
                 && self->expectedPlayers.contains(inPlayerId)
                 && self->enteredPlayers.insert(inPlayerId).second;
+            if (accepted) self->players.at(inPlayerId).characterId = inCharacterId;
             if (accepted && self->enteredPlayers.size() == self->expectedPlayers.size())
             {
                 self->StartDungeon();
@@ -236,6 +246,9 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, resultHandler = std::move(inResultHandler)]() mutable
         {
             const bool removed = self->enteredPlayers.erase(inPlayerId) > 0;
+            const auto player = self->players.find(inPlayerId);
+            if (player != self->players.end()) { player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear(); }
+            self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = removed && self->enteredPlayers.empty()
                 && self->state != State::WaitingForPlayers;
             if (resultHandler)
@@ -253,12 +266,25 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, resultHandler = std::move(inResultHandler)]() mutable
         {
             self->enteredPlayers.erase(inPlayerId);
+            self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = self->enteredPlayers.empty()
                 && self->state != State::WaitingForPlayers;
             if (resultHandler)
             {
                 resultHandler(roomEmpty);
             }
+        });
+    }
+
+    // Validate membership and terminal state on the room strand before a replacement is created.
+    void GameRoom::ValidateCompletion(std::vector<PlayerId> inParticipants, std::function<void(bool)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, participants = std::move(inParticipants), handler = std::move(inHandler)]()
+        {
+            const std::unordered_set<PlayerId> requested(participants.begin(), participants.end());
+            handler(self->state == State::Cleared && !requested.empty()
+                && requested.size() == participants.size() && requested == self->enteredPlayers);
         });
     }
 
@@ -272,6 +298,7 @@ namespace GameRoomServer
                 return;
             }
             self->state = State::Cleared;
+            self->PublishRealtime();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
             if (resultHandler)
@@ -321,20 +348,27 @@ namespace GameRoomServer
         state = State::Running;
         asio::error_code ignoredError;
         enterTimer.cancel(ignoredError);
+        nextTickAt = std::chrono::steady_clock::now();
         ScheduleTick();
     }
 
     void GameRoom::ScheduleTick()
     {
-        tickTimer.expires_after(std::chrono::milliseconds(50));
+        // Anchor deadlines so processing time does not accumulate into the tick interval.
+        // Under overload, skip missed deadlines rather than executing an unbounded catch-up burst.
+        nextTickAt += TICK_INTERVAL;
+        const auto now = std::chrono::steady_clock::now();
+        if (nextTickAt <= now) nextTickAt = now + TICK_INTERVAL;
+        tickTimer.expires_at(nextTickAt);
         const std::shared_ptr<GameRoom> self = shared_from_this();
         tickTimer.async_wait([self](const asio::error_code& inError)
         {
             if (!inError && self->state == State::Running)
             {
                 ++self->serverTick;
-                self->UpdatePlayers(0.05f);
-                self->UpdateCombat(0.05f);
+                self->UpdatePlayers(TICK_SECONDS);
+                self->UpdateCombat(TICK_SECONDS);
+                if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested) self->PublishRealtime();
                 if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();
             }
         });

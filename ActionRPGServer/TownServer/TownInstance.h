@@ -42,6 +42,10 @@ namespace TownServer::Domain
             std::uint32_t inDungeonId, DungeonRequestHandler inHandler);
         void CompleteDungeonRequest(std::vector<PlayerId> inParticipantPlayerIds,
             ActionRPG::RoomControlProtocol::CreateRoomResult inResult);
+        void ValidateDungeonCompletion(std::uint64_t inSessionId,
+            ActionRPG::RoomControlProtocol::RoomId inRoomId, DungeonRequestHandler inHandler);
+        void CompleteDungeonCompletion(std::vector<PlayerId> inParticipants, bool inRetry,
+            ActionRPG::RoomControlProtocol::FinishRoomResult inResult);
         void InviteToParty(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
         void CreateParty(std::uint64_t inSessionId, std::string inTitle, bool inIsPublic);
         void AnswerPartyInvitation(std::uint64_t inSessionId, std::uint64_t inInvitationId,

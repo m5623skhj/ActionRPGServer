@@ -89,6 +89,7 @@ namespace TownServer::Network
                 return;
             }
             enterRequested = true;
+            characterId.store(request->characterId, std::memory_order_release);
             town->Enter(shared_from_this(), request->playerName, request->characterId);
             return;
         }
@@ -116,7 +117,8 @@ namespace TownServer::Network
                 tcpSession->Stop();
                 return;
             }
-            roomControl->ConfirmJoin(request->roomId, authenticatedPlayerId, request->challenge);
+            roomControl->ConfirmJoin(request->roomId, authenticatedPlayerId, request->challenge,
+                characterId.load(std::memory_order_acquire));
             return;
         }
         case TownProtocol::PacketType::EnterDungeonRequest:
@@ -156,6 +158,35 @@ namespace TownServer::Network
                                 activeTown->CompleteDungeonRequest(
                                     std::move(participantPlayerIds), std::move(inResult));
                             }
+                        });
+                });
+            return;
+        }
+        case TownProtocol::PacketType::DungeonCompletionRequest:
+        {
+            const auto request = TownProtocol::DecodeDungeonCompletionRequest(inPacket);
+            const auto roomControl = roomControlServer.lock();
+            if (!request || !enterRequested || GetPlayerId() == 0 || !roomControl)
+            { tcpSession->Stop(); return; }
+            const auto weakSelf = weak_from_this();
+            const std::weak_ptr<Domain::TownInstance> weakTown = town;
+            town->ValidateDungeonCompletion(GetSessionId(), request->roomId,
+                [weakSelf, weakTown, roomControl, roomId = request->roomId, retry = request->retry]
+                (const bool inValid, std::vector<Domain::PlayerId> inParticipants) mutable
+                {
+                    if (!inValid)
+                    {
+                        if (const auto self = weakSelf.lock()) self->Send(TownProtocol::Encode(
+                            TownProtocol::DungeonCompletionResponse{roomId, false, retry}));
+                        return;
+                    }
+                    auto responseParticipants = inParticipants;
+                    roomControl->FinishRoom(roomId, retry, std::move(inParticipants),
+                        [weakTown, retry, participants = std::move(responseParticipants)]
+                        (ActionRPG::RoomControlProtocol::FinishRoomResult inResult) mutable
+                        {
+                            if (const auto activeTown = weakTown.lock()) activeTown->CompleteDungeonCompletion(
+                                std::move(participants), retry, std::move(inResult));
                         });
                 });
             return;

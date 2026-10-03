@@ -159,6 +159,8 @@
     <ClCompile Include="DungeonDefinition.cpp" />
     <ClCompile Include="GameRoom.cpp" />
     <ClCompile Include="GameRoomCombat.cpp" />
+    <ClCompile Include="GameRoomSkills.cpp" />
+    <ClCompile Include="GameRoomRealtime.cpp" />
     <ClCompile Include="CombatDefinition.cpp" />
     <ClCompile Include="MonsterDefinition.cpp" />
     <ClCompile Include="main.cpp" />
@@ -174,6 +176,7 @@
     <ClInclude Include="DungeonDefinition.h" />
     <ClInclude Include="GameRoom.h" />
     <ClInclude Include="CombatDefinition.h" />
+    <ClInclude Include="..\Shared\PlayerSkillCatalog.h" />
     <ClInclude Include="MonsterDefinition.h" />
     <ClInclude Include="RoomManager.h" />
     <ClInclude Include="RudpPrerequisites.h" />
@@ -184,6 +187,8 @@
     <None Include="ServerOptionFile\SessionBrokerOption.txt" />
     <None Include="Data\Dungeons\README.md" />
     <None Include="Data\Combat.json" />
+    <None Include="Data\PlayerSkills.json" />
+    <None Include="PLAYER_SKILLS.md" />
     <None Include="COMBAT_PROTOCOL.md" />
     <None Include="Data\Monsters\MonsterCatalog.json" />
     <None Include="Data\Monsters\Dummy.ai.json" />

@@ -22,6 +22,10 @@ namespace ActionRPG::DungeonProtocol
         DUNGEON_ACTION_RESULT,
         DUNGEON_COMBAT_STATE_REQUEST,
         DUNGEON_COMBAT_STATE_CHUNK,
+        DUNGEON_REALTIME_REQUEST,
+        DUNGEON_REALTIME_RESULT,
+        DUNGEON_REALTIME_CHUNK,
+        DUNGEON_SKILL_INPUT,
     };
 
     class DungeonChallenge final : public IPacket
@@ -140,6 +144,68 @@ namespace ActionRPG::DungeonProtocol
         std::uint8_t status{};
         std::uint32_t retryAfterMs{};
         std::string payload{};
+    };
+
+    class DungeonRealtimeRequest final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint16_t version{};
+        std::uint8_t enabled{};
+        std::uint64_t challenge{};
+    };
+
+    class DungeonRealtimeResult final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint16_t version{};
+        std::uint8_t accepted{};
+        std::uint64_t challenge{};
+        std::uint64_t roomId{};
+        std::uint32_t dungeonId{};
+        std::uint16_t tickIntervalMs{};
+        std::uint16_t snapshotIntervalMs{};
+    };
+
+    class DungeonRealtimeChunk final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint16_t version{};
+        std::uint64_t challenge{};
+        std::uint64_t roomId{};
+        std::uint32_t dungeonId{};
+        std::uint32_t mapEpoch{};
+        std::uint64_t snapshotSequence{};
+        std::uint64_t serverTick{};
+        std::uint64_t serverTimeMs{};
+        std::string mapId{};
+        std::uint32_t totalBytes{};
+        std::uint32_t offset{};
+        std::uint8_t state{};
+        std::string payload{};
+    };
+
+    class DungeonSkillInput final : public IPacket
+    {
+    public:
+        [[nodiscard]] ::PacketId GetPacketId() const override;
+        void BufferToPacket(NetBuffer& inBuffer) override;
+        void PacketToBuffer(NetBuffer& outBuffer) override;
+
+        std::uint32_t sequence{};
+        std::string skillId{};
+        std::uint8_t facingLeft{};
     };
 
     void RegisterPackets();

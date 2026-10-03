@@ -127,6 +127,7 @@ namespace GameRoomServer
         }
         for (const auto& [dataId, definition] : inMonsters)
             Require(result->monsters.contains(dataId), "Missing combat profile for monster " + std::to_string(dataId));
+        result->playerSkills = ActionRPG::PlayerSkills::Catalog::Load(inPath.parent_path() / "PlayerSkills.json");
         return result;
     }
 }

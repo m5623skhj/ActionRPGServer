@@ -231,3 +231,29 @@ Packet:
         Name: title
       - Type: bool
         Name: isPublic
+
+  - Type: RequestPacket
+    PacketName: DungeonCompletionRequest
+    Items:
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: bool
+        Name: retry
+
+  - Type: ReplyPacket
+    PacketName: DungeonCompletionResponse
+    Items:
+      - Type: std::uint64_t
+        Name: previousRoomId
+      - Type: bool
+        Name: succeeded
+      - Type: bool
+        Name: retry
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: std::uint64_t
+        Name: combatSeed
+      - Type: std::string
+        Name: sessionBrokerAddress
+      - Type: std::uint16_t
+        Name: sessionBrokerPort

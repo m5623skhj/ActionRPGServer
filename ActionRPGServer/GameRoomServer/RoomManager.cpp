@@ -43,18 +43,18 @@ namespace GameRoomServer
 
     void RoomManager::CreateRoom(
         Protocol::CreateRoom inRequest,
-        CreateResultHandler inResultHandler)
+        CreateResultHandler inResultHandler, const Protocol::RoomId inReplacingRoomId)
     {
         const std::shared_ptr<RoomManager> self = shared_from_this();
         asio::dispatch(strand,
-            [self, request = std::move(inRequest), resultHandler = std::move(inResultHandler)]() mutable
+            [self, request = std::move(inRequest), resultHandler = std::move(inResultHandler), inReplacingRoomId]() mutable
             {
                 Protocol::CreateRoomResult result;
                 result.requestId = request.requestId;
                 const auto definition = self->definitions.find(request.dungeonId);
                 const std::unordered_set<Protocol::PlayerId> participantIds(
                     request.participantPlayerIds.begin(), request.participantPlayerIds.end());
-                if (self->rooms.size() >= self->maxRoomCount || definition == self->definitions.end()
+                if ((self->rooms.size() >= self->maxRoomCount && !self->rooms.contains(inReplacingRoomId)) || definition == self->definitions.end()
                     || request.participantPlayerIds.empty()
                     || participantIds.contains(0) || participantIds.size() != request.participantPlayerIds.size()
                     || request.participantPlayerIds.size() > definition->second->maxPlayers)
@@ -102,6 +102,55 @@ namespace GameRoomServer
             });
     }
 
+    // Keep the cleared room until fresh-room creation succeeds. All manager mutations use its strand.
+    void RoomManager::FinishRoom(Protocol::FinishRoom inRequest,
+        std::function<void(Protocol::FinishRoomResult)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, request = std::move(inRequest), handler = std::move(inHandler)]() mutable
+        {
+            const auto found = self->rooms.find(request.roomId);
+            if (found == self->rooms.end() || !self->endedRooms.contains(request.roomId))
+            {
+                handler(Protocol::FinishRoomResult{request.requestId, request.roomId});
+                return;
+            }
+            const auto room = found->second;
+            const auto participants = request.participantPlayerIds;
+            room->ValidateCompletion(participants,
+                [self, room, request = std::move(request), handler = std::move(handler)](const bool inValid) mutable
+                {
+                    asio::dispatch(self->strand,
+                        [self, room, request = std::move(request), handler = std::move(handler), inValid]() mutable
+                        {
+                            if (!inValid || !self->rooms.contains(request.roomId)
+                                || self->rooms.at(request.roomId) != room || !self->endedRooms.contains(request.roomId))
+                            {
+                                handler(Protocol::FinishRoomResult{request.requestId, request.roomId});
+                                return;
+                            }
+                            auto complete = [self, requestId = request.requestId, oldRoomId = request.roomId,
+                                handler = std::move(handler)](Protocol::CreateRoomResult inResult) mutable
+                            {
+                                if (inResult.succeeded) self->RemoveRoom(oldRoomId, false);
+                                handler(Protocol::FinishRoomResult{requestId, oldRoomId, inResult.succeeded,
+                                    inResult.roomId, inResult.combatSeed, std::move(inResult.sessionBrokerAddress),
+                                    inResult.sessionBrokerPort});
+                            };
+                            if (request.retry)
+                                self->CreateRoom(Protocol::CreateRoom{request.requestId, room->GetDungeonId(),
+                                    std::move(request.participantPlayerIds)}, std::move(complete), request.roomId);
+                            else
+                            {
+                                Protocol::CreateRoomResult result;
+                                result.succeeded = true;
+                                complete(std::move(result));
+                            }
+                        });
+                });
+        });
+    }
+
     void RoomManager::RegisterChallenge(
         const std::uint64_t inChallenge,
         DungeonSession* const inSession,
@@ -133,7 +182,7 @@ namespace GameRoomServer
             const std::uint32_t generation = pendingIterator->second.generation;
             self->pendingSessions.erase(pendingIterator);
             const std::weak_ptr<RoomManager> weakSelf = self;
-            roomIterator->second->TryEnter(request.playerId,
+            roomIterator->second->TryEnter(request.playerId, request.characterId,
                 [weakSelf, request, session, generation](const bool inAccepted)
                 {
                     if (const std::shared_ptr<RoomManager> manager = weakSelf.lock())

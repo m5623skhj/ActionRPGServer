@@ -3,6 +3,7 @@
 #include "../Shared/RoomControlProtocol.h"
 #include "RudpPrerequisites.h"
 #include "DungeonProtocol.h"
+#include "GameRoom.h"
 
 #include <RUDPSession.h>
 
@@ -29,7 +30,12 @@ namespace GameRoomServer
         void OnWorldRequest(const ActionRPG::DungeonProtocol::DungeonWorldRequest& inPacket);
         void OnMoveInput(const ActionRPG::DungeonProtocol::DungeonMoveInput& inPacket);
         void OnActionInput(const ActionRPG::DungeonProtocol::DungeonActionInput& inPacket);
+        void OnSkillInput(const ActionRPG::DungeonProtocol::DungeonSkillInput& inPacket);
         void OnCombatStateRequest(const ActionRPG::DungeonProtocol::DungeonCombatStateRequest& inPacket);
+        void OnRealtimeRequest(const ActionRPG::DungeonProtocol::DungeonRealtimeRequest& inPacket);
+        void SendRealtimeFrame(std::uint32_t inGeneration, ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::weak_ptr<const std::uint8_t> inLease,
+            std::uint32_t inMapEpoch, std::shared_ptr<const GameRoom::RealtimeFrame> inFrame);
         void SendActionResult(std::uint32_t inGeneration, ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, ActionRPG::DungeonProtocol::DungeonActionResult inPacket);
         void SendCombatChunk(std::uint32_t inGeneration, ActionRPG::RoomControlProtocol::RoomId inRoomId,
@@ -58,5 +64,8 @@ namespace GameRoomServer
         std::uint32_t snapshotId{}, nextCombatOffset{}, combatBytesThisSecond{}, actionsThisSecond{};
         bool snapshotPending{};
         std::chrono::steady_clock::time_point lastSnapshotRequest{}, combatWindow{}, actionWindow{};
+        std::shared_ptr<const std::uint8_t> realtimeLease;
+        std::uint32_t realtimeBytesThisSecond{};
+        std::chrono::steady_clock::time_point realtimeWindow{}, lastRealtimeRequest{};
     };
 }

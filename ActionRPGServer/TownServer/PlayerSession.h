@@ -42,6 +42,7 @@ namespace TownServer::Network
         std::weak_ptr<Domain::TownInstance> townInstance;
         std::weak_ptr<RoomControlTcpServer> roomControlServer;
         std::atomic_uint64_t playerId{};
+        std::atomic_uint32_t characterId{};
         bool enterRequested = false;
     };
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MonsterDefinition.h"
+#include "../Shared/PlayerSkillCatalog.h"
 
 #include <filesystem>
 #include <memory>
@@ -37,6 +38,7 @@ namespace GameRoomServer
         float jumpPrepareSeconds{}, jumpSpeed{}, gravity{}, hitStunSeconds{}, downSeconds{}, riseSeconds{};
         float airFireLift{}, airRecoilDistance{};
         std::unordered_map<std::uint32_t, MonsterCombatProfile> monsters;
+        ActionRPG::PlayerSkills::Catalog playerSkills;
 
         [[nodiscard]] static std::shared_ptr<const CombatDefinition> Load(
             const std::filesystem::path& inPath, const MonsterDefinition::Catalog& inMonsters);

@@ -152,6 +152,17 @@ namespace GameRoomServer
                 });
             return;
         }
+        case Protocol::PacketType::FinishRoom:
+        {
+            const auto request = Protocol::DecodeFinishRoom(inPacket);
+            if (!request) { session->Stop(); return; }
+            const auto weakSelf = weak_from_this();
+            roomManager->FinishRoom(*request, [weakSelf](Protocol::FinishRoomResult inResult)
+            {
+                if (const auto self = weakSelf.lock()) self->Send(Protocol::Encode(inResult));
+            });
+            return;
+        }
         case Protocol::PacketType::ConfirmJoin:
         {
             const std::optional<Protocol::ConfirmJoin> request = Protocol::DecodeConfirmJoin(inPacket);

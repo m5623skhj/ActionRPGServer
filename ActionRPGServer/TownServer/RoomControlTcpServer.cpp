@@ -62,12 +62,32 @@ namespace TownServer::Network
             });
     }
 
+    void RoomControlTcpServer::FinishRoom(const Protocol::RoomId inRoomId, const bool inRetry,
+        std::vector<Protocol::PlayerId> inParticipants, FinishRoomResultHandler inHandler)
+    {
+        asio::dispatch(GetExecutor(), [this, inRoomId, inRetry, participants = std::move(inParticipants),
+            handler = std::move(inHandler)]() mutable
+        {
+            const auto found = roomToServerSession.find(inRoomId);
+            if (found == roomToServerSession.end() || !endingRoomPlayers.contains(inRoomId)
+                || !roomServers.contains(found->second))
+            {
+                handler(Protocol::FinishRoomResult{0, inRoomId});
+                return;
+            }
+            const auto requestId = nextRequestId++;
+            pendingFinishRooms.emplace(requestId, PendingFinishRoom{found->second, inRoomId, std::move(handler)});
+            roomServers.at(found->second).session->Send(Protocol::Encode(
+                Protocol::FinishRoom{requestId, inRoomId, inRetry, std::move(participants)}));
+        });
+    }
+
     void RoomControlTcpServer::ConfirmJoin(
         const Protocol::RoomId inRoomId,
         const Protocol::PlayerId inPlayerId,
-        const std::uint64_t inChallenge)
+        const std::uint64_t inChallenge, const std::uint32_t inCharacterId)
     {
-        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, inChallenge]()
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, inChallenge, inCharacterId]()
         {
             const auto roomIterator = roomToServerSession.find(inRoomId);
             if (roomIterator == roomToServerSession.end())
@@ -80,7 +100,7 @@ namespace TownServer::Network
                 return;
             }
             serverIterator->second.session->Send(Protocol::Encode(
-                Protocol::ConfirmJoin{ inRoomId, inPlayerId, inChallenge }));
+                Protocol::ConfirmJoin{ inRoomId, inPlayerId, inChallenge, inCharacterId }));
         });
     }
 
@@ -138,6 +158,12 @@ namespace TownServer::Network
                 iterator->second.resultHandler(Protocol::CreateRoomResult{ iterator->first });
             }
             iterator = pendingCreateRooms.erase(iterator);
+        }
+        for (auto iterator = pendingFinishRooms.begin(); iterator != pendingFinishRooms.end();)
+        {
+            if (iterator->second.roomServerSessionId != inSessionId) { ++iterator; continue; }
+            iterator->second.handler(Protocol::FinishRoomResult{iterator->first, iterator->second.roomId});
+            iterator = pendingFinishRooms.erase(iterator);
         }
         roomServers.erase(inSessionId);
     }
@@ -222,6 +248,30 @@ namespace TownServer::Network
             {
                 handler(*packet);
             }
+            return;
+        }
+        case Protocol::PacketType::FinishRoomResult:
+        {
+            const auto packet = Protocol::DecodeFinishRoomResult(inPacket);
+            if (!packet) { CloseInvalidSession(state); return; }
+            const auto pending = pendingFinishRooms.find(packet->requestId);
+            if (pending == pendingFinishRooms.end() || pending->second.roomServerSessionId != inSessionId
+                || pending->second.roomId != packet->previousRoomId)
+            { CloseInvalidSession(state); return; }
+            if (packet->succeeded)
+            {
+                endingRoomPlayers.erase(packet->previousRoomId);
+                roomToServerSession.erase(packet->previousRoomId);
+                if (state.roomCount > 0) --state.roomCount;
+                if (packet->roomId != 0)
+                {
+                    roomToServerSession[packet->roomId] = inSessionId;
+                    ++state.roomCount;
+                }
+            }
+            auto handler = std::move(pending->second.handler);
+            pendingFinishRooms.erase(pending);
+            handler(*packet);
             return;
         }
         case Protocol::PacketType::EnterRoom:

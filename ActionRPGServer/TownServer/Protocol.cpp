@@ -1055,4 +1055,57 @@ namespace TownProtocol
         packet.isPublic = isPublic != 0;
         return packet;
     }
+    std::vector<std::uint8_t> Encode(const DungeonCompletionRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::DungeonCompletionRequest);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt8(inPacket.retry ? 1 : 0);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const DungeonCompletionResponse& inPacket)
+    {
+        PacketWriter writer(PacketType::DungeonCompletionResponse);
+        writer.WriteUInt64(inPacket.previousRoomId);
+        writer.WriteUInt8(inPacket.succeeded ? 1 : 0);
+        writer.WriteUInt8(inPacket.retry ? 1 : 0);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.combatSeed);
+        writer.WriteString(inPacket.sessionBrokerAddress);
+        writer.WriteUInt16(inPacket.sessionBrokerPort);
+        return writer.Finish();
+    }
+
+    std::optional<DungeonCompletionRequest> DecodeDungeonCompletionRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        DungeonCompletionRequest packet;
+        std::uint8_t retry{};
+        if (!ReadExpectedType(reader, PacketType::DungeonCompletionRequest)
+            || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0
+            || !reader.ReadUInt8(retry) || retry > 1 || !reader.Finished()) return std::nullopt;
+        packet.retry = retry != 0;
+        return packet;
+    }
+
+    std::optional<DungeonCompletionResponse> DecodeDungeonCompletionResponse(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        DungeonCompletionResponse packet;
+        std::uint8_t succeeded{}, retry{};
+        if (!ReadExpectedType(reader, PacketType::DungeonCompletionResponse)
+            || !reader.ReadUInt64(packet.previousRoomId) || packet.previousRoomId == 0
+            || !reader.ReadUInt8(succeeded) || succeeded > 1
+            || !reader.ReadUInt8(retry) || retry > 1
+            || !reader.ReadUInt64(packet.roomId) || !reader.ReadUInt64(packet.combatSeed)
+            || !reader.ReadString(packet.sessionBrokerAddress) || packet.sessionBrokerAddress.size() > 255
+            || !reader.ReadUInt16(packet.sessionBrokerPort) || !reader.Finished()) return std::nullopt;
+        packet.succeeded = succeeded != 0;
+        packet.retry = retry != 0;
+        if (packet.succeeded && packet.retry && (packet.roomId == 0 || packet.combatSeed == 0
+            || packet.sessionBrokerAddress.empty() || packet.sessionBrokerPort == 0)) return std::nullopt;
+        if (packet.succeeded && !packet.retry && packet.roomId != 0) return std::nullopt;
+        return packet;
+    }
+
 }

@@ -23,8 +23,12 @@ namespace GameRoomServer
             static_cast<::PacketId>(PacketType::DUNGEON_MOVE_INPUT), &DungeonSession::OnMoveInput);
         RegisterPacketHandler<DungeonSession, DungeonActionInput>(
             static_cast<::PacketId>(PacketType::DUNGEON_ACTION_INPUT), &DungeonSession::OnActionInput);
+        RegisterPacketHandler<DungeonSession, DungeonSkillInput>(
+            static_cast<::PacketId>(PacketType::DUNGEON_SKILL_INPUT), &DungeonSession::OnSkillInput);
         RegisterPacketHandler<DungeonSession, DungeonCombatStateRequest>(
             static_cast<::PacketId>(PacketType::DUNGEON_COMBAT_STATE_REQUEST), &DungeonSession::OnCombatStateRequest);
+        RegisterPacketHandler<DungeonSession, DungeonRealtimeRequest>(
+            static_cast<::PacketId>(PacketType::DUNGEON_REALTIME_REQUEST), &DungeonSession::OnRealtimeRequest);
     }
 
     bool DungeonSession::ConfirmAuthentication(
@@ -107,6 +111,7 @@ namespace GameRoomServer
             disconnectedRoomId = roomId;
             disconnectedPlayerId = playerId;
             disconnectedGeneration = connectedGeneration;
+            realtimeLease.reset();
         }
         if (const std::shared_ptr<RoomManager> manager = roomManager.lock())
         {
@@ -190,6 +195,88 @@ namespace GameRoomServer
         snapshotId = nextCombatOffset = combatBytesThisSecond = actionsThisSecond = 0;
         snapshotPending = false;
         lastSnapshotRequest = combatWindow = actionWindow = {};
+        realtimeLease.reset();
+        realtimeBytesThisSecond = 0;
+        realtimeWindow = lastRealtimeRequest = {};
+    }
+
+    // Opt-in preserves old clients. The weak lease expires at unsubscribe/disconnect/session reuse.
+    void DungeonSession::OnRealtimeRequest(const ActionRPG::DungeonProtocol::DungeonRealtimeRequest& inPacket)
+    {
+        std::shared_ptr<GameRoom> room;
+        std::weak_ptr<const std::uint8_t> lease;
+        std::uint32_t generation{};
+        ActionRPG::RoomControlProtocol::RoomId boundRoom{};
+        ActionRPG::RoomControlProtocol::PlayerId boundPlayer{};
+        bool sent = true;
+        {
+            std::lock_guard lock(bindingMutex);
+            if (!IsConnected() || connectedGeneration != GetSessionGeneration() || !initialWorld
+                || roomId == 0 || nextWorldOffset != initialWorld->size() || inPacket.challenge != challenge) return;
+            const auto now = std::chrono::steady_clock::now();
+            if (now - lastRealtimeRequest < std::chrono::seconds(1)) return;
+            lastRealtimeRequest = now;
+            ActionRPG::DungeonProtocol::DungeonRealtimeResult result;
+            result.version = 1; result.challenge = challenge; result.roomId = roomId;
+            result.tickIntervalMs = static_cast<std::uint16_t>((1000 + GameRoom::TICK_RATE / 2) / GameRoom::TICK_RATE);
+            result.snapshotIntervalMs = static_cast<std::uint16_t>((1000 + GameRoom::SNAPSHOT_RATE / 2) / GameRoom::SNAPSHOT_RATE);
+            const auto boundGameRoom = gameRoom.lock();
+            if (boundGameRoom) result.dungeonId = boundGameRoom->GetDungeonId();
+            if (inPacket.version == 1 && inPacket.enabled <= 1 && boundGameRoom)
+            {
+                result.accepted = 1;
+                if (inPacket.enabled == 0) realtimeLease.reset();
+                else if (!realtimeLease)
+                {
+                    realtimeLease = std::make_shared<const std::uint8_t>(0);
+                    lease = realtimeLease;
+                    room = boundGameRoom;
+                    generation = connectedGeneration; boundRoom = roomId; boundPlayer = playerId;
+                }
+            }
+            sent = SendPacket(result);
+        }
+        if (!sent) { DoDisconnect(DISCONNECT_REASON::BY_ERROR); return; }
+        if (room) room->SubscribeRealtime(boundPlayer, lease,
+            [this, generation, boundRoom, boundPlayer, lease](std::uint32_t mapEpoch, auto frame)
+            { SendRealtimeFrame(generation, boundRoom, boundPlayer, lease, mapEpoch, std::move(frame)); });
+    }
+
+    // Drop a whole oversized/budget-limited frame; never queue reliable retries for motion.
+    void DungeonSession::SendRealtimeFrame(std::uint32_t inGeneration,
+        ActionRPG::RoomControlProtocol::RoomId inRoomId, ActionRPG::RoomControlProtocol::PlayerId inPlayerId,
+        std::weak_ptr<const std::uint8_t> inLease, std::uint32_t inMapEpoch,
+        std::shared_ptr<const GameRoom::RealtimeFrame> inFrame)
+    {
+        constexpr std::size_t CHUNK_BYTES = 768;
+        constexpr std::uint32_t MAX_BYTES_PER_SECOND = 256 * 1024;
+        std::lock_guard lock(bindingMutex);
+        if (connectedGeneration != inGeneration || GetSessionGeneration() != inGeneration
+            || roomId != inRoomId || playerId != inPlayerId || !IsConnected()
+            || !realtimeLease || inLease.lock() != realtimeLease || !inFrame) return;
+        if (inFrame->payload.empty() || inFrame->payload.size() > 48 * 1024 || inFrame->mapId.size() > 64) return;
+        const auto boundGameRoom = gameRoom.lock();
+        if (!boundGameRoom) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - realtimeWindow >= std::chrono::seconds(1)) { realtimeWindow = now; realtimeBytesThisSecond = 0; }
+        const auto chunkCount = (inFrame->payload.size() + CHUNK_BYTES - 1) / CHUNK_BYTES;
+        // Includes a conservative bound for NetBuffer, RUDP, authentication and IP/UDP headers.
+        const auto frameBytes = inFrame->payload.size() + chunkCount * (160 + inFrame->mapId.size());
+        if (frameBytes > MAX_BYTES_PER_SECOND - realtimeBytesThisSecond) return;
+        realtimeBytesThisSecond += static_cast<std::uint32_t>(frameBytes);
+        for (std::size_t offset = 0; offset < inFrame->payload.size(); offset += CHUNK_BYTES)
+        {
+            ActionRPG::DungeonProtocol::DungeonRealtimeChunk packet;
+            packet.version = 1; packet.challenge = challenge; packet.roomId = roomId;
+            packet.dungeonId = boundGameRoom->GetDungeonId();
+            packet.mapEpoch = inMapEpoch; packet.snapshotSequence = inFrame->sequence;
+            packet.serverTick = inFrame->tick; packet.serverTimeMs = inFrame->timeMs;
+            packet.mapId = inFrame->mapId; packet.state = inFrame->state;
+            packet.totalBytes = static_cast<std::uint32_t>(inFrame->payload.size());
+            packet.offset = static_cast<std::uint32_t>(offset);
+            packet.payload = inFrame->payload.substr(offset, CHUNK_BYTES);
+            if (!SendUnreliablePacket(packet)) break;
+        }
     }
 
     void DungeonSession::OnActionInput(const ActionRPG::DungeonProtocol::DungeonActionInput& inPacket)
@@ -213,6 +300,29 @@ namespace GameRoomServer
             boundPlayer = playerId;
         }
         if (room) room->SubmitAction(boundPlayer, inPacket,
+            [this, generation, boundRoom, boundPlayer](auto packet)
+                { SendActionResult(generation, boundRoom, boundPlayer, std::move(packet)); });
+    }
+
+    void DungeonSession::OnSkillInput(const ActionRPG::DungeonProtocol::DungeonSkillInput& inPacket)
+    {
+        if (inPacket.sequence == 0 || inPacket.facingLeft > 1
+            || !ActionRPG::PlayerSkills::Catalog::IsId(inPacket.skillId)) return;
+        std::shared_ptr<GameRoom> room;
+        std::uint32_t generation{};
+        ActionRPG::RoomControlProtocol::RoomId boundRoom{};
+        ActionRPG::RoomControlProtocol::PlayerId boundPlayer{};
+        {
+            std::lock_guard lock(bindingMutex);
+            if (!IsConnected() || connectedGeneration != GetSessionGeneration() || !initialWorld
+                || roomId == 0 || nextWorldOffset != initialWorld->size()) return;
+            const auto now = std::chrono::steady_clock::now();
+            if (now - actionWindow >= std::chrono::seconds(1)) { actionWindow = now; actionsThisSecond = 0; }
+            if (actionsThisSecond >= 20) return;
+            ++actionsThisSecond; room = gameRoom.lock(); generation = connectedGeneration;
+            boundRoom = roomId; boundPlayer = playerId;
+        }
+        if (room) room->SubmitSkill(boundPlayer, inPacket,
             [this, generation, boundRoom, boundPlayer](auto packet)
                 { SendActionResult(generation, boundRoom, boundPlayer, std::move(packet)); });
     }

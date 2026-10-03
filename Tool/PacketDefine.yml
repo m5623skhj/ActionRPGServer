@@ -108,3 +108,71 @@ Packet:
         Name: retryAfterMs
       - Type: std::string
         Name: payload
+
+  - Type: RequestPacket
+    PacketName: DungeonRealtimeRequest
+    Items:
+      - Type: std::uint16_t
+        Name: version
+      - Type: std::uint8_t
+        Name: enabled
+      - Type: std::uint64_t
+        Name: challenge
+
+  - Type: ReplyPacket
+    PacketName: DungeonRealtimeResult
+    Items:
+      - Type: std::uint16_t
+        Name: version
+      - Type: std::uint8_t
+        Name: accepted
+      - Type: std::uint64_t
+        Name: challenge
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: std::uint32_t
+        Name: dungeonId
+      - Type: std::uint16_t
+        Name: tickIntervalMs
+      - Type: std::uint16_t
+        Name: snapshotIntervalMs
+
+  - Type: ReplyPacket
+    PacketName: DungeonRealtimeChunk
+    Items:
+      - Type: std::uint16_t
+        Name: version
+      - Type: std::uint64_t
+        Name: challenge
+      - Type: std::uint64_t
+        Name: roomId
+      - Type: std::uint32_t
+        Name: dungeonId
+      - Type: std::uint32_t
+        Name: mapEpoch
+      - Type: std::uint64_t
+        Name: snapshotSequence
+      - Type: std::uint64_t
+        Name: serverTick
+      - Type: std::uint64_t
+        Name: serverTimeMs
+      - Type: std::string
+        Name: mapId
+      - Type: std::uint32_t
+        Name: totalBytes
+      - Type: std::uint32_t
+        Name: offset
+      - Type: std::uint8_t
+        Name: state
+      - Type: std::string
+        Name: payload
+
+  - Type: RequestPacket
+    PacketName: DungeonSkillInput
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: std::string
+        Name: skillId
+      - Type: std::uint8_t
+        Name: facingLeft

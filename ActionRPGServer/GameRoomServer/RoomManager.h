@@ -35,7 +35,9 @@ namespace GameRoomServer
             std::shared_ptr<const CombatDefinition> inCombatDefinition);
 
         void SetSendHandler(SendHandler inSendHandler);
-        void CreateRoom(Protocol::CreateRoom inRequest, CreateResultHandler inResultHandler);
+        void CreateRoom(Protocol::CreateRoom inRequest, CreateResultHandler inResultHandler,
+            Protocol::RoomId inReplacingRoomId = 0);
+        void FinishRoom(Protocol::FinishRoom inRequest, std::function<void(Protocol::FinishRoomResult)> inHandler);
         void RegisterChallenge(std::uint64_t inChallenge, DungeonSession* inSession,
             std::uint32_t inSessionGeneration);
         void ConfirmJoin(Protocol::ConfirmJoin inRequest);

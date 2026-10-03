@@ -191,6 +191,110 @@ namespace ActionRPG::DungeonProtocol
         outBuffer << payload;
     }
 
+    ::PacketId DungeonRealtimeRequest::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_REALTIME_REQUEST);
+    }
+
+    void DungeonRealtimeRequest::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> version;
+        inBuffer >> enabled;
+        inBuffer >> challenge;
+    }
+
+    void DungeonRealtimeRequest::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << version;
+        outBuffer << enabled;
+        outBuffer << challenge;
+    }
+
+    ::PacketId DungeonRealtimeResult::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_REALTIME_RESULT);
+    }
+
+    void DungeonRealtimeResult::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> version;
+        inBuffer >> accepted;
+        inBuffer >> challenge;
+        inBuffer >> roomId;
+        inBuffer >> dungeonId;
+        inBuffer >> tickIntervalMs;
+        inBuffer >> snapshotIntervalMs;
+    }
+
+    void DungeonRealtimeResult::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << version;
+        outBuffer << accepted;
+        outBuffer << challenge;
+        outBuffer << roomId;
+        outBuffer << dungeonId;
+        outBuffer << tickIntervalMs;
+        outBuffer << snapshotIntervalMs;
+    }
+
+    ::PacketId DungeonRealtimeChunk::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_REALTIME_CHUNK);
+    }
+
+    void DungeonRealtimeChunk::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> version;
+        inBuffer >> challenge;
+        inBuffer >> roomId;
+        inBuffer >> dungeonId;
+        inBuffer >> mapEpoch;
+        inBuffer >> snapshotSequence;
+        inBuffer >> serverTick;
+        inBuffer >> serverTimeMs;
+        inBuffer >> mapId;
+        inBuffer >> totalBytes;
+        inBuffer >> offset;
+        inBuffer >> state;
+        inBuffer >> payload;
+    }
+
+    void DungeonRealtimeChunk::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << version;
+        outBuffer << challenge;
+        outBuffer << roomId;
+        outBuffer << dungeonId;
+        outBuffer << mapEpoch;
+        outBuffer << snapshotSequence;
+        outBuffer << serverTick;
+        outBuffer << serverTimeMs;
+        outBuffer << mapId;
+        outBuffer << totalBytes;
+        outBuffer << offset;
+        outBuffer << state;
+        outBuffer << payload;
+    }
+
+    ::PacketId DungeonSkillInput::GetPacketId() const
+    {
+        return static_cast<::PacketId>(PacketType::DUNGEON_SKILL_INPUT);
+    }
+
+    void DungeonSkillInput::BufferToPacket(NetBuffer& inBuffer)
+    {
+        inBuffer >> sequence;
+        inBuffer >> skillId;
+        inBuffer >> facingLeft;
+    }
+
+    void DungeonSkillInput::PacketToBuffer(NetBuffer& outBuffer)
+    {
+        outBuffer << sequence;
+        outBuffer << skillId;
+        outBuffer << facingLeft;
+    }
+
     void RegisterPackets()
     {
         PacketManager::GetInst().RegisterPacket<DungeonChallenge>();
@@ -203,5 +307,9 @@ namespace ActionRPG::DungeonProtocol
         PacketManager::GetInst().RegisterPacket<DungeonActionResult>();
         PacketManager::GetInst().RegisterPacket<DungeonCombatStateRequest>();
         PacketManager::GetInst().RegisterPacket<DungeonCombatStateChunk>();
+        PacketManager::GetInst().RegisterPacket<DungeonRealtimeRequest>();
+        PacketManager::GetInst().RegisterPacket<DungeonRealtimeResult>();
+        PacketManager::GetInst().RegisterPacket<DungeonRealtimeChunk>();
+        PacketManager::GetInst().RegisterPacket<DungeonSkillInput>();
     }
 }

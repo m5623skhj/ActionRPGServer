@@ -22,10 +22,13 @@
     <ClCompile Include="MonsterDefinition.cpp"><Filter>소스 파일</Filter></ClCompile>
     <ClCompile Include="CombatDefinition.cpp"><Filter>소스 파일</Filter></ClCompile>
     <ClCompile Include="GameRoomCombat.cpp"><Filter>소스 파일</Filter></ClCompile>
+    <ClCompile Include="GameRoomSkills.cpp"><Filter>소스 파일</Filter></ClCompile>
+    <ClCompile Include="GameRoomRealtime.cpp"><Filter>소스 파일</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DungeonDefinition.h"><Filter>헤더 파일</Filter></ClInclude>
     <ClInclude Include="MonsterDefinition.h"><Filter>헤더 파일</Filter></ClInclude>
     <ClInclude Include="CombatDefinition.h"><Filter>헤더 파일</Filter></ClInclude>
+    <ClInclude Include="..\Shared\PlayerSkillCatalog.h"><Filter>헤더 파일</Filter></ClInclude>
   </ItemGroup>
 </Project>

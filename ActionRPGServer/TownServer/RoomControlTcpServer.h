@@ -28,8 +28,11 @@ namespace TownServer::Network
         void CreateRoom(std::uint32_t inDungeonId,
             std::vector<ActionRPG::RoomControlProtocol::PlayerId> inParticipantPlayerIds,
             CreateRoomResultHandler inResultHandler);
+        using FinishRoomResultHandler = std::function<void(ActionRPG::RoomControlProtocol::FinishRoomResult)>;
+        void FinishRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId, bool inRetry,
+            std::vector<ActionRPG::RoomControlProtocol::PlayerId> inParticipants, FinishRoomResultHandler inHandler);
         void ConfirmJoin(ActionRPG::RoomControlProtocol::RoomId inRoomId,
-            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge);
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge, std::uint32_t inCharacterId);
 
     private:
         struct RoomServerState
@@ -46,6 +49,14 @@ namespace TownServer::Network
             std::uint64_t roomServerSessionId{};
             CreateRoomResultHandler resultHandler;
         };
+
+        struct PendingFinishRoom
+        {
+            std::uint64_t roomServerSessionId{};
+            ActionRPG::RoomControlProtocol::RoomId roomId{};
+            FinishRoomResultHandler handler;
+        };
+        std::unordered_map<ActionRPG::RoomControlProtocol::RequestId, PendingFinishRoom> pendingFinishRooms;
 
         void HandleAcceptedSession(std::shared_ptr<ActionRPG::Network::TcpSession> inSession) override;
         void HandleClosedSession(std::uint64_t inSessionId) override;

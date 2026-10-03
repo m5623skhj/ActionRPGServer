@@ -1,8 +1,10 @@
 # 서버 전투 실행과 클라이언트 연결 계약
 
+플레이어 스킬 편집기의 신규 직접 공격·투사체·버프 실행과 SKL1 확장 계약은 [PLAYER_SKILLS.md](PLAYER_SKILLS.md)를 참고합니다.
+
 ## 구현 범위와 현재 콘텐츠
 
-- 방 strand의 20Hz 업데이트에서 플레이어 사격·점프, 탄환, 몬스터 AI, HP·피격·사망을 처리합니다.
+- 방 strand의 목표 30Hz 업데이트에서 플레이어 사격·점프, 탄환, 몬스터 AI, HP·피격·사망을 처리합니다.
 - 클라이언트가 보낸 위치·피해량·피격 대상은 사용하지 않습니다. 인증된 세션의 플레이어 ID로 입력을 처리합니다.
 - MonsterEditor schemaVersion 1은 유지합니다. AI 정의의 스킬·동작 참조를 서버 전용 `Data/Combat.json`과 함께 검사합니다.
 - Dummy는 대기 정의를 유지합니다. 녹슨 갑옷병과 수호자는 감지·추적·공격 대기·공격·회복·귀환의 최소 패턴을 정의했습니다.
@@ -66,6 +68,12 @@ AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는
 
 ## 패킷
 
+새 클라이언트는 초기 월드 수신 후 ID 11~13의 realtime 바이너리 프레임을 구독하여
+이동·동작을 목표 15Hz로 받을 수 있습니다. 기존 ID 1~10과 JSON 전투 복구 경로는 유지합니다.
+시간·연결/맵 epoch·레코드 규격과 클라이언트 보간 규칙은
+[`SERVER_HANDOFF.md`](../../output/movement-smoothing/SERVER_HANDOFF.md)에 있습니다.
+서버가 상태를 전달하는 것과 클라이언트가 시간에 맞춰 보간하는 것 모두 필요합니다.
+
 원본은 `Tool/PacketDefine.yml`입니다. 기존 ID 1~6을 유지하고 아래를 끝에 추가했습니다.
 생성 파일은 직접 수정하지 않습니다. 서버와 클라이언트 생성 파일을 각각 갱신했고,
 양쪽 결과가 공유 YAML과 일치하는 것을 정적으로 확인했습니다. 클라이언트 송수신 핸들러와 상태 표시도 연결했습니다.
@@ -105,7 +113,10 @@ accepted는 요청 접수 여부이며 타격 성공을 뜻하지 않습니다. 
 스냅샷은 최대 512KB, payload는 최대 768바이트, 연결당 전투 조각은 초당 64KB입니다.
 클라이언트는 stop-and-wait로 한 요청의 응답을 처리한 뒤 다음 요청을 보내야 합니다.
 요청 폭주나 중복 요청을 정상적인 폴링 방식으로 사용하지 않습니다.
-serverTick은 20Hz 시뮬레이션 번호이며 매 조각의 수신 시각을 뜻하지 않습니다.
+serverTick은 30Hz 시뮬레이션 번호이며 매 조각의 수신 시각을 뜻하지 않습니다.
+초기 월드 combatRules와 전투 JSON의 tickRate=30, snapshotRate=15, tickIntervalSeconds=1/30을 사용합니다.
+전투 JSON의 serverTimeMs는 realtime과 같은 서버 steady_clock 기준이며, 과거의 tick*50 시간으로 덮어쓰지 않습니다.
+구독 결과의 정수 밀리초 안내값은 tickIntervalMs=33, snapshotIntervalMs=67입니다.
 큰 방에서는 조각 수와 대역폭 제한으로 전체 상태 갱신에 더 오래 걸립니다.
 
 JSON 최상위: `version=1`, `roomId`, `serverTick`, `mapId`, `state`, `cleared`, `players`, `monsters`, `projectiles`.
@@ -134,3 +145,28 @@ mapId가 바뀌면 이전 방의 표시 목록을 교체합니다. 삭제된 탄
 - 설치와 정적 확인 결과는 `output/combat-integration/INTEGRATION_REPORT.md`에 정리했습니다.
 - 몬스터/스킬: 최소 패턴·타격 event는 연결했으며 최종 밸런스와 특수 패턴은 별도 합의가 필요합니다.
 - 사용자 합의가 필요한 추가 기능: 보상/드랍 정책·데이터, 전멸 종료·부활, 특수 보스 패턴.
+
+## 클리어 후 선택
+
+`cleared=true` 수신 시 마을 이동/재도전 선택 창을 표시하고 전투 입력을 차단한다.
+같은 serverTick의 최초 클리어 상태도 적용한다. 방향키·Enter 또는 마우스로 선택하며,
+파티에서는 파티장만 전체 파티의 다음 행동을 결정한다. 던전 참여 중 파티 구성 변경은 Busy로 거절한다.
+
+- Town TCP `DungeonCompletionRequest`(25): roomId(uint64), retry(bool).
+- Town TCP `DungeonCompletionResponse`(26): previousRoomId(uint64), succeeded(bool), retry(bool),
+  roomId(uint64), combatSeed(uint64), sessionBrokerAddress(string), sessionBrokerPort(uint16).
+- RoomControl TCP `FinishRoom`(8): requestId(uint64), roomId(uint64), retry(bool), participantPlayerIds(vector<uint64>).
+- RoomControl TCP `FinishRoomResult`(9): requestId(uint64), previousRoomId(uint64), succeeded(bool),
+  roomId(uint64), combatSeed(uint64), sessionBrokerAddress(string), sessionBrokerPort(uint16).
+
+TownServer는 인증된 요청자의 현재 roomId·파티장·참여자·진행 중 요청을 검사한다.
+GameRoomServer는 실제 Cleared 상태와 입장한 참여자 집합의 일치를 확인한다.
+마을 이동 성공 시 roomId는 0이다. 재도전은 기존 dungeonId로 새 roomId/seed와 전체 전투 상태를 생성한다.
+새 방 생성이 실패하면 기존 클리어 방을 유지한다. 방 한도에 도달해도 기존 방의 교체는 허용한다.
+성공 응답을 모든 참여자에게 먼저 보내고 마을 가시성을 복구한다.
+클라이언트는 기존 RUDP 코어 종료를 비동기로 기다린 뒤 마을 복귀 또는 새 방 인증을 시작한다.
+종료가 끝나기 전에 새 코어를 시작하지 않으며, 대기 중 마을 이벤트를 보관했다가 복귀 후 처리한다.
+거절·응답 지연 시 안내와 재선택을 제공한다. 중복 클릭과 이전 roomId 응답은 적용하지 않는다.
+
+패킷이 추가되었으므로 클라이언트·TownServer·GameRoomServer를 함께 빌드/갱신해야 한다.
+이번 변경의 빌드·실행·실제 클리어/복귀/재도전 검증은 수행하지 않았다.

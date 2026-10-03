@@ -185,7 +185,7 @@ namespace ActionRPG::RoomControlProtocol
         PacketReader reader(inPacket);
         std::uint16_t type{};
         if (!reader.ReadUInt16(type) || type < static_cast<std::uint16_t>(PacketType::RegisterRoomServer)
-            || type > static_cast<std::uint16_t>(PacketType::RoomEnded))
+            || type > static_cast<std::uint16_t>(PacketType::FinishRoomResult))
         {
             return std::nullopt;
         }
@@ -227,6 +227,7 @@ namespace ActionRPG::RoomControlProtocol
         writer.WriteUInt64(inPacket.roomId);
         writer.WriteUInt64(inPacket.playerId);
         writer.WriteUInt64(inPacket.challenge);
+        writer.WriteUInt32(inPacket.characterId);
         return writer.Finish();
     }
 
@@ -319,6 +320,7 @@ namespace ActionRPG::RoomControlProtocol
             || !reader.ReadUInt64(packet.roomId)
             || !reader.ReadUInt64(packet.playerId)
             || !reader.ReadUInt64(packet.challenge)
+            || !reader.ReadUInt32(packet.characterId) || packet.characterId == 0
             || packet.roomId == 0 || packet.playerId == 0 || packet.challenge == 0 || !reader.Finished())
         {
             return std::nullopt;
@@ -373,4 +375,59 @@ namespace ActionRPG::RoomControlProtocol
         packet.reason = static_cast<RoomEndReason>(reason);
         return packet;
     }
+    std::vector<std::uint8_t> Encode(const FinishRoom& inPacket)
+    {
+        PacketWriter writer(PacketType::FinishRoom);
+        writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt8(inPacket.retry ? 1 : 0);
+        WritePlayerIds(writer, inPacket.participantPlayerIds);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const FinishRoomResult& inPacket)
+    {
+        PacketWriter writer(PacketType::FinishRoomResult);
+        writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt64(inPacket.previousRoomId);
+        writer.WriteUInt8(inPacket.succeeded ? 1 : 0);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.combatSeed);
+        writer.WriteString(inPacket.sessionBrokerAddress);
+        writer.WriteUInt16(inPacket.sessionBrokerPort);
+        return writer.Finish();
+    }
+
+    std::optional<FinishRoom> DecodeFinishRoom(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        FinishRoom packet;
+        std::uint8_t retry{};
+        if (!ReadExpectedType(reader, PacketType::FinishRoom)
+            || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0
+            || !reader.ReadUInt8(retry) || retry > 1
+            || !ReadPlayerIds(reader, packet.participantPlayerIds) || !reader.Finished()) return std::nullopt;
+        packet.retry = retry != 0;
+        return packet;
+    }
+
+    std::optional<FinishRoomResult> DecodeFinishRoomResult(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        FinishRoomResult packet;
+        std::uint8_t succeeded{};
+        if (!ReadExpectedType(reader, PacketType::FinishRoomResult)
+            || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt64(packet.previousRoomId) || packet.previousRoomId == 0
+            || !reader.ReadUInt8(succeeded) || succeeded > 1
+            || !reader.ReadUInt64(packet.roomId) || !reader.ReadUInt64(packet.combatSeed)
+            || !reader.ReadString(packet.sessionBrokerAddress) || packet.sessionBrokerAddress.size() > MAX_ADDRESS_LENGTH
+            || !reader.ReadUInt16(packet.sessionBrokerPort) || !reader.Finished()) return std::nullopt;
+        packet.succeeded = succeeded != 0;
+        if (packet.succeeded && packet.roomId != 0 && (packet.combatSeed == 0
+            || packet.sessionBrokerAddress.empty() || packet.sessionBrokerPort == 0)) return std::nullopt;
+        return packet;
+    }
+
 }

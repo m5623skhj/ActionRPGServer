@@ -33,6 +33,8 @@ namespace TownProtocol
         PartyDirectoryPage = 22,
         PartyDirectoryChanged = 23,
         PartyCreateRequest = 24,
+        DungeonCompletionRequest = 25,
+        DungeonCompletionResponse = 26,
     };
 
     struct EnterTownRequest
@@ -188,6 +190,23 @@ namespace TownProtocol
     {
         std::string title{};
         bool isPublic{};
+    };
+
+    struct DungeonCompletionRequest
+    {
+        std::uint64_t roomId{};
+        bool retry{};
+    };
+
+    struct DungeonCompletionResponse
+    {
+        std::uint64_t previousRoomId{};
+        bool succeeded{};
+        bool retry{};
+        std::uint64_t roomId{};
+        std::uint64_t combatSeed{};
+        std::string sessionBrokerAddress{};
+        std::uint16_t sessionBrokerPort{};
     };
 
 }

@@ -238,6 +238,55 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::ValidateDungeonCompletion(const std::uint64_t inSessionId,
+        const ActionRPG::RoomControlProtocol::RoomId inRoomId, DungeonRequestHandler inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, inRoomId, handler = std::move(inHandler)]() mutable
+        {
+            std::vector<PlayerId> participants;
+            const auto session = self->sessionToPlayer.find(inSessionId);
+            if (session != self->sessionToPlayer.end())
+            {
+                const auto playerId = session->second;
+                const auto party = self->partyManager.GetPartyForPlayer(playerId);
+                if (!party) participants.push_back(playerId);
+                else if (party->leaderPlayerId == playerId)
+                    for (const auto& member : party->members) participants.push_back(member.playerId);
+            }
+            const bool valid = inRoomId != 0 && !participants.empty()
+                && std::all_of(participants.begin(), participants.end(), [self, inRoomId](const auto playerId)
+                {
+                    const auto found = self->players.find(playerId);
+                    return found != self->players.end() && found->second.dungeonRoomId == inRoomId
+                        && !self->pendingDungeonPlayers.contains(playerId);
+                });
+            if (valid) self->pendingDungeonPlayers.insert(participants.begin(), participants.end());
+            handler(valid, std::move(participants));
+        });
+    }
+
+    // Response precedes town visibility events so clients reset before recreating remote players.
+    void TownInstance::CompleteDungeonCompletion(std::vector<PlayerId> inParticipants, const bool inRetry,
+        ActionRPG::RoomControlProtocol::FinishRoomResult inResult)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, participants = std::move(inParticipants), inRetry, result = std::move(inResult)]()
+        {
+            const TownProtocol::DungeonCompletionResponse response{result.previousRoomId, result.succeeded,
+                inRetry, result.roomId, result.combatSeed, result.sessionBrokerAddress, result.sessionBrokerPort};
+            for (const auto playerId : participants)
+            {
+                self->pendingDungeonPlayers.erase(playerId);
+                const auto found = self->players.find(playerId);
+                if (found != self->players.end() && found->second.dungeonRoomId == result.previousRoomId)
+                    found->second.session->Send(TownProtocol::Encode(response));
+            }
+            if (result.succeeded)
+                for (const auto playerId : participants) self->LeaveDungeon(playerId, result.previousRoomId);
+        });
+    }
+
     void TownInstance::CreateParty(const std::uint64_t inSessionId,
         std::string inTitle, const bool inIsPublic)
     {
@@ -1068,7 +1117,9 @@ namespace TownServer::Domain
         return std::ranges::any_of(party->members,
             [this](const PartyManager::MemberSlot& inMember)
             {
-                return pendingDungeonPlayers.contains(inMember.playerId);
+                const auto player = players.find(inMember.playerId);
+                return pendingDungeonPlayers.contains(inMember.playerId)
+                    || (player != players.end() && player->second.dungeonRoomId != 0);
             });
     }
 

@@ -129,6 +129,10 @@ namespace TownProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PlayerMove& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PlayerDisappear& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ConfirmDungeonJoin& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const DungeonCompletionRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const DungeonCompletionResponse& inPacket);
+    [[nodiscard]] std::optional<DungeonCompletionRequest> DecodeDungeonCompletionRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<DungeonCompletionResponse> DecodeDungeonCompletionResponse(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterDungeonRequest& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterDungeonResponse& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const MapChanged& inPacket);
