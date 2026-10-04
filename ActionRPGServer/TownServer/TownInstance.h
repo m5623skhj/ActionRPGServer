@@ -99,6 +99,7 @@ namespace TownServer::Domain
         void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
             std::uint32_t inCharacterId);
         void LeaveOnStrand(std::uint64_t inSessionId);
+        bool EnterDungeonOnStrand(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
         void ProcessTransition(PlayerId inPlayerId, PlayerEntry& inEntry);
         bool TransferMap(PlayerId inPlayerId, PlayerEntry& inEntry,

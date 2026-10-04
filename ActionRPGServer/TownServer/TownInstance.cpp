@@ -621,20 +621,26 @@ namespace TownServer::Domain
         const std::shared_ptr<TownInstance> self = shared_from_this();
         asio::dispatch(strand, [self, inPlayerId, inRoomId, handler = std::move(inHandler)]()
         {
-            const auto iterator = self->players.find(inPlayerId);
-            if (iterator == self->players.end() || iterator->second.dungeonRoomId != 0
-                || iterator->second.reservedDungeonRoomId != inRoomId)
-            {
-                handler(false);
-                return;
-            }
-            self->HideFromTown(inPlayerId, iterator->second);
-            self->partyDirectorySubscribers.erase(inPlayerId);
-            iterator->second.dungeonRoomId = inRoomId;
-            iterator->second.reservedDungeonRoomId = 0;
-            iterator->second.player.StopMovement();
-            handler(true);
+            handler(self->EnterDungeonOnStrand(inPlayerId, inRoomId));
         });
+    }
+
+    /** Apply a confirmed room entry on the town strand; repeated confirmations are harmless. */
+    bool TownInstance::EnterDungeonOnStrand(
+        const PlayerId inPlayerId, const ActionRPG::RoomControlProtocol::RoomId inRoomId)
+    {
+        const auto iterator = players.find(inPlayerId);
+        if (inRoomId == 0 || iterator == players.end()) return false;
+        auto& entry = iterator->second;
+        if (entry.dungeonRoomId == inRoomId) return true;
+        if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != inRoomId) return false;
+
+        HideFromTown(inPlayerId, entry);
+        partyDirectorySubscribers.erase(inPlayerId);
+        entry.dungeonRoomId = inRoomId;
+        entry.reservedDungeonRoomId = 0;
+        entry.player.StopMovement();
+        return true;
     }
 
     void TownInstance::LeaveDungeon(
@@ -676,6 +682,9 @@ namespace TownServer::Domain
         {
             const std::unordered_set<PlayerId> participants(
                 started.participantPlayerIds.begin(), started.participantPlayerIds.end());
+            // Room start also confirms the admitted party, even before individual entry notifications arrive.
+            for (const PlayerId playerId : participants)
+                static_cast<void>(self->EnterDungeonOnStrand(playerId, started.roomId));
             for (const auto& [id, entry] : self->players)
                 if (entry.reservedDungeonRoomId == started.roomId && !participants.contains(id))
                     self->LeaveDungeon(id, started.roomId);

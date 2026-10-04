@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "activeRequestId": null,
-  "updatedAt": "2026-10-03T14:20:19.6274525+00:00",
+  "activeRequestId": "character1-front-kick-motion",
+  "updatedAt": "2026-10-03T16:08:36.7668331+00:00",
   "requests": [
     {
       "jobId": "flooded-citadel-20261003-01",
@@ -26,6 +26,14 @@
       "status": "completed",
       "output": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\FloodedCitadel_Throne.png",
       "result": "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\DungeonEditor\\output\\FloodedCitadel\\graphics\\throne\\r1\\GRAPHICS_RESULT.json"
+    },
+    {
+      "jobId": "character1-front-kick-v1",
+      "requestId": "character1-front-kick-motion",
+      "revision": 1,
+      "status": "running",
+      "request": "C:/Users/KimHyeongJin/source/repos/ActionRPGServer/output/dungeon-jobs/character1-front-kick-v1/REQUEST.md",
+      "output": "C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-skills/outputs/character1-front-kick-v1/art/player_front_kick.png"
     }
   ]
 }

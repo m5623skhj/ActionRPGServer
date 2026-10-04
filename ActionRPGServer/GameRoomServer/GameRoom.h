@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -111,6 +112,12 @@ namespace GameRoomServer
             std::string id, stat;
             float multiplier{}, remainingSeconds{};
         };
+        struct BufferedAction
+        {
+            std::uint8_t action{};
+            bool facingLeft{};
+            float remainingSeconds{};
+        };
         struct PlayerState
         {
             std::string mapId;
@@ -130,6 +137,8 @@ namespace GameRoomServer
             std::uint32_t shotSequence{}, jumpSequence{};
             ShotPhase shotPhase{ ShotPhase::None };
             float shotSeconds{}, jumpSeconds{};
+            float shotInputRemainingSeconds{};
+            std::deque<BufferedAction> bufferedActions;
             std::uint32_t characterId{}, skillSequence{};
             std::string lastSkillId;
             bool lastSkillAirborne{};
@@ -177,6 +186,8 @@ namespace GameRoomServer
         void EnterNode(MonsterState& inMonster, const std::string& inNodeId);
         bool AdvanceNode(MonsterState& inMonster, const std::string& inTrigger);
         void UpdateShots(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
+        bool TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft);
+        void UpdateBufferedActions(PlayerState& inPlayer, float inDeltaSeconds);
         void UpdateProjectiles(float inDeltaSeconds);
         void UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
         [[nodiscard]] static float BuffMultiplier(const PlayerState& inPlayer, const char* inStat);

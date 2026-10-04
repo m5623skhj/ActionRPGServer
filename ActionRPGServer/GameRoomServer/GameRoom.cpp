@@ -179,6 +179,9 @@ namespace GameRoomServer
                             { return value.at("id") == action.at("targetEntryPointId"); });
                         player.mapId = targetMapId;
                         ++player.mapEpoch;
+                        player.bufferedActions.clear();
+                        player.shotInputRemainingSeconds = 0;
+                        player.shotCount = 0;
                         player.position = DungeonDefinition::Point(entry->at("position"));
                         player.warpArmed = false;
                         player.skill.reset();

@@ -9,7 +9,7 @@
       "airMuzzleForward": 45.765625, "airMuzzleHeight": 86.0078125,
       "airFireLift": 60, "airRecoilDistance": 8
     },
-    "jump": { "prepareSeconds": 0.12, "speed": 420, "gravity": 1200 }
+    "jump": { "prepareSeconds": 0.12, "speed": 851.43, "gravity": 1200 }
   },
   "reactions": { "hitStunSeconds": 0.25, "downSeconds": 0.5, "riseSeconds": 0.35 },
   "monsters": [
