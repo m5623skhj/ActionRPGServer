@@ -1,0 +1,59 @@
+{
+  "jobId": "character1-front-kick-v1",
+  "requestId": "character1-front-kick-motion",
+  "revision": 1,
+  "requirementsRevision": 1,
+  "source": "C:\\Users\\KimHyeongJin\\.codex\\generated_images\\01a0fa9f-7587-73e2-a85d-be95e68d307f\\exec-8956221c-ffe7-4279-8e42-1d06d0b700fa.png",
+  "root": "C:\\Users\\KimHyeongJin\\Documents\\Codex\\2026-10-02\\actionrpg-skills\\outputs\\character1-front-kick-v1\\art",
+  "prompt": "Use case: identity-preserve / animation edit. Edit/rework the existing running sprite sheet (input 1, player_run) into a NEW front-kick animation sprite sheet, saving a separate result. Input 2 player_jump_start is supporting anatomy/palette reference. Input 3 player_shoot_end is lowered handgun/neutral-pose reference. Input 4 player_idle is face/costume identity reference. Preserve this exact game's character identity, not a new character.\nOUTPUT: genuine transparent RGBA PNG, ONE 4-column by 2-row atlas with exactly EIGHT distinct full-body sprites, chronological LEFT TO RIGHT then second row. Desired canvas 1280x640, each cell320x320; each character is only about 200-226 pixels tall, matching the actual 256px reference animation sprites; extra cell space is for extended kicking foot. Never include text, numbers, labels, separators, checkerboard pixels, floor, shadow, FX, motion trails, weapons discharge or other characters. No cropped extremities.\nIDENTITY: youthful white/spiky silver-lavender hair, same small anime face, facing screen RIGHT in consistent three-quarter profile, high-neck charcoal black LONG split-tail coat, subtle dark-purple highlights, gold small collar pin, narrow brown-red belt with gold buckle, blue pants with pale blue turn-up cuffs, warm reddish-brown leather boots. Preserve reference proportions, line weight and controlled crisp pixel clusters. No new costume, no color shifts, no grey halo. Preserve visible skin-colored fingers and dark wrist cuffs as in references. Thin black handgun in anatomical RIGHT/near hand points DOWN and stays low at rear hip throughout; no aiming or firing. Opposite arm balances. Gun must not obscure kicking leg.\nANATOMY: anatomical RIGHT/near leg performs the entire kick and is the FRONT blue leg visible to camera; anatomical LEFT/far leg is planted support on floor. Same left boot sole/pivot stays absolutely fixed at cell-local (125,285) in all eight frames. Left calf points down to this boot throughout, NO walking, NO alternating legs, no lifted support boot, no backwards knees, no rotated body. Two legs, two arms only. The right foot kicks toward screen RIGHT at waist level. Head/body may lean back subtly but character width/height stay consistent, no scaling between frames.\nEight UNIQUE POSES:\n0: standing neutral, weight beginning to shift onto left foot, right boot still down but relaxed; gun lowered.\n1: distinct slight bend of planted left knee and rearward torso, right heel rises; left arm moves for balance.\n2: right thigh lifts FORWARD toward screen right, right knee raised around waist, right shin folded DOWN close to body; left support sole fixed.\n3: strike extension begins: right thigh forward, right knee opens naturally, right boot extends mostly horizontally to right; left leg vertical anchored.\n4: strike peak: right leg straight horizontally toward screen RIGHT, sole/boot toe clearly right-facing, a little farther than3, no duplicated pose. Coattails flow rearward, left arm balance, supportboot fixed.\n5: right knee retracts back toward waist, right boot folds down, leg visibly shorter than4; anchored left boot.\n6: right thigh descends, right knee partially bent, right boot nearing floor, torso returns toward upright; planted left boot.\n7: recovered neutral, right boot placed down slightly ahead of left, same original posture with lowered gun; subtly different from frame0 due to settled weight.\nEach frame must occupy its own equal cell with transparent margin, with head/coattail/both boots/gun entirely inside. Reuse same face/hair silhouette and palette all frames. Sprites need exact crisp pixel game art, NOT painterly, blurry, 3D, chibi or stick figures.",
+  "refs": [
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_idle.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_run.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_jump_start.png",
+    "C:\\Users\\KimHyeongJin\\source\\repos\\ActionRPGClient\\ActionRPGClient\\Assets\\Images\\Characters\\player_shoot_end.png"
+  ],
+  "pivots": [
+    [
+      153,
+      419
+    ],
+    [
+      199,
+      419
+    ],
+    [
+      222,
+      417
+    ],
+    [
+      218,
+      417
+    ],
+    [
+      226,
+      408
+    ],
+    [
+      239,
+      409
+    ],
+    [
+      223,
+      408
+    ],
+    [
+      152,
+      407
+    ]
+  ],
+  "notes": [
+    "weight shift",
+    "support knee flex/right heel rise",
+    "right knee lift",
+    "strike extension",
+    "peak strike",
+    "knee retraction",
+    "right foot descent",
+    "recovered neutral"
+  ]
+}
