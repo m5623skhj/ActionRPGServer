@@ -1,9 +1,10 @@
 # 서버 output 보관 기준
 
-2026-10-03 정리 이후 이 폴더에는 서버용 JSON, 편집 가능한 던전 작업 JSON, 검사·제작·통합 기록을 보관합니다. 클라이언트 이미지·미리보기·일회성 소스 수정 스크립트는 서버 실행 데이터와 분리합니다.
+이 폴더에는 서버용 JSON, 편집 가능한 던전 작업 JSON, 서버 작업에 필요한 기존 검사·제작·통합 기록을 보관합니다. 클라이언트 이미지·미리보기·설정 사본·일회성 소스 수정 스크립트는 서버 저장소에 보관하지 않습니다. 에이전트는 저장소 루트의 `AGENTS.md`를 먼저 따릅니다.
 
 - 서버 설치: `Dungeon.json`과 `Maps/*.json`만 `Data/Dungeons/<DungeonId>`에 반영합니다.
 - 클라이언트 표시 파일: 기존 클라이언트 `Assets`를 사용합니다.
+- 추가 보고서·프롬프트·해시·설치 기록은 요청 없이 만들지 않습니다. 임시 처리 파일은 저장소 밖에서 사용하고 작업 완료 후 정리합니다.
 - 공용 ZIP: 미니맵·아이콘을 포함하므로 클라이언트 또는 별도 산출물 폴더에 보관합니다.
 - PNG/SVG 제작 원본과 폐기한 준비 도구: `C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-editors/outputs/ServerOutputCleanup-20261003/removed-files.zip`에 보존했습니다.
 - 상세 정리·해시 기록: `C:/Users/KimHyeongJin/Documents/Codex/2026-10-02/actionrpg-editors/outputs/ServerOutputCleanup-20261003/CLEANUP_REPORT.json`.
