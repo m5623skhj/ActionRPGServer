@@ -35,6 +35,15 @@ namespace TownProtocol
         PartyCreateRequest = 24,
         DungeonCompletionRequest = 25,
         DungeonCompletionResponse = 26,
+        SkillStateRequest = 27,
+        LearnSkillRequest = 28,
+        SkillStateResponse = 29,
+        PartyDetailRequest = 30,
+        PartyDetailResponse = 31,
+        PartyJoinRequest = 32,
+        PartyJoinAnswer = 33,
+        PartyJoinRequestUpdate = 34,
+        PartyKicked = 35,
     };
 
     struct EnterTownRequest
@@ -207,6 +216,64 @@ namespace TownProtocol
         std::uint64_t combatSeed{};
         std::string sessionBrokerAddress{};
         std::uint16_t sessionBrokerPort{};
+    };
+
+    struct SkillStateRequest
+    {
+    };
+
+    struct LearnSkillRequest
+    {
+        std::string skillId{};
+        std::uint32_t expectedSkillLevel{};
+    };
+
+    struct SkillStateResponse
+    {
+        std::string payload{};
+    };
+
+    struct PartyDetailRequest
+    {
+        std::uint64_t partyId{};
+    };
+
+    struct PartyDetailResponse
+    {
+        std::uint64_t partyId{};
+        PartyResultCode result{};
+        std::string title{};
+        std::uint64_t leaderPlayerId{};
+        bool isPublic{};
+        bool busy{};
+        std::vector<PartyMemberInfo> members{};
+    };
+
+    struct PartyJoinRequest
+    {
+        std::uint64_t partyId{};
+    };
+
+    struct PartyJoinAnswer
+    {
+        std::uint64_t requestId{};
+        bool accepted{};
+    };
+
+    struct PartyJoinRequestUpdate
+    {
+        std::uint64_t requestId{};
+        std::uint64_t partyId{};
+        std::uint64_t requesterPlayerId{};
+        std::string requesterName{};
+        PartyJoinRequestState state{};
+        PartyResultCode result{};
+    };
+
+    struct PartyKicked
+    {
+        std::uint64_t partyId{};
+        std::uint64_t leaderPlayerId{};
     };
 
 }

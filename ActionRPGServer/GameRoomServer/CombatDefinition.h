@@ -2,6 +2,7 @@
 
 #include "MonsterDefinition.h"
 #include "../Shared/PlayerSkillCatalog.h"
+#include "../Shared/SkillTreeCatalog.h"
 
 #include <filesystem>
 #include <memory>
@@ -40,6 +41,7 @@ namespace GameRoomServer
         float airFireLift{}, airRecoilDistance{};
         std::unordered_map<std::uint32_t, MonsterCombatProfile> monsters;
         ActionRPG::PlayerSkills::Catalog playerSkills;
+        ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
 
         [[nodiscard]] static std::shared_ptr<const CombatDefinition> Load(
             const std::filesystem::path& inPath, const MonsterDefinition::Catalog& inMonsters);

@@ -34,6 +34,7 @@ namespace GameRoomServer
         dungeonWorld = definition->world;
         dungeonWorld["roomId"] = roomId;
         dungeonWorld["playerSkills"] = combatDefinition->playerSkills.source;
+        dungeonWorld["skillTrees"] = combatDefinition->skillTrees.source;
         dungeonWorld["combatRules"] = {
             { "version", 1 }, { "maxHp", combatDefinition->playerMaxHp },
             { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
@@ -113,7 +114,11 @@ namespace GameRoomServer
             player.worldReady = true;
             player.directionX = inInput.directionX;
             player.directionY = inInput.directionY;
-            if (!player.skill && player.shotPhase == ShotPhase::None && player.actor.reaction == Reaction::None
+            // Movement may leave recovery after the last shot, never preparation/fire.
+            if ((inInput.directionX != 0 || inInput.directionY != 0)
+                && player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)
+                player.shotPhase = ShotPhase::None;
+            if (!player.skill && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
                 && inInput.directionX != 0) player.facingLeft = inInput.directionX < 0;
             player.running = inInput.running != 0;
             player.lastInput = std::chrono::steady_clock::now();
@@ -143,7 +148,8 @@ namespace GameRoomServer
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
             if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
-                || player.skill || player.shotPhase != ShotPhase::None || player.actor.height > 0 || player.jumpPreparing) continue;
+                || player.skill || (player.shotPhase != ShotPhase::None
+                    && !(player.shotPhase == ShotPhase::Recover && player.pendingShots == 0))) continue;
             const auto& map = dungeonWorld.at("maps").at(player.mapId);
             float dx = static_cast<float>(player.directionX), dy = static_cast<float>(player.directionY);
             if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
@@ -170,7 +176,7 @@ namespace GameRoomServer
                     const auto zone = std::find_if(zones.begin(), zones.end(), [&player](const auto& value)
                         { return DungeonDefinition::Contains(value.at("polygon"), player.position); });
                     if (zone == zones.end()) player.warpArmed = true;
-                    else if (player.warpArmed && mapCleared)
+                    else if (player.warpArmed && mapCleared && player.actor.height == 0 && !player.jumpPreparing)
                     {
                         const auto& action = zone->at("action");
                         const std::string targetMapId = action.at("targetMapId");
@@ -180,8 +186,7 @@ namespace GameRoomServer
                         player.mapId = targetMapId;
                         ++player.mapEpoch;
                         player.bufferedActions.clear();
-                        player.shotInputRemainingSeconds = 0;
-                        player.shotCount = 0;
+                        ResetShotState(player);
                         player.position = DungeonDefinition::Point(entry->at("position"));
                         player.warpArmed = false;
                         player.skill.reset();
@@ -210,12 +215,35 @@ namespace GameRoomServer
         });
     }
 
+    void GameRoom::UpdatePlayerProgress(PlayerId inPlayerId, std::string inProgression)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, data = std::move(inProgression)]()
+        {
+            const auto found = self->players.find(inPlayerId);
+            if (found == self->players.end() || !self->enteredPlayers.contains(inPlayerId)) return;
+            try
+            {
+                auto progression = ActionRPG::PlayerSkills::CharacterProgression::Parse(nlohmann::json::parse(data));
+                self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills,
+                    progression, found->second.characterId);
+                found->second.progression = std::move(progression);
+            }
+            catch (const std::exception&) { return; }
+        });
+    }
+
     void GameRoom::Stop()
     {
         const std::shared_ptr<GameRoom> self = shared_from_this();
         asio::dispatch(strand, [self]()
         {
             self->state = State::Stopped;
+            for (auto& [playerId, player] : self->players)
+            {
+                self->ResetShotState(player);
+                player.bufferedActions.clear();
+            }
             self->PublishRealtime();
             self->realtimeSubscribers.clear();
             asio::error_code ignoredError;
@@ -224,16 +252,33 @@ namespace GameRoomServer
         });
     }
 
-    void GameRoom::TryEnter(const PlayerId inPlayerId, std::uint32_t inCharacterId, EnterResultHandler inResultHandler)
+    void GameRoom::TryEnter(const PlayerId inPlayerId, std::uint32_t inCharacterId, std::string inProgression,
+        EnterResultHandler inResultHandler)
     {
         const std::shared_ptr<GameRoom> self = shared_from_this();
-        asio::dispatch(strand, [self, inPlayerId, inCharacterId, resultHandler = std::move(inResultHandler)]() mutable
+        asio::dispatch(strand, [self, inPlayerId, inCharacterId, data = std::move(inProgression),
+            resultHandler = std::move(inResultHandler)]() mutable
         {
+            ActionRPG::PlayerSkills::CharacterProgression progression;
+            try
+            {
+                progression = ActionRPG::PlayerSkills::CharacterProgression::Parse(nlohmann::json::parse(data));
+                self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills, progression, inCharacterId);
+            }
+            catch (const std::exception&)
+            {
+                if (resultHandler) resultHandler(false);
+                return;
+            }
             const bool accepted = self->state == State::WaitingForPlayers
                 && inCharacterId != 0
                 && self->expectedPlayers.contains(inPlayerId)
                 && self->enteredPlayers.insert(inPlayerId).second;
-            if (accepted) self->players.at(inPlayerId).characterId = inCharacterId;
+            if (accepted)
+            {
+                self->players.at(inPlayerId).characterId = inCharacterId;
+                self->players.at(inPlayerId).progression = std::move(progression);
+            }
             if (accepted && self->enteredPlayers.size() == self->expectedPlayers.size())
             {
                 self->StartDungeon();
@@ -252,7 +297,12 @@ namespace GameRoomServer
         {
             const bool removed = self->enteredPlayers.erase(inPlayerId) > 0;
             const auto player = self->players.find(inPlayerId);
-            if (player != self->players.end()) { player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear(); }
+            if (player != self->players.end())
+            {
+                self->ResetShotState(player->second);
+                player->second.bufferedActions.clear();
+                player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear();
+            }
             self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = removed && self->enteredPlayers.empty()
                 && self->state != State::WaitingForPlayers;
@@ -271,6 +321,11 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, resultHandler = std::move(inResultHandler)]() mutable
         {
             self->enteredPlayers.erase(inPlayerId);
+            if (const auto player = self->players.find(inPlayerId); player != self->players.end())
+            {
+                self->ResetShotState(player->second);
+                player->second.bufferedActions.clear();
+            }
             self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = self->enteredPlayers.empty()
                 && self->state != State::WaitingForPlayers;
@@ -303,6 +358,11 @@ namespace GameRoomServer
                 return;
             }
             self->state = State::Cleared;
+            for (auto& [playerId, player] : self->players)
+            {
+                self->ResetShotState(player);
+                player.bufferedActions.clear();
+            }
             self->PublishRealtime();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);

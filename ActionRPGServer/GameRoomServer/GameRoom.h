@@ -51,7 +51,8 @@ namespace GameRoomServer
 
         void Start();
         void Stop();
-        void TryEnter(PlayerId inPlayerId, std::uint32_t inCharacterId, EnterResultHandler inResultHandler);
+        void TryEnter(PlayerId inPlayerId, std::uint32_t inCharacterId, std::string inProgression, EnterResultHandler inResultHandler);
+        void UpdatePlayerProgress(PlayerId inPlayerId, std::string inProgression);
         void Leave(PlayerId inPlayerId, LeaveResultHandler inResultHandler);
         void RemoveUnannouncedPlayer(PlayerId inPlayerId, std::function<void(bool)> inResultHandler);
         void ValidateCompletion(std::vector<PlayerId> inParticipants, std::function<void(bool)> inHandler);
@@ -106,6 +107,7 @@ namespace GameRoomServer
             bool airborne{}, facingLeft{}, eventApplied{};
             float seconds{};
             std::unordered_set<std::uint64_t> hitIds;
+            std::uint32_t skillLevel{};
         };
         struct ActiveBuff
         {
@@ -146,6 +148,7 @@ namespace GameRoomServer
             std::optional<ActiveSkill> skill;
             std::unordered_map<std::string, float> skillCooldowns;
             std::vector<ActiveBuff> buffs;
+            ActionRPG::PlayerSkills::CharacterProgression progression;
         };
 
         // Definitions are shared read-only; each room owns HP and the current AI node.
@@ -186,6 +189,8 @@ namespace GameRoomServer
         void EnterNode(MonsterState& inMonster, const std::string& inNodeId);
         bool AdvanceNode(MonsterState& inMonster, const std::string& inTrigger);
         void UpdateShots(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
+        [[nodiscard]] static bool IsShotFacingLocked(const PlayerState& inPlayer);
+        static void ResetShotState(PlayerState& inPlayer);
         bool TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft);
         void UpdateBufferedActions(PlayerState& inPlayer, float inDeltaSeconds);
         void UpdateProjectiles(float inDeltaSeconds);

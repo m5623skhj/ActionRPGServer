@@ -11,7 +11,8 @@
 
 namespace
 {
-    constexpr float TICK_SECONDS = 1.0f / 20.0f;
+    constexpr auto TICK_INTERVAL = std::chrono::milliseconds(50);
+    constexpr float MAX_SIMULATION_SECONDS = 0.25f;
     constexpr std::uint32_t SNAPSHOT_TICK_INTERVAL = 2;
 
     [[nodiscard]] TownProtocol::PartyResultCode ToProtocolResult(
@@ -46,15 +47,24 @@ namespace
 namespace TownServer::Domain
 {
     TownInstance::TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
-        DungeonCatalog inDungeonCatalog)
+        DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory)
         : strand(asio::make_strand(inIoContext)),
           tickTimer(strand),
-          dungeonCatalog(std::move(inDungeonCatalog))
+          dungeonCatalog(std::move(inDungeonCatalog)),
+          progressionPolicy(ActionRPG::PlayerSkills::ProgressionPolicy::Load(inDataDirectory / "CharacterProgression.json")),
+          playerSkills(ActionRPG::PlayerSkills::Catalog::Load(inDataDirectory / "PlayerSkills.json")),
+          skillTrees(ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inDataDirectory / "SkillTrees.json", playerSkills))
     {
         if (inMaps.empty())
         {
             throw std::invalid_argument("TownInstance requires at least one map.");
         }
+        const ActionRPG::PlayerSkills::Catalog::Json skillPayload{
+            { "characterId", 1 }, { "progression", progressionPolicy.Create().ToJson() },
+            { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", "State" } };
+        // Leave room for the bounded learned-skill map; never truncate the catalog inside a TCP string.
+        if (skillPayload.dump().size() + 24000 > std::numeric_limits<std::uint16_t>::max())
+            throw std::invalid_argument("Skill catalog exceeds the town skill-state packet limit.");
         defaultMapId = inMaps.front().GetInfo().mapId;
         for (TownMap& map : inMaps)
         {
@@ -87,6 +97,99 @@ namespace TownServer::Domain
         }
     }
 
+    void TownInstance::SetProgressionChangedHandler(ProgressionChangedHandler inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, handler = std::move(inHandler)]() mutable
+        {
+            self->progressionChangedHandler = std::move(handler);
+        });
+    }
+
+    void TownInstance::SendSkillState(PlayerEntry& inEntry, const std::string& inResult)
+    {
+        const ActionRPG::PlayerSkills::Catalog::Json payload{
+            { "characterId", inEntry.player.GetCharacterId() }, { "progression", inEntry.progression.ToJson() },
+            { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", inResult } };
+        inEntry.session->Send(TownProtocol::Encode(TownProtocol::SkillStateResponse{ payload.dump() }));
+    }
+
+    void TownInstance::NotifyProgression(PlayerId inPlayerId, const PlayerEntry& inEntry)
+    {
+        const auto roomId = inEntry.dungeonRoomId != 0 ? inEntry.dungeonRoomId : inEntry.reservedDungeonRoomId;
+        if (roomId != 0 && progressionChangedHandler)
+            progressionChangedHandler(roomId, inPlayerId, inEntry.progression.ToJson().dump());
+    }
+
+    void TownInstance::RequestSkillState(PlayerId inPlayerId)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId]()
+        {
+            const auto found = self->players.find(inPlayerId);
+            if (found != self->players.end()) self->SendSkillState(found->second, "State");
+        });
+    }
+
+    void TownInstance::GetProgression(PlayerId inPlayerId, std::function<void(std::string)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, handler = std::move(inHandler)]()
+        {
+            const auto found = self->players.find(inPlayerId);
+            handler(found == self->players.end() ? std::string{} : found->second.progression.ToJson().dump());
+        });
+    }
+
+    void TownInstance::LearnSkill(PlayerId inPlayerId, std::string inSkillId, std::uint32_t inExpectedSkillLevel)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, id = std::move(inSkillId), inExpectedSkillLevel]()
+        {
+            const auto found = self->players.find(inPlayerId);
+            if (found == self->players.end()) return;
+            auto& entry = found->second;
+            // Include reserved rooms so delayed entry confirmation cannot permit a skill purchase.
+            if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != 0)
+            {
+                self->SendSkillState(entry, "InDungeon");
+                return;
+            }
+            auto proposed = entry.progression;
+            auto result = self->skillTrees.Learn(self->playerSkills, proposed,
+                entry.player.GetCharacterId(), id, inExpectedSkillLevel);
+            if (result == "Succeeded")
+            {
+                entry.progression = std::move(proposed);
+                self->NotifyProgression(inPlayerId, entry);
+            }
+            self->SendSkillState(entry, result);
+        });
+    }
+
+    void TownInstance::AdvancePlayerLevel(PlayerId inPlayerId, std::uint32_t inLevel, std::function<void(bool)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inPlayerId, inLevel, handler = std::move(inHandler)]()
+        {
+            const auto found = self->players.find(inPlayerId);
+            bool accepted = false;
+            if (found != self->players.end())
+            {
+                auto& entry = found->second;
+                auto proposed = entry.progression;
+                accepted = self->progressionPolicy.AdvanceLevel(proposed, inLevel);
+                if (accepted)
+                {
+                    entry.progression = std::move(proposed);
+                    self->NotifyProgression(inPlayerId, entry);
+                    self->SendSkillState(entry, "LevelAdvanced");
+                }
+            }
+            if (handler) handler(accepted);
+        });
+    }
+
     void TownInstance::Start()
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
@@ -97,6 +200,10 @@ namespace TownServer::Domain
                 return;
             }
             self->running = true;
+            const auto now = std::chrono::steady_clock::now();
+            for (auto& [playerId, entry] : self->players)
+                entry.lastSimulationTime = now;
+            self->nextTickTime = now + TICK_INTERVAL;
             self->ScheduleTick();
         });
     }
@@ -161,7 +268,18 @@ namespace TownServer::Domain
             const auto playerIterator = self->players.find(sessionIterator->second);
             if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0)
             {
-                playerIterator->second.player.SetMovementInput(inInput, std::chrono::steady_clock::now());
+                auto& entry = playerIterator->second;
+                if (inInput.sequence <= entry.player.GetLastProcessedInput()) return;
+                // Use the strand's acceptance time so queued input never rewrites an integrated interval.
+                const auto now = std::chrono::steady_clock::now();
+                const bool changedSector = self->running
+                    && self->SimulateMovement(sessionIterator->second, entry, now);
+                entry.player.SetMovementInput(inInput, now);
+                if (self->running)
+                {
+                    self->ProcessTransition(sessionIterator->second, entry);
+                    if (changedSector) self->RefreshVisibility(sessionIterator->second);
+                }
             }
         });
     }
@@ -224,6 +342,7 @@ namespace TownServer::Domain
             {
                 self->pendingDungeonPlayers.insert(
                     participantPlayerIds.begin(), participantPlayerIds.end());
+                self->PrunePartyJoinRequests();
             }
             handler(valid, std::move(participantPlayerIds));
         });
@@ -253,6 +372,7 @@ namespace TownServer::Domain
                     iterator->second.session->Send(TownProtocol::Encode(response));
                 }
             }
+            self->PrunePartyJoinRequests();
         });
     }
 
@@ -385,10 +505,8 @@ namespace TownServer::Domain
             }
             const std::optional<PartyManager::PartyView> currentParty =
                 self->partyManager.GetPartyForPlayer(inviterPlayerId);
-            if (self->pendingDungeonPlayers.contains(inviterPlayerId)
-                || self->pendingDungeonPlayers.contains(inTargetPlayerId)
-                || self->players.at(inviterPlayerId).reservedDungeonRoomId != 0
-                || self->players.at(inTargetPlayerId).reservedDungeonRoomId != 0
+            if (self->IsPlayerPartyBusy(inviterPlayerId)
+                || self->IsPlayerPartyBusy(inTargetPlayerId)
                 || (currentParty.has_value() && self->IsPartyBusy(currentParty->partyId)))
             {
                 self->SendPartyResult(inviterPlayerId, TownProtocol::PartyOperationType::Invite,
@@ -435,8 +553,7 @@ namespace TownServer::Domain
             const PlayerId playerId = sessionIterator->second;
             const std::optional<PartyManager::Invitation> invitation =
                 self->partyManager.GetInvitation(playerId, inInvitationId);
-            if (self->pendingDungeonPlayers.contains(playerId)
-                || self->players.at(playerId).reservedDungeonRoomId != 0
+            if (self->IsPlayerPartyBusy(playerId)
                 || (invitation.has_value() && self->IsPartyBusy(invitation->partyId)))
             {
                 self->SendPartyResult(playerId,
@@ -531,6 +648,8 @@ namespace TownServer::Domain
             {
                 return;
             }
+            self->players.at(inTargetPlayerId).session->Send(TownProtocol::Encode(
+                TownProtocol::PartyKicked{ partyId, leaderPlayerId }));
             self->SendEmptyPartySnapshot(inTargetPlayerId);
             self->BroadcastPartySnapshot(partyId);
             if (party.has_value() && party->isPublic)
@@ -614,6 +733,113 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::RequestPartyDetail(const std::uint64_t inSessionId, const PartyManager::PartyId inPartyId)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, inPartyId]()
+        {
+            const auto session = self->sessionToPlayer.find(inSessionId);
+            if (session == self->sessionToPlayer.end()) return;
+            TownProtocol::PartyDetailResponse response;
+            response.partyId = inPartyId;
+            const auto party = self->partyManager.GetParty(inPartyId);
+            if (self->IsPlayerPartyBusy(session->second)) response.result = TownProtocol::PartyResultCode::Busy;
+            else if (!party) response.result = TownProtocol::PartyResultCode::PartyNotFound;
+            else if (!party->isPublic) response.result = TownProtocol::PartyResultCode::NotPublic;
+            else
+            {
+                response.title = party->title;
+                response.leaderPlayerId = party->leaderPlayerId;
+                response.isPublic = party->isPublic;
+                response.busy = self->IsPartyBusy(inPartyId);
+                for (const auto& member : party->members)
+                {
+                    const auto player = self->players.find(member.playerId);
+                    if (player == self->players.end())
+                    {
+                        response = TownProtocol::PartyDetailResponse{};
+                        response.partyId = inPartyId;
+                        response.result = TownProtocol::PartyResultCode::PlayerNotFound;
+                        break;
+                    }
+                    response.members.push_back({ member.playerId, player->second.player.GetName(), member.slot });
+                }
+            }
+            self->players.at(session->second).session->Send(TownProtocol::Encode(response));
+        });
+    }
+
+    void TownInstance::RequestPartyJoin(const std::uint64_t inSessionId, const PartyManager::PartyId inPartyId)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, inPartyId]()
+        {
+            const auto session = self->sessionToPlayer.find(inSessionId);
+            if (session == self->sessionToPlayer.end()) return;
+            const auto playerId = session->second;
+            self->PrunePartyJoinRequests();
+            if (std::ranges::any_of(self->partyJoinRequests, [playerId](const auto& inPending)
+                { return inPending.second.requesterPlayerId == playerId; }))
+            {
+                self->SendPartyResult(playerId, TownProtocol::PartyOperationType::RequestJoin,
+                    TownProtocol::PartyResultCode::AlreadyRequested);
+                return;
+            }
+            const auto party = self->partyManager.GetParty(inPartyId);
+            PendingPartyJoin request{ 0, inPartyId, party ? party->leaderPlayerId : 0,
+                playerId, self->players.at(playerId).player.GetName() };
+            const auto result = self->ValidatePartyJoin(request);
+            self->SendPartyResult(playerId, TownProtocol::PartyOperationType::RequestJoin, result);
+            if (result != TownProtocol::PartyResultCode::Succeeded) return;
+            request.requestId = self->nextPartyJoinRequestId++;
+            self->partyJoinRequests.emplace(request.requestId, request);
+            self->SendPartyJoinUpdate(request, TownProtocol::PartyJoinRequestState::Pending, result);
+        });
+    }
+
+    /** Revalidate and consume one request on the town strand before applying an approved membership change. */
+    void TownInstance::AnswerPartyJoin(const std::uint64_t inSessionId, const std::uint64_t inRequestId,
+        const bool inAccepted)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, inSessionId, inRequestId, inAccepted]()
+        {
+            const auto session = self->sessionToPlayer.find(inSessionId);
+            if (session == self->sessionToPlayer.end()) return;
+            const auto playerId = session->second;
+            self->PrunePartyJoinRequests();
+            const auto found = self->partyJoinRequests.find(inRequestId);
+            if (found == self->partyJoinRequests.end())
+            {
+                self->SendPartyResult(playerId, TownProtocol::PartyOperationType::AnswerJoin,
+                    TownProtocol::PartyResultCode::JoinRequestNotFound);
+                return;
+            }
+            if (found->second.leaderPlayerId != playerId)
+            {
+                self->SendPartyResult(playerId, TownProtocol::PartyOperationType::AnswerJoin,
+                    TownProtocol::PartyResultCode::NotLeader);
+                return;
+            }
+            const auto request = found->second;
+            auto result = self->ValidatePartyJoin(request);
+            if (result == TownProtocol::PartyResultCode::Succeeded && inAccepted)
+                result = ToProtocolResult(self->partyManager.JoinApproved(
+                    request.partyId, playerId, request.requesterPlayerId));
+            self->partyJoinRequests.erase(found);
+            self->SendPartyResult(playerId, TownProtocol::PartyOperationType::AnswerJoin, result);
+            const auto state = result != TownProtocol::PartyResultCode::Succeeded
+                ? TownProtocol::PartyJoinRequestState::Invalidated
+                : inAccepted ? TownProtocol::PartyJoinRequestState::Accepted : TownProtocol::PartyJoinRequestState::Rejected;
+            self->SendPartyJoinUpdate(request, state, result);
+            if (state == TownProtocol::PartyJoinRequestState::Accepted)
+            {
+                self->BroadcastPartySnapshot(request.partyId);
+                self->NotifyPartyDirectoryChanged();
+            }
+        });
+    }
+
     void TownInstance::EnterDungeon(
         const PlayerId inPlayerId,
         const ActionRPG::RoomControlProtocol::RoomId inRoomId, std::function<void(bool)> inHandler)
@@ -640,6 +866,7 @@ namespace TownServer::Domain
         entry.dungeonRoomId = inRoomId;
         entry.reservedDungeonRoomId = 0;
         entry.player.StopMovement();
+        PrunePartyJoinRequests();
         return true;
     }
 
@@ -666,6 +893,7 @@ namespace TownServer::Domain
             if (inNotify) entry.session->Send(TownProtocol::Encode(
                 TownProtocol::DungeonCompletionResponse{inRoomId, true, false}));
             iterator->second.dungeonRoomId = 0;
+            entry.lastSimulationTime = std::chrono::steady_clock::now();
             iterator->second.sector = self->GetSector(
                 iterator->second.mapId, iterator->second.player.GetPosition());
             self->AddToSector(inPlayerId, iterator->second.sector);
@@ -727,13 +955,18 @@ namespace TownServer::Domain
 
     void TownInstance::ScheduleTick()
     {
-        tickTimer.expires_after(std::chrono::milliseconds(50));
+        tickTimer.expires_at(nextTickTime);
         const std::shared_ptr<TownInstance> self = shared_from_this();
         tickTimer.async_wait([self](const asio::error_code& inError)
         {
             if (!inError && self->running)
             {
                 self->Tick();
+                self->nextTickTime += TICK_INTERVAL;
+                const auto now = std::chrono::steady_clock::now();
+                // Skip overdue deadlines after a stall; integrate elapsed time instead of bursting ticks.
+                if (self->nextTickTime <= now)
+                    self->nextTickTime += TICK_INTERVAL * ((now - self->nextTickTime) / TICK_INTERVAL + 1);
                 self->ScheduleTick();
             }
         });
@@ -750,25 +983,8 @@ namespace TownServer::Domain
             {
                 continue;
             }
-            TownMap& currentMap = maps.at(entry.mapId);
-            const TownProtocol::MapInfo& mapInfo = currentMap.GetInfo();
-            const TownProtocol::Vector2 previousPosition = entry.player.GetPosition();
-            entry.player.Simulate(TICK_SECONDS, mapInfo.walkSpeed, now);
-            const TownProtocol::Vector2 proposedPosition = entry.player.GetPosition();
-            const TownProtocol::Vector2 constrainedPosition = currentMap.ConstrainMovement(
-                previousPosition, proposedPosition);
-            entry.player.SetPosition(constrainedPosition);
-            if (constrainedPosition.x != proposedPosition.x || constrainedPosition.y != proposedPosition.y)
+            if (SimulateMovement(playerId, entry, now))
             {
-                entry.player.StopMovement();
-            }
-
-            const SectorCoordinate newSector = GetSector(entry.mapId, entry.player.GetPosition());
-            if (newSector != entry.sector)
-            {
-                RemoveFromSector(playerId, entry.sector);
-                entry.sector = newSector;
-                AddToSector(playerId, entry.sector);
                 changedSectorPlayers.push_back(playerId);
             }
             ProcessTransition(playerId, entry);
@@ -785,6 +1001,34 @@ namespace TownServer::Domain
         }
     }
 
+    /** Integrate the current input up to inNow on the town strand, applying collision and sector limits. */
+    bool TownInstance::SimulateMovement(const PlayerId inPlayerId, PlayerEntry& inEntry,
+        const std::chrono::steady_clock::time_point inNow)
+    {
+        const float deltaSeconds = std::clamp(
+            std::chrono::duration<float>(inNow - inEntry.lastSimulationTime).count(),
+            0.0f, MAX_SIMULATION_SECONDS);
+        inEntry.lastSimulationTime = inNow;
+        TownMap& currentMap = maps.at(inEntry.mapId);
+        const TownProtocol::Vector2 previousPosition = inEntry.player.GetPosition();
+        inEntry.player.Simulate(deltaSeconds, currentMap.GetInfo().walkSpeed, inNow);
+        const TownProtocol::Vector2 proposedPosition = inEntry.player.GetPosition();
+        const TownProtocol::Vector2 constrainedPosition = currentMap.ConstrainMovement(
+            previousPosition, proposedPosition);
+        inEntry.player.SetPosition(constrainedPosition);
+        if (constrainedPosition.x != proposedPosition.x || constrainedPosition.y != proposedPosition.y)
+        {
+            inEntry.player.StopMovement();
+        }
+
+        const SectorCoordinate newSector = GetSector(inEntry.mapId, inEntry.player.GetPosition());
+        if (newSector == inEntry.sector) return false;
+        RemoveFromSector(inPlayerId, inEntry.sector);
+        inEntry.sector = newSector;
+        AddToSector(inPlayerId, inEntry.sector);
+        return true;
+    }
+
     void TownInstance::EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession,
         std::string inPlayerName, const std::uint32_t inCharacterId)
     {
@@ -793,6 +1037,13 @@ namespace TownServer::Domain
         {
             return;
         }
+
+        if (!playerSkills.characterIds.contains("Character" + std::to_string(inCharacterId)))
+        {
+            inSession->Disconnect();
+            return;
+        }
+        auto progression = progressionPolicy.Create();
 
         const PlayerId playerId = nextPlayerId++;
         const TownProtocol::MapInfo& mapInfo = maps.at(defaultMapId).GetInfo();
@@ -810,6 +1061,7 @@ namespace TownServer::Domain
             0,
             {}
         };
+        entry.progression = std::move(progression);
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
         AddToSector(playerId, sector);
@@ -822,6 +1074,7 @@ namespace TownServer::Domain
             mapInfo
         }));
         RefreshVisibility(playerId);
+        SendSkillState(playerEntry, "State");
     }
 
     void TownInstance::LeaveOnStrand(const std::uint64_t inSessionId)
@@ -860,6 +1113,7 @@ namespace TownServer::Domain
         }
         players.erase(playerIterator);
         sessionToPlayer.erase(sessionIterator);
+        PrunePartyJoinRequests();
     }
 
     void TownInstance::HideFromTown(const PlayerId inPlayerId, PlayerEntry& inEntry)
@@ -1096,6 +1350,7 @@ namespace TownServer::Domain
 
     void TownInstance::BroadcastPartySnapshot(const PartyManager::PartyId inPartyId)
     {
+        PrunePartyJoinRequests();
         const std::optional<PartyManager::PartyView> party = partyManager.GetParty(inPartyId);
         if (!party.has_value())
         {
@@ -1183,6 +1438,7 @@ namespace TownServer::Domain
 
     void TownInstance::NotifyPartyDirectoryChanged()
     {
+        PrunePartyJoinRequests();
         const std::vector<std::uint8_t> packet = TownProtocol::Encode(
             TownProtocol::PartyDirectoryChanged{ ++partyDirectoryRevision });
         for (const PlayerId playerId : partyDirectorySubscribers)
@@ -1210,6 +1466,53 @@ namespace TownServer::Domain
                     || (player != players.end() && (player->second.dungeonRoomId != 0
                         || player->second.reservedDungeonRoomId != 0));
             });
+    }
+
+    bool TownInstance::IsPlayerPartyBusy(const PlayerId inPlayerId) const
+    {
+        const auto found = players.find(inPlayerId);
+        return pendingDungeonPlayers.contains(inPlayerId)
+            || (found != players.end() && (found->second.dungeonRoomId != 0
+                || found->second.reservedDungeonRoomId != 0));
+    }
+
+    TownProtocol::PartyResultCode TownInstance::ValidatePartyJoin(const PendingPartyJoin& inRequest) const
+    {
+        const auto party = partyManager.GetParty(inRequest.partyId);
+        if (!party) return TownProtocol::PartyResultCode::PartyNotFound;
+        if (party->leaderPlayerId != inRequest.leaderPlayerId) return TownProtocol::PartyResultCode::NotLeader;
+        if (!party->isPublic) return TownProtocol::PartyResultCode::NotPublic;
+        if (!players.contains(inRequest.requesterPlayerId) || !players.contains(inRequest.leaderPlayerId))
+            return TownProtocol::PartyResultCode::PlayerNotFound;
+        if (partyManager.GetPartyForPlayer(inRequest.requesterPlayerId)) return TownProtocol::PartyResultCode::AlreadyInParty;
+        if (IsPlayerPartyBusy(inRequest.requesterPlayerId) || IsPartyBusy(inRequest.partyId))
+            return TownProtocol::PartyResultCode::Busy;
+        if (party->members.size() >= PartyManager::MAX_PARTY_MEMBERS) return TownProtocol::PartyResultCode::PartyFull;
+        return TownProtocol::PartyResultCode::Succeeded;
+    }
+
+    void TownInstance::SendPartyJoinUpdate(const PendingPartyJoin& inRequest,
+        const TownProtocol::PartyJoinRequestState inState, const TownProtocol::PartyResultCode inResult)
+    {
+        const auto packet = TownProtocol::Encode(TownProtocol::PartyJoinRequestUpdate{
+            inRequest.requestId, inRequest.partyId, inRequest.requesterPlayerId, inRequest.requesterName, inState, inResult });
+        for (const auto playerId : { inRequest.leaderPlayerId, inRequest.requesterPlayerId })
+            if (const auto player = players.find(playerId); player != players.end()) player->second.session->Send(packet);
+    }
+
+    /** Remove obsolete prompts in request order; called only on the owning town strand. */
+    void TownInstance::PrunePartyJoinRequests()
+    {
+        for (auto iterator = partyJoinRequests.begin(); iterator != partyJoinRequests.end();)
+        {
+            const auto result = ValidatePartyJoin(iterator->second);
+            if (result == TownProtocol::PartyResultCode::Succeeded) ++iterator;
+            else
+            {
+                SendPartyJoinUpdate(iterator->second, TownProtocol::PartyJoinRequestState::Invalidated, result);
+                iterator = partyJoinRequests.erase(iterator);
+            }
+        }
     }
 
     // Keep the client-visible party leader eligible to choose for the actual room participants.

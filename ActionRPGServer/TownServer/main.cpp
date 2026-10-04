@@ -114,9 +114,15 @@ int main(const int inArgumentCount, char* inArguments[])
             dataDirectory / "DungeonCatalog.json");
         std::shared_ptr<TownServer::Domain::TownInstance> townInstance =
             std::make_shared<TownServer::Domain::TownInstance>(
-                ioContext, std::move(townMaps), std::move(dungeonCatalog));
+                ioContext, std::move(townMaps), std::move(dungeonCatalog), dataDirectory);
         std::shared_ptr<RoomControlTcpServer> roomControlServer = std::make_shared<RoomControlTcpServer>(
             ioContext, asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), roomControlPort), townInstance);
+        townInstance->SetProgressionChangedHandler([weakControl = std::weak_ptr<RoomControlTcpServer>(roomControlServer)](
+            const auto inRoomId, const auto inPlayerId, std::string inProgression)
+        {
+            if (const auto control = weakControl.lock())
+                control->UpdatePlayerProgress(inRoomId, inPlayerId, std::move(inProgression));
+        });
         TownClientTcpServer server(
             ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);

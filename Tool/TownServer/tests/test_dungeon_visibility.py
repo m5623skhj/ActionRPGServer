@@ -77,6 +77,8 @@ def scenario(start_only=False):
         document["spawn"] = {axis: sum(p[axis] for p in gate["polygon"]) / len(gate["polygon"]) for axis in ("x", "y")}
         (fixture / "Data/TownMap.json").write_text(json.dumps(document), encoding="utf-8")
         shutil.copy2(ROOT / "ActionRPGServer/TownServer/Data/DungeonCatalog.json", fixture / "Data/DungeonCatalog.json")
+        for name in ("CharacterProgression.json", "PlayerSkills.json", "SkillTrees.json"):
+            shutil.copy2(ROOT / "ActionRPGServer/TownServer/Data" / name, fixture / "Data" / name)
         client_port, control_port = port(), port()
         while client_port == control_port:
             control_port = port()

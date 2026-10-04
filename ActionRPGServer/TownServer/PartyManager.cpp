@@ -216,6 +216,24 @@ namespace TownServer::Domain
         return LeaveResult{ Result::Succeeded, partyId, false };
     }
 
+    // Called by the town strand only after an authenticated leader answers a pending request.
+    PartyManager::Result PartyManager::JoinApproved(const PartyId inPartyId,
+        const PlayerId inLeaderPlayerId, const PlayerId inRequesterPlayerId)
+    {
+        const auto found = parties.find(inPartyId);
+        if (inRequesterPlayerId == 0 || found == parties.end() || !found->second.isPublic)
+            return Result::InvalidTarget;
+        auto& party = found->second;
+        if (party.leaderPlayerId != inLeaderPlayerId) return Result::NotLeader;
+        if (playerParties.contains(inRequesterPlayerId)) return Result::AlreadyInParty;
+        const auto emptySlot = FindEmptySlot(party);
+        if (!emptySlot) return Result::PartyFull;
+        party.slots[*emptySlot] = inRequesterPlayerId;
+        playerParties.emplace(inRequesterPlayerId, inPartyId);
+        invitationsByTarget.erase(inRequesterPlayerId);
+        return Result::Succeeded;
+    }
+
     PartyManager::Result PartyManager::Kick(const PlayerId inLeaderPlayerId,
         const PlayerId inTargetPlayerId, PartyId& outPartyId)
     {

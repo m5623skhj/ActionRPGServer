@@ -175,6 +175,8 @@
     <ClInclude Include="TownClientTcpServer.h" />
     <ClInclude Include="TownInstance.h" />
     <ClInclude Include="TownMap.h" />
+    <ClInclude Include="..\Shared\CharacterProgression.h" />
+    <ClInclude Include="..\Shared\SkillTreeCatalog.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />

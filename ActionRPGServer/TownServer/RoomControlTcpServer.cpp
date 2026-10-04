@@ -86,9 +86,10 @@ namespace TownServer::Network
     void RoomControlTcpServer::ConfirmJoin(
         const Protocol::RoomId inRoomId,
         const Protocol::PlayerId inPlayerId,
-        const std::uint64_t inChallenge, const std::uint32_t inCharacterId)
+        const std::uint64_t inChallenge, const std::uint32_t inCharacterId, std::string inProgression)
     {
-        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, inChallenge, inCharacterId]()
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, inChallenge, inCharacterId,
+            progression = std::move(inProgression)]()
         {
             const auto roomIterator = roomToServerSession.find(inRoomId);
             if (roomIterator == roomToServerSession.end())
@@ -101,7 +102,20 @@ namespace TownServer::Network
                 return;
             }
             serverIterator->second.session->Send(Protocol::Encode(
-                Protocol::ConfirmJoin{ inRoomId, inPlayerId, inChallenge, inCharacterId }));
+                Protocol::ConfirmJoin{ inRoomId, inPlayerId, inChallenge, inCharacterId, progression }));
+        });
+    }
+
+    void RoomControlTcpServer::UpdatePlayerProgress(const Protocol::RoomId inRoomId,
+        const Protocol::PlayerId inPlayerId, std::string inProgression)
+    {
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, progression = std::move(inProgression)]()
+        {
+            const auto room = roomToServerSession.find(inRoomId);
+            if (room == roomToServerSession.end()) return;
+            const auto server = roomServers.find(room->second);
+            if (server == roomServers.end() || !server->second.registered) return;
+            server->second.session->Send(Protocol::Encode(Protocol::UpdatePlayerProgress{ inRoomId, inPlayerId, progression }));
         });
     }
 

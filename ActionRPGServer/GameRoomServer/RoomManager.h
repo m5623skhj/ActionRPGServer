@@ -41,6 +41,7 @@ namespace GameRoomServer
         void RegisterChallenge(std::uint64_t inChallenge, DungeonSession* inSession,
             std::uint32_t inSessionGeneration);
         void ConfirmJoin(Protocol::ConfirmJoin inRequest);
+        void UpdatePlayerProgress(Protocol::UpdatePlayerProgress inRequest);
         void LeaveRoom(Protocol::LeaveRoom inRequest);
         void SessionDisconnected(std::uint64_t inChallenge, DungeonSession* inSession,
             std::uint32_t inSessionGeneration, Protocol::RoomId inRoomId, Protocol::PlayerId inPlayerId);

@@ -1,0 +1,19 @@
+{
+  "format": "SkillTrees",
+  "schemaVersion": 1,
+  "skillLevelInterval": 2,
+  "nodes": [
+    {
+      "skillId": "Character1.FrontKick",
+      "requiredLevel": 1,
+      "spCost": 20,
+      "maxSkillLevel": null,
+      "prerequisites": [],
+      "description": "앞으로 다리를 뻗어 가까운 적을 공격합니다. 지상에서만 사용할 수 있으며, 스킬 레벨마다 공격력이 5 증가합니다.",
+      "icon": "Images/UI/Skills/character1_front_kick.png",
+      "column": 0,
+      "row": 0,
+      "damagePerLevel": 5
+    }
+  ]
+}

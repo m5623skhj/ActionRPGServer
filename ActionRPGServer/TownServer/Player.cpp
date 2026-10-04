@@ -1,5 +1,6 @@
 #include "Player.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -63,11 +64,10 @@ namespace TownServer::Domain
         const std::chrono::steady_clock::time_point inNow) noexcept
     {
         constexpr auto INPUT_TIMEOUT = std::chrono::milliseconds(500);
-        if (inNow - lastInputTime > INPUT_TIMEOUT)
-        {
-            directionX = 0;
-            directionY = 0;
-        }
+        // Preserve movement before the timeout even when this integration interval crosses its deadline.
+        const float movementSeconds = std::clamp(
+            std::chrono::duration<float>(lastInputTime + INPUT_TIMEOUT - inNow).count() + inDeltaSeconds,
+            0.0f, inDeltaSeconds);
 
         float x = static_cast<float>(directionX);
         float y = static_cast<float>(directionY);
@@ -80,8 +80,14 @@ namespace TownServer::Domain
         }
 
         velocity = TownProtocol::Vector2{ x * inWalkSpeed, y * inWalkSpeed };
-        position.x += velocity.x * inDeltaSeconds;
-        position.y += velocity.y * inDeltaSeconds;
+        position.x += velocity.x * movementSeconds;
+        position.y += velocity.y * movementSeconds;
+        if (inNow - lastInputTime >= INPUT_TIMEOUT)
+        {
+            directionX = 0;
+            directionY = 0;
+            velocity = {};
+        }
     }
 
     void Player::SetPosition(const TownProtocol::Vector2 inPosition) noexcept

@@ -121,11 +121,30 @@ namespace TownServer::Network
                 return;
             }
             town->ValidateDungeonJoin(authenticatedPlayerId, request->roomId,
-                [roomControl, request = *request, authenticatedPlayerId,
+                [town, roomControl, request = *request, authenticatedPlayerId,
                     selectedCharacterId = characterId.load(std::memory_order_acquire)](const bool valid)
                 {
-                    if (valid) roomControl->ConfirmJoin(request.roomId, authenticatedPlayerId, request.challenge, selectedCharacterId);
+                    if (valid) town->GetProgression(authenticatedPlayerId,
+                        [roomControl, request, authenticatedPlayerId, selectedCharacterId](std::string progression)
+                    {
+                        if (!progression.empty()) roomControl->ConfirmJoin(request.roomId, authenticatedPlayerId,
+                            request.challenge, selectedCharacterId, std::move(progression));
+                    });
                 });
+            return;
+        }
+        case TownProtocol::PacketType::SkillStateRequest:
+        {
+            if (!enterRequested || GetPlayerId() == 0 || !TownProtocol::DecodeSkillStateRequest(inPacket))
+            { tcpSession->Stop(); return; }
+            town->RequestSkillState(GetPlayerId());
+            return;
+        }
+        case TownProtocol::PacketType::LearnSkillRequest:
+        {
+            const auto request = TownProtocol::DecodeLearnSkillRequest(inPacket);
+            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            town->LearnSkill(GetPlayerId(), request->skillId, request->expectedSkillLevel);
             return;
         }
         case TownProtocol::PacketType::EnterDungeonRequest:
@@ -196,6 +215,27 @@ namespace TownServer::Network
                                 std::move(participants), retry, std::move(inResult));
                         });
                 });
+            return;
+        }
+        case TownProtocol::PacketType::PartyDetailRequest:
+        {
+            const auto request = TownProtocol::DecodePartyDetailRequest(inPacket);
+            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            town->RequestPartyDetail(GetSessionId(), request->partyId);
+            return;
+        }
+        case TownProtocol::PacketType::PartyJoinRequest:
+        {
+            const auto request = TownProtocol::DecodePartyJoinRequest(inPacket);
+            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            town->RequestPartyJoin(GetSessionId(), request->partyId);
+            return;
+        }
+        case TownProtocol::PacketType::PartyJoinAnswer:
+        {
+            const auto request = TownProtocol::DecodePartyJoinAnswer(inPacket);
+            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            town->AnswerPartyJoin(GetSessionId(), request->requestId, request->accepted);
             return;
         }
         case TownProtocol::PacketType::PartyInviteRequest:

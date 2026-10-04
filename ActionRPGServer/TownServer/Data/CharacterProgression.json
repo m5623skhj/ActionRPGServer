@@ -1,0 +1,7 @@
+{
+  "format": "CharacterProgression",
+  "schemaVersion": 1,
+  "initialLevel": 1,
+  "initialSkillPoints": 0,
+  "skillPointsPerLevel": 200
+}

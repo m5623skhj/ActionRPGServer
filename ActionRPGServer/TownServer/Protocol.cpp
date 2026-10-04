@@ -4,6 +4,7 @@
 #include <bit>
 #include <cstddef>
 #include <limits>
+#include <stdexcept>
 #include <unordered_set>
 #include <utility>
 
@@ -929,9 +930,9 @@ namespace TownProtocol
         if (!ReadExpectedType(reader, PacketType::PartyOperationResult)
             || !reader.ReadUInt8(operation)
             || operation < static_cast<std::uint8_t>(PartyOperationType::Invite)
-            || operation > static_cast<std::uint8_t>(PartyOperationType::Create)
+            || operation > static_cast<std::uint8_t>(PartyOperationType::AnswerJoin)
             || !reader.ReadUInt8(result)
-            || result > static_cast<std::uint8_t>(PartyResultCode::InvalidTitle)
+            || result > static_cast<std::uint8_t>(PartyResultCode::NotPublic)
             || !reader.Finished())
         {
             return std::nullopt;
@@ -1108,4 +1109,209 @@ namespace TownProtocol
         return packet;
     }
 
+    std::vector<std::uint8_t> Encode(const SkillStateRequest&)
+    {
+        return PacketWriter(PacketType::SkillStateRequest).Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const LearnSkillRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::LearnSkillRequest);
+        writer.WriteString(inPacket.skillId);
+        writer.WriteUInt32(inPacket.expectedSkillLevel);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const SkillStateResponse& inPacket)
+    {
+        if (inPacket.payload.size() > std::numeric_limits<std::uint16_t>::max())
+            throw std::length_error("Skill state exceeds TCP string size.");
+        PacketWriter writer(PacketType::SkillStateResponse);
+        writer.WriteString(inPacket.payload);
+        return writer.Finish();
+    }
+
+    std::optional<SkillStateRequest> DecodeSkillStateRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        if (!ReadExpectedType(reader, PacketType::SkillStateRequest) || !reader.Finished()) return std::nullopt;
+        return SkillStateRequest{};
+    }
+
+    std::optional<LearnSkillRequest> DecodeLearnSkillRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        LearnSkillRequest packet;
+        if (!ReadExpectedType(reader, PacketType::LearnSkillRequest) || !reader.ReadString(packet.skillId)
+            || packet.skillId.empty() || packet.skillId.size() > 64 || !reader.ReadUInt32(packet.expectedSkillLevel)
+            || packet.expectedSkillLevel > 1000000 || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+
+    std::optional<SkillStateResponse> DecodeSkillStateResponse(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        SkillStateResponse packet;
+        if (!ReadExpectedType(reader, PacketType::SkillStateResponse) || !reader.ReadString(packet.payload)
+            || packet.payload.empty() || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDetailRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyDetailRequest);
+        writer.WriteUInt64(inPacket.partyId);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyDetailResponse& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyDetailResponse);
+        writer.WriteUInt64(inPacket.partyId);
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.result));
+        writer.WriteString(inPacket.title);
+        writer.WriteUInt64(inPacket.leaderPlayerId);
+        writer.WriteUInt8(inPacket.isPublic ? 1 : 0);
+        writer.WriteUInt8(inPacket.busy ? 1 : 0);
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.members.size()));
+        for (const auto& member : inPacket.members)
+        {
+            writer.WriteUInt64(member.playerId);
+            writer.WriteString(member.playerName);
+            writer.WriteUInt8(member.slot);
+        }
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyJoinRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyJoinRequest);
+        writer.WriteUInt64(inPacket.partyId);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyJoinAnswer& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyJoinAnswer);
+        writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt8(inPacket.accepted ? 1 : 0);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyJoinRequestUpdate& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyJoinRequestUpdate);
+        writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt64(inPacket.partyId);
+        writer.WriteUInt64(inPacket.requesterPlayerId);
+        writer.WriteString(inPacket.requesterName);
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.state));
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.result));
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const PartyKicked& inPacket)
+    {
+        PacketWriter writer(PacketType::PartyKicked);
+        writer.WriteUInt64(inPacket.partyId);
+        writer.WriteUInt64(inPacket.leaderPlayerId);
+        return writer.Finish();
+    }
+
+    std::optional<PartyDetailRequest> DecodePartyDetailRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyDetailRequest packet;
+        if (!ReadExpectedType(reader, PacketType::PartyDetailRequest)
+            || !reader.ReadUInt64(packet.partyId) || packet.partyId == 0 || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+
+    std::optional<PartyDetailResponse> DecodePartyDetailResponse(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyDetailResponse packet;
+        std::uint8_t result{}, isPublic{}, busy{}, count{};
+        if (!ReadExpectedType(reader, PacketType::PartyDetailResponse)
+            || !reader.ReadUInt64(packet.partyId) || packet.partyId == 0
+            || !reader.ReadUInt8(result) || result > static_cast<std::uint8_t>(PartyResultCode::NotPublic)
+            || !reader.ReadString(packet.title) || packet.title.size() > 96
+            || !reader.ReadUInt64(packet.leaderPlayerId)
+            || !reader.ReadUInt8(isPublic) || isPublic > 1
+            || !reader.ReadUInt8(busy) || busy > 1
+            || !reader.ReadUInt8(count) || count > 8) return std::nullopt;
+        packet.result = static_cast<PartyResultCode>(result);
+        packet.isPublic = isPublic != 0;
+        packet.busy = busy != 0;
+        std::unordered_set<std::uint64_t> ids;
+        std::unordered_set<std::uint8_t> slots;
+        bool leaderFound = false;
+        packet.members.resize(count);
+        for (auto& member : packet.members)
+        {
+            if (!reader.ReadUInt64(member.playerId) || member.playerId == 0
+                || !reader.ReadString(member.playerName) || member.playerName.empty() || member.playerName.size() > 32
+                || !reader.ReadUInt8(member.slot) || member.slot >= 8
+                || !ids.emplace(member.playerId).second || !slots.emplace(member.slot).second) return std::nullopt;
+            leaderFound = leaderFound || member.playerId == packet.leaderPlayerId;
+        }
+        if (packet.result == PartyResultCode::Succeeded)
+        {
+            if (!leaderFound || packet.title.empty() || !packet.isPublic) return std::nullopt;
+        }
+        else if (!packet.title.empty() || packet.leaderPlayerId != 0 || packet.isPublic || packet.busy || count != 0)
+            return std::nullopt;
+        return reader.Finished() ? std::optional<PartyDetailResponse>(std::move(packet)) : std::nullopt;
+    }
+
+    std::optional<PartyJoinRequest> DecodePartyJoinRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyJoinRequest packet;
+        if (!ReadExpectedType(reader, PacketType::PartyJoinRequest)
+            || !reader.ReadUInt64(packet.partyId) || packet.partyId == 0 || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+
+    std::optional<PartyJoinAnswer> DecodePartyJoinAnswer(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyJoinAnswer packet;
+        std::uint8_t accepted{};
+        if (!ReadExpectedType(reader, PacketType::PartyJoinAnswer)
+            || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt8(accepted) || accepted > 1 || !reader.Finished()) return std::nullopt;
+        packet.accepted = accepted != 0;
+        return packet;
+    }
+
+    std::optional<PartyJoinRequestUpdate> DecodePartyJoinRequestUpdate(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyJoinRequestUpdate packet;
+        std::uint8_t state{}, result{};
+        if (!ReadExpectedType(reader, PacketType::PartyJoinRequestUpdate)
+            || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt64(packet.partyId) || packet.partyId == 0
+            || !reader.ReadUInt64(packet.requesterPlayerId) || packet.requesterPlayerId == 0
+            || !reader.ReadString(packet.requesterName) || packet.requesterName.empty() || packet.requesterName.size() > 32
+            || !reader.ReadUInt8(state) || state < 1 || state > 4
+            || !reader.ReadUInt8(result) || result > static_cast<std::uint8_t>(PartyResultCode::NotPublic)
+            || (state == 4 && result == 0) || (state != 4 && result != 0)
+            || !reader.Finished()) return std::nullopt;
+        packet.state = static_cast<PartyJoinRequestState>(state);
+        packet.result = static_cast<PartyResultCode>(result);
+        return packet;
+    }
+
+    std::optional<PartyKicked> DecodePartyKicked(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        PartyKicked packet;
+        if (!ReadExpectedType(reader, PacketType::PartyKicked)
+            || !reader.ReadUInt64(packet.partyId) || packet.partyId == 0
+            || !reader.ReadUInt64(packet.leaderPlayerId) || packet.leaderPlayerId == 0
+            || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
 }

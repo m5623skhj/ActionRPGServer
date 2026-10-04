@@ -255,6 +255,16 @@ namespace ActionRPG::RoomControlProtocol
         writer.WriteUInt64(inPacket.playerId);
         writer.WriteUInt64(inPacket.challenge);
         writer.WriteUInt32(inPacket.characterId);
+        writer.WriteString(inPacket.progression);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const UpdatePlayerProgress& inPacket)
+    {
+        PacketWriter writer(PacketType::UpdatePlayerProgress);
+        writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.playerId);
+        writer.WriteString(inPacket.progression);
         return writer.Finish();
     }
 
@@ -367,10 +377,23 @@ namespace ActionRPG::RoomControlProtocol
             || !reader.ReadUInt64(packet.playerId)
             || !reader.ReadUInt64(packet.challenge)
             || !reader.ReadUInt32(packet.characterId) || packet.characterId == 0
+            || !reader.ReadString(packet.progression) || packet.progression.empty() || packet.progression.size() > 32768
             || packet.roomId == 0 || packet.playerId == 0 || packet.challenge == 0 || !reader.Finished())
         {
             return std::nullopt;
         }
+        return packet;
+    }
+
+    std::optional<UpdatePlayerProgress> DecodeUpdatePlayerProgress(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        UpdatePlayerProgress packet;
+        if (!ReadExpectedType(reader, PacketType::UpdatePlayerProgress)
+            || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0
+            || !reader.ReadUInt64(packet.playerId) || packet.playerId == 0
+            || !reader.ReadString(packet.progression) || packet.progression.empty() || packet.progression.size() > 32768
+            || !reader.Finished()) return std::nullopt;
         return packet;
     }
 

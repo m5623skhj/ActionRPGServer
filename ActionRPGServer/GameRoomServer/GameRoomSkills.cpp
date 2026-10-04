@@ -33,7 +33,8 @@ namespace GameRoomServer
                     const auto definition = self->combatDefinition->playerSkills.skills.find(input.skillId);
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
                         && player.actor.reaction == Reaction::None && !player.skill && !player.jumpPreparing
-                        && player.shotPhase == ShotPhase::None && input.facingLeft <= 1
+                        && (player.shotPhase == ShotPhase::None
+                            || (player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)) && input.facingLeft <= 1
                         && definition != self->combatDefinition->playerSkills.skills.end())
                     {
                         const auto& skill = definition->second;
@@ -41,16 +42,20 @@ namespace GameRoomServer
                         const bool airborne = player.actor.height > 0;
                         const auto cooldown = player.skillCooldowns.find(input.skillId);
                         if (self->combatDefinition->playerSkills.characterIds.at(character) == player.characterId
+                            && player.progression.GetSkillLevel(input.skillId) > 0
                             && !skill.at(airborne ? "air" : "ground").is_null()
                             && (cooldown == player.skillCooldowns.end() || cooldown->second <= 0)
                             && (skill.at("type") != "buff" || player.buffs.size() < 16
                                 || std::any_of(player.buffs.begin(), player.buffs.end(), [&input](const auto& buff) { return buff.id == input.skillId; })))
                         {
-                            player.facingLeft = input.facingLeft != 0;
-                            player.skill = ActiveSkill{ input.skillId, airborne, player.facingLeft, false, 0, {} };
+                            if (!self->IsShotFacingLocked(player)) player.facingLeft = input.facingLeft != 0;
+                            player.skill = ActiveSkill{ input.skillId, airborne, player.facingLeft, false, 0, {},
+                                player.progression.GetSkillLevel(input.skillId) };
                             player.lastSkillId = input.skillId; player.lastSkillAirborne = airborne; player.lastSkillSeconds = 0;
                             player.skillCooldowns[input.skillId] = skill.at("cooldownSeconds").get<float>();
-                            ++player.skillSequence; player.directionX = player.directionY = 0;
+                            ++player.skillSequence;
+                            self->ResetShotState(player);
+                            player.bufferedActions.clear();
                             self->UpdateSkills(inPlayerId, player, 0.0f);
                             result.accepted = 1;
                         }
@@ -108,7 +113,10 @@ namespace GameRoomServer
                 projectile.directionY = std::sin(yaw) * std::cos(pitch); projectile.heightDirection = std::sin(pitch);
                 projectile.speed = execution.at("speed").get<float>(); projectile.radius = execution.at("radius").get<float>();
                 projectile.remainingDistance = execution.at("range").get<float>(); projectile.skillId = cast.id;
-                projectile.damage = static_cast<std::uint32_t>(std::max(1.0f, execution.at("damage").get<float>() * BuffMultiplier(inPlayer, "damageMultiplier")));
+                projectile.damage = static_cast<std::uint32_t>(std::clamp(
+                    static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
+                    * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
+                    static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
                 // A spawn offset cannot shoot through a wall; traverse the same four-unit ground checks.
                 const float length = std::hypot(projectile.position.x - inPlayer.position.x, projectile.position.y - inPlayer.position.y);
                 const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
@@ -154,7 +162,10 @@ namespace GameRoomServer
                     }
                     if (!visible) continue;
                     cast.hitIds.insert(id);
-                    const auto damage = static_cast<std::uint32_t>(std::max(1.0f, execution.at("damage").get<float>() * BuffMultiplier(inPlayer, "damageMultiplier")));
+                    const auto damage = static_cast<std::uint32_t>(std::clamp(
+                        static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
+                        * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
+                        static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
                     ApplyDamage(monster.actor, damage, false); monster.actionStarted = monster.actionComplete = false;
                 }
             }

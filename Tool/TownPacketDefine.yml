@@ -16,6 +16,7 @@ ExternalTypes:
   - PartyOperationType
   - PartyResultCode
   - PartyDirectoryEntry
+  - PartyJoinRequestState
 
 Packet:
   - Type: RequestPacket
@@ -257,3 +258,83 @@ Packet:
         Name: sessionBrokerAddress
       - Type: std::uint16_t
         Name: sessionBrokerPort
+
+  - Type: RequestPacket
+    PacketName: SkillStateRequest
+    Items: []
+
+  - Type: RequestPacket
+    PacketName: LearnSkillRequest
+    Items:
+      - Type: std::string
+        Name: skillId
+      - Type: std::uint32_t
+        Name: expectedSkillLevel
+
+  - Type: ReplyPacket
+    PacketName: SkillStateResponse
+    Items:
+      - Type: std::string
+        Name: payload
+
+  - Type: RequestPacket
+    PacketName: PartyDetailRequest
+    Items:
+      - Type: std::uint64_t
+        Name: partyId
+
+  - Type: ReplyPacket
+    PacketName: PartyDetailResponse
+    Items:
+      - Type: std::uint64_t
+        Name: partyId
+      - Type: PartyResultCode
+        Name: result
+      - Type: std::string
+        Name: title
+      - Type: std::uint64_t
+        Name: leaderPlayerId
+      - Type: bool
+        Name: isPublic
+      - Type: bool
+        Name: busy
+      - Type: std::vector<PartyMemberInfo>
+        Name: members
+
+  - Type: RequestPacket
+    PacketName: PartyJoinRequest
+    Items:
+      - Type: std::uint64_t
+        Name: partyId
+
+  - Type: RequestPacket
+    PacketName: PartyJoinAnswer
+    Items:
+      - Type: std::uint64_t
+        Name: requestId
+      - Type: bool
+        Name: accepted
+
+  - Type: ReplyPacket
+    PacketName: PartyJoinRequestUpdate
+    Items:
+      - Type: std::uint64_t
+        Name: requestId
+      - Type: std::uint64_t
+        Name: partyId
+      - Type: std::uint64_t
+        Name: requesterPlayerId
+      - Type: std::string
+        Name: requesterName
+      - Type: PartyJoinRequestState
+        Name: state
+      - Type: PartyResultCode
+        Name: result
+
+  - Type: ReplyPacket
+    PacketName: PartyKicked
+    Items:
+      - Type: std::uint64_t
+        Name: partyId
+      - Type: std::uint64_t
+        Name: leaderPlayerId

@@ -179,6 +179,16 @@ namespace GameRoomServer
         });
     }
 
+    void RoomManager::UpdatePlayerProgress(Protocol::UpdatePlayerProgress inRequest)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, request = std::move(inRequest)]() mutable
+        {
+            const auto room = self->rooms.find(request.roomId);
+            if (room != self->rooms.end()) room->second->UpdatePlayerProgress(request.playerId, std::move(request.progression));
+        });
+    }
+
     void RoomManager::ConfirmJoin(Protocol::ConfirmJoin inRequest)
     {
         const std::shared_ptr<RoomManager> self = shared_from_this();
@@ -200,7 +210,7 @@ namespace GameRoomServer
             const std::uint32_t generation = pendingIterator->second.generation;
             self->pendingSessions.erase(pendingIterator);
             const std::weak_ptr<RoomManager> weakSelf = self;
-            roomIterator->second->TryEnter(request.playerId, request.characterId,
+            roomIterator->second->TryEnter(request.playerId, request.characterId, request.progression,
                 [weakSelf, request, session, generation](const bool inAccepted)
                 {
                     if (const std::shared_ptr<RoomManager> manager = weakSelf.lock())

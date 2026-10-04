@@ -73,6 +73,22 @@ namespace GameRoomServer
         }
     }
 
+    // Recovery may allow movement while the same unfinished combo still owns its facing.
+    bool GameRoom::IsShotFacingLocked(const PlayerState& inPlayer)
+    {
+        return inPlayer.shotPhase != ShotPhase::None
+            || (inPlayer.shotCount > 0 && inPlayer.shotCount < MAX_SHOTS && inPlayer.shotInputRemainingSeconds > 0);
+    }
+
+    // Reset the combo without clearing queued actions or the per-jump shot limit.
+    void GameRoom::ResetShotState(PlayerState& inPlayer)
+    {
+        inPlayer.shotPhase = ShotPhase::None;
+        inPlayer.pendingShots = inPlayer.shotCount = 0;
+        inPlayer.shotSeconds = inPlayer.shotInputRemainingSeconds = 0;
+        inPlayer.airAttack = false;
+    }
+
     // Inputs express intent only. Position, HP, attack timing and hit targets belong to the strand.
     void GameRoom::SubmitAction(PlayerId inPlayerId, ActionRPG::DungeonProtocol::DungeonActionInput inInput,
         std::function<void(ActionRPG::DungeonProtocol::DungeonActionResult)> inHandler)
@@ -122,6 +138,8 @@ namespace GameRoomServer
     bool GameRoom::TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft)
     {
         if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill) return false;
+        if (inAction == 2 && inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0)
+            inPlayer.shotPhase = ShotPhase::None;
         if (inAction == 1)
         {
             // A just-landed air attack is cancelled by UpdateShots before buffered ground input runs.
@@ -135,7 +153,7 @@ namespace GameRoomServer
             if (inPlayer.shotPhase == ShotPhase::None)
             {
                 ++inPlayer.shotSequence;
-                inPlayer.facingLeft = inFacingLeft;
+                if (!continuing) inPlayer.facingLeft = inFacingLeft;
                 inPlayer.airAttack = airborne;
                 inPlayer.shotPhase = continuing ? ShotPhase::Fire : ShotPhase::Prepare;
                 inPlayer.shotSeconds = 0;
@@ -153,11 +171,11 @@ namespace GameRoomServer
             inPlayer.jumpPreparing = true;
             ++inPlayer.jumpSequence;
             inPlayer.jumpSeconds = 0;
-            inPlayer.airShotCount = inPlayer.shotCount = 0;
-            inPlayer.shotInputRemainingSeconds = 0;
+            ResetShotState(inPlayer);
+            inPlayer.airShotCount = 0;
         }
         else return false;
-        inPlayer.directionX = inPlayer.directionY = 0;
+        // Keep held movement intent; the active phase decides when it may move again.
         return true;
     }
 
@@ -417,9 +435,7 @@ namespace GameRoomServer
                                     && (victim.position.x - inMonster.position.x) * (inMonster.facingLeft ? -1 : 1) >= 0)
                                 {
                                     ApplyDamage(victim.actor, effect.damage, skill.at("hitType") == "Airborne");
-                                    victim.shotPhase = ShotPhase::None;
-                                    victim.pendingShots = victim.shotCount = 0;
-                                    victim.shotInputRemainingSeconds = 0;
+                                    ResetShotState(victim);
                                     victim.bufferedActions.clear();
                                     victim.directionX = victim.directionY = 0;
                                     victim.jumpPreparing = false;
@@ -438,15 +454,13 @@ namespace GameRoomServer
 
     void GameRoom::UpdateShots(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds)
     {
-        if (inPlayer.shotPhase == ShotPhase::None) return;
         if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None
             || (inPlayer.airAttack && !inPlayer.jumpPreparing && inPlayer.actor.height == 0))
         {
-            inPlayer.shotPhase = ShotPhase::None;
-            inPlayer.pendingShots = inPlayer.shotCount = 0;
-            inPlayer.shotInputRemainingSeconds = 0;
+            ResetShotState(inPlayer);
             return;
         }
+        if (inPlayer.shotPhase == ShotPhase::None) return;
         if (inPlayer.jumpPreparing) return;
         inPlayer.shotSeconds += inDeltaSeconds;
         const float duration = inPlayer.shotPhase == ShotPhase::Prepare ? combatDefinition->shotPrepareSeconds
@@ -461,8 +475,7 @@ namespace GameRoomServer
                 inPlayer.shotPhase = ShotPhase::None;
                 if (inPlayer.shotCount >= MAX_SHOTS)
                 {
-                    inPlayer.shotCount = 0;
-                    inPlayer.shotInputRemainingSeconds = 0;
+                    ResetShotState(inPlayer);
                 }
             }
             return;
@@ -607,6 +620,7 @@ namespace GameRoomServer
     void GameRoom::UpdateCombat(float inDeltaSeconds)
     {
         if (clearRequested) return;
+        const auto now = std::chrono::steady_clock::now();
         for (auto& [id, player] : players)
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
@@ -626,12 +640,16 @@ namespace GameRoomServer
             }
             const float height = player.actor.height;
             player.shotInputRemainingSeconds = std::max(0.0f, player.shotInputRemainingSeconds - inDeltaSeconds);
-            if (player.shotPhase == ShotPhase::None && player.shotInputRemainingSeconds == 0) player.shotCount = 0;
+            if (player.shotPhase == ShotPhase::None && player.shotInputRemainingSeconds == 0) ResetShotState(player);
             UpdateActor(player.actor, inDeltaSeconds);
             if (height > 0 && player.actor.height == 0) player.airShotCount = 0;
             UpdateShots(id, player, inDeltaSeconds);
             UpdateSkills(id, player, inDeltaSeconds);
             UpdateBufferedActions(player, inDeltaSeconds);
+            if (!player.skill && !IsShotFacingLocked(player) && player.actor.hp > 0
+                && player.actor.reaction == Reaction::None && player.directionX != 0
+                && now - player.lastInput <= std::chrono::seconds(1))
+                player.facingLeft = player.directionX < 0;
         }
         UpdateProjectiles(inDeltaSeconds);
         for (auto& [id, monster] : monsters)
@@ -688,6 +706,10 @@ namespace GameRoomServer
                 record["skillActive"] = player.skill.has_value();
                 record["skillAirborne"] = player.lastSkillAirborne;
                 record["skillSeconds"] = player.lastSkillSeconds;
+                record["level"] = player.progression.level;
+                record["skillPoints"] = player.progression.skillPoints;
+                record["skillLevels"] = player.progression.skillLevels;
+                record["skillCooldowns"] = player.skillCooldowns;
                 record["movementMultiplier"] = BuffMultiplier(player, "movementMultiplier");
                 record["buffs"] = nlohmann::json::array();
                 for (const auto& buff : player.buffs) record["buffs"].push_back({ { "skillId", buff.id }, { "remainingSeconds", buff.remainingSeconds } });

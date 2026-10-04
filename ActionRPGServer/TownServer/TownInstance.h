@@ -5,12 +5,15 @@
 #include "../Shared/RoomControlProtocol.h"
 #include "DungeonCatalog.h"
 #include "TownMap.h"
+#include "../Shared/SkillTreeCatalog.h"
 
 #include <asio.hpp>
 
 #include <cstdint>
+#include <chrono>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -30,7 +33,15 @@ namespace TownServer::Domain
         using DungeonRequestHandler = std::function<void(bool, std::vector<PlayerId>)>;
 
         TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
-            DungeonCatalog inDungeonCatalog);
+            DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory);
+
+        using ProgressionChangedHandler = std::function<void(ActionRPG::RoomControlProtocol::RoomId,
+            PlayerId, std::string)>;
+        void SetProgressionChangedHandler(ProgressionChangedHandler inHandler);
+        void RequestSkillState(PlayerId inPlayerId);
+        void LearnSkill(PlayerId inPlayerId, std::string inSkillId, std::uint32_t inExpectedSkillLevel);
+        void GetProgression(PlayerId inPlayerId, std::function<void(std::string)> inHandler);
+        void AdvancePlayerLevel(PlayerId inPlayerId, std::uint32_t inLevel, std::function<void(bool)> inHandler);
 
         void Start();
         void Stop();
@@ -57,6 +68,9 @@ namespace TownServer::Domain
         void KickPartyMember(std::uint64_t inSessionId, PlayerId inTargetPlayerId);
         void UpdatePartySettings(std::uint64_t inSessionId, std::string inTitle, bool inIsPublic);
         void RequestPartyDirectoryPage(std::uint64_t inSessionId, std::uint32_t inPage);
+        void RequestPartyDetail(std::uint64_t inSessionId, PartyManager::PartyId inPartyId);
+        void RequestPartyJoin(std::uint64_t inSessionId, PartyManager::PartyId inPartyId);
+        void AnswerPartyJoin(std::uint64_t inSessionId, std::uint64_t inRequestId, bool inAccepted);
         void UnsubscribePartyDirectory(std::uint64_t inSessionId);
         void EnterDungeon(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId,
             std::function<void(bool)> inHandler);
@@ -92,15 +106,21 @@ namespace TownServer::Domain
             ActionRPG::RoomControlProtocol::RoomId dungeonRoomId{};
             ActionRPG::RoomControlProtocol::RoomId reservedDungeonRoomId{};
             std::string activeTransitionZoneId;
+            ActionRPG::PlayerSkills::CharacterProgression progression;
+            std::chrono::steady_clock::time_point lastSimulationTime{ std::chrono::steady_clock::now() };
         };
 
         void ScheduleTick();
         void Tick();
+        bool SimulateMovement(PlayerId inPlayerId, PlayerEntry& inEntry,
+            std::chrono::steady_clock::time_point inNow);
         void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
             std::uint32_t inCharacterId);
         void LeaveOnStrand(std::uint64_t inSessionId);
         bool EnterDungeonOnStrand(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
+        void SendSkillState(PlayerEntry& inEntry, const std::string& inResult);
+        void NotifyProgression(PlayerId inPlayerId, const PlayerEntry& inEntry);
         void ProcessTransition(PlayerId inPlayerId, PlayerEntry& inEntry);
         bool TransferMap(PlayerId inPlayerId, PlayerEntry& inEntry,
             const TownProtocol::TransitionZone& inZone);
@@ -117,6 +137,19 @@ namespace TownServer::Domain
         void RefreshDungeonLeader(ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void SendPartyDirectoryPage(PlayerId inPlayerId, std::uint32_t inPage);
         void NotifyPartyDirectoryChanged();
+        struct PendingPartyJoin
+        {
+            std::uint64_t requestId{};
+            PartyManager::PartyId partyId{};
+            PlayerId leaderPlayerId{};
+            PlayerId requesterPlayerId{};
+            std::string requesterName;
+        };
+        [[nodiscard]] bool IsPlayerPartyBusy(PlayerId inPlayerId) const;
+        [[nodiscard]] TownProtocol::PartyResultCode ValidatePartyJoin(const PendingPartyJoin& inRequest) const;
+        void SendPartyJoinUpdate(const PendingPartyJoin& inRequest,
+            TownProtocol::PartyJoinRequestState inState, TownProtocol::PartyResultCode inResult);
+        void PrunePartyJoinRequests();
         [[nodiscard]] bool IsPartyBusy(PartyManager::PartyId inPartyId) const;
         [[nodiscard]] SectorCoordinate GetSector(std::string_view inMapId,
             TownProtocol::Vector2 inPosition) const;
@@ -124,13 +157,20 @@ namespace TownServer::Domain
 
         asio::strand<asio::io_context::executor_type> strand;
         asio::steady_timer tickTimer;
+        std::chrono::steady_clock::time_point nextTickTime{};
         std::unordered_map<std::string, TownMap> maps;
         std::string defaultMapId;
         DungeonCatalog dungeonCatalog;
+        const ActionRPG::PlayerSkills::ProgressionPolicy progressionPolicy;
+        const ActionRPG::PlayerSkills::Catalog playerSkills;
+        const ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
+        ProgressionChangedHandler progressionChangedHandler;
         std::unordered_map<PlayerId, PlayerEntry> players;
         std::unordered_map<std::uint64_t, PlayerId> sessionToPlayer;
         std::unordered_map<SectorCoordinate, std::unordered_set<PlayerId>, SectorHash> sectors;
         PartyManager partyManager;
+        std::map<std::uint64_t, PendingPartyJoin> partyJoinRequests;
+        std::uint64_t nextPartyJoinRequestId = 1;
         std::unordered_set<PlayerId> pendingDungeonPlayers;
         std::unordered_set<PlayerId> partyDirectorySubscribers;
         std::uint64_t partyDirectoryRevision{};

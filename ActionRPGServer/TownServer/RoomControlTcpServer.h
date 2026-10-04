@@ -33,7 +33,10 @@ namespace TownServer::Network
         void FinishRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId, bool inRetry,
             std::vector<ActionRPG::RoomControlProtocol::PlayerId> inParticipants, FinishRoomResultHandler inHandler);
         void ConfirmJoin(ActionRPG::RoomControlProtocol::RoomId inRoomId,
-            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge, std::uint32_t inCharacterId);
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::uint64_t inChallenge, std::uint32_t inCharacterId,
+            std::string inProgression);
+        void UpdatePlayerProgress(ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::string inProgression);
         void LeaveRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId);
 

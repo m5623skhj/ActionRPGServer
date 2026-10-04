@@ -81,7 +81,9 @@ namespace TownProtocol
         Leave = 3,
         Kick = 4,
         Settings = 5,
-        Create = 6
+        Create = 6,
+        RequestJoin = 7,
+        AnswerJoin = 8
     };
 
     enum class PartyResultCode : std::uint8_t
@@ -96,7 +98,19 @@ namespace TownProtocol
         InvitationNotFound = 7,
         InvalidTarget = 8,
         Busy = 9,
-        InvalidTitle = 10
+        InvalidTitle = 10,
+        AlreadyRequested = 11,
+        JoinRequestNotFound = 12,
+        PartyNotFound = 13,
+        NotPublic = 14
+    };
+
+    enum class PartyJoinRequestState : std::uint8_t
+    {
+        Pending = 1,
+        Accepted = 2,
+        Rejected = 3,
+        Invalidated = 4
     };
 
     struct PartyMemberInfo
@@ -120,6 +134,24 @@ namespace TownProtocol
 
 namespace TownProtocol
 {
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDetailRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDetailResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyJoinRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyJoinAnswer& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyJoinRequestUpdate& inPacket);
+    [[nodiscard]] std::optional<PartyDetailRequest> DecodePartyDetailRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyDetailResponse> DecodePartyDetailResponse(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyJoinRequest> DecodePartyJoinRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyJoinAnswer> DecodePartyJoinAnswer(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<PartyJoinRequestUpdate> DecodePartyJoinRequestUpdate(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyKicked& inPacket);
+    [[nodiscard]] std::optional<PartyKicked> DecodePartyKicked(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const SkillStateRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const LearnSkillRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const SkillStateResponse& inPacket);
+    [[nodiscard]] std::optional<SkillStateRequest> DecodeSkillStateRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<LearnSkillRequest> DecodeLearnSkillRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<SkillStateResponse> DecodeSkillStateResponse(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket);
 
     [[nodiscard]] std::vector<std::uint8_t> Encode(const EnterTownRequest& inPacket);

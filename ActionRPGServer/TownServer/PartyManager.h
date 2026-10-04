@@ -69,6 +69,8 @@ namespace TownServer::Domain
             bool inIsPublic, PartyId& outPartyId);
         [[nodiscard]] Result AnswerInvitation(PlayerId inTargetPlayerId,
             InvitationId inInvitationId, bool inAccepted, PartyId& outPartyId);
+        [[nodiscard]] Result JoinApproved(PartyId inPartyId, PlayerId inLeaderPlayerId,
+            PlayerId inRequesterPlayerId);
         [[nodiscard]] LeaveResult Leave(PlayerId inPlayerId);
         [[nodiscard]] Result Kick(PlayerId inLeaderPlayerId, PlayerId inTargetPlayerId,
             PartyId& outPartyId);

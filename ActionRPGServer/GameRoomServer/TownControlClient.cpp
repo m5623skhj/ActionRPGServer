@@ -184,6 +184,13 @@ namespace GameRoomServer
             roomManager->ConfirmJoin(*request);
             return;
         }
+        case Protocol::PacketType::UpdatePlayerProgress:
+        {
+            const auto request = Protocol::DecodeUpdatePlayerProgress(inPacket);
+            if (!request) { session->Stop(); return; }
+            roomManager->UpdatePlayerProgress(*request);
+            return;
+        }
         case Protocol::PacketType::LeaveRoom:
         {
             const auto request = Protocol::DecodeLeaveRoom(inPacket);
