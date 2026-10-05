@@ -193,10 +193,12 @@ namespace TownServer::Database
     ProcedureConnection::~ProcedureConnection() = default;
 
     /** Keep one lease/transaction for the complete CALL, including all result sets and output values.
-     * Runtime procedures must not commit, roll back, alter the session, or execute DDL internally.
+     * Runtime procedures must not commit/fully roll back the owning transaction, alter the session,
+     * or execute DDL. A procedure may use a savepoint and partial rollback for an expected conflict.
      */
     void ProcedureConnection::Execute(std::wstring_view inName, ProcedureParameters& inParameters,
-        const std::function<void(ProcedureRow&, std::size_t)>& inReadRow)
+        const std::function<void(ProcedureRow&, std::size_t)>& inReadRow,
+        const std::function<void(std::size_t, std::size_t)>& inValidateResults)
     {
         bool executionAttempted = false;
         bool transactionStarted = false;
@@ -336,6 +338,7 @@ namespace TownServer::Database
                 }
                 parameter.assignOutput(parameter.value, indicator == SQL_NULL_DATA);
             }
+            inValidateResults(resultIndex, rowCount);
             Check(SQLEndTran(SQL_HANDLE_DBC, connection, SQL_COMMIT), SQL_HANDLE_DBC, connection,
                 "Unable to confirm procedure commit.");
             transactionStarted = false;

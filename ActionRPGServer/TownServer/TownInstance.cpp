@@ -218,6 +218,11 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self]()
         {
             self->running = false;
+            while (!self->pendingGoogleLogins.empty())
+            {
+                const auto& pending = *self->pendingGoogleLogins.begin();
+                self->FinishGoogleLogin(pending.first, pending.second.attemptId, Authentication::LoginResult::Stopped);
+            }
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
         });
@@ -240,6 +245,9 @@ namespace TownServer::Domain
         const std::shared_ptr<TownInstance> self = shared_from_this();
         asio::dispatch(strand, [self, inSessionId, handler = std::move(inDungeonLeaveHandler)]()
         {
+            if (const auto pending = self->pendingGoogleLogins.find(inSessionId);
+                pending != self->pendingGoogleLogins.end())
+                self->FinishGoogleLogin(inSessionId, pending->second.attemptId, Authentication::LoginResult::Stopped);
             ActionRPG::RoomControlProtocol::RoomId previousRoomId = 0;
             const auto session = self->sessionToPlayer.find(inSessionId);
             if (session != self->sessionToPlayer.end())
@@ -1037,6 +1045,12 @@ namespace TownServer::Domain
         std::string inPlayerName, const std::uint32_t inCharacterId)
     {
         const std::uint64_t sessionId = inSession->GetSessionId();
+        const auto accountId = inSession->GetAccountId();
+        if (!running || accountId == 0)
+        {
+            inSession->Stop();
+            return;
+        }
         if (sessionToPlayer.contains(sessionId))
         {
             return;
@@ -1066,6 +1080,7 @@ namespace TownServer::Domain
             {}
         };
         entry.progression = std::move(progression);
+        entry.accountId = accountId;
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
         AddToSector(playerId, sector);

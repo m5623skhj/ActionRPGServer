@@ -6,6 +6,7 @@
 #include "TownInstance.h"
 
 #include <optional>
+#include <limits>
 #include <utility>
 
 namespace TownServer::Network
@@ -34,6 +35,7 @@ namespace TownServer::Network
 
     void PlayerSession::Disconnect()
     {
+        CloseAuthentication();
         if (const std::shared_ptr<Domain::TownInstance> town = townInstance.lock())
         {
             town->Leave(GetSessionId(), [weakControl = roomControlServer](const auto inRoomId, const auto inPlayerId)
@@ -45,6 +47,7 @@ namespace TownServer::Network
 
     void PlayerSession::Stop()
     {
+        CloseAuthentication();
         tcpSession->Stop();
     }
 
@@ -68,13 +71,60 @@ namespace TownServer::Network
         playerId.store(inPlayerId, std::memory_order_release);
     }
 
+    std::uint64_t PlayerSession::GetAccountId() const noexcept
+    {
+        return loginState.load(std::memory_order_acquire) == LoginState::Authenticated
+            ? accountId.load(std::memory_order_acquire) : 0;
+    }
+
+    std::uint64_t PlayerSession::BeginAuthentication() noexcept
+    {
+        if (loginAttemptId.load() == std::numeric_limits<std::uint64_t>::max()) return 0;
+        auto expected = LoginState::Unauthenticated;
+        if (!loginState.compare_exchange_strong(expected, LoginState::VerifyingGoogle)) return 0;
+        return loginAttemptId.fetch_add(1) + 1;
+    }
+
+    bool PlayerSession::MatchesAuthentication(const std::uint64_t inAttemptId) const noexcept
+    {
+        const auto state = loginState.load(std::memory_order_acquire);
+        return inAttemptId != 0 && loginAttemptId.load(std::memory_order_acquire) == inAttemptId
+            && (state == LoginState::VerifyingGoogle || state == LoginState::ResolvingAccount);
+    }
+
+    bool PlayerSession::BeginAccountLookup(const std::uint64_t inAttemptId) noexcept
+    {
+        if (!MatchesAuthentication(inAttemptId)) return false;
+        auto expected = LoginState::VerifyingGoogle;
+        return loginState.compare_exchange_strong(expected, LoginState::ResolvingAccount);
+    }
+
+    bool PlayerSession::CompleteAuthentication(const std::uint64_t inAttemptId,
+        const std::uint64_t inAccountId) noexcept
+    {
+        if (inAccountId == 0 || !MatchesAuthentication(inAttemptId)) return false;
+        accountId.store(inAccountId, std::memory_order_release);
+        auto expected = LoginState::ResolvingAccount;
+        if (loginState.compare_exchange_strong(expected, LoginState::Authenticated)) return true;
+        accountId.store(0, std::memory_order_release);
+        return false;
+    }
+
+    void PlayerSession::CloseAuthentication() noexcept
+    {
+        loginState.store(LoginState::Closed, std::memory_order_release);
+        accountId.store(0, std::memory_order_release);
+    }
+
     void PlayerSession::HandlePacket(std::vector<std::uint8_t> inPacket)
     {
         const std::optional<TownProtocol::PacketType> type = TownProtocol::ReadPacketType(inPacket);
         const std::shared_ptr<Domain::TownInstance> town = townInstance.lock();
-        if (!type.has_value() || !town)
+        // No ID token is accepted over this plaintext protocol. A trusted login adapter must
+        // authenticate the session first; all game requests, including EnterTown, fail closed.
+        if (!type.has_value() || !town || GetAccountId() == 0)
         {
-            tcpSession->Stop();
+            Stop();
             return;
         }
 
@@ -88,7 +138,7 @@ namespace TownServer::Network
                 || request->characterId == 0
                 || request->playerName.size() > 32)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             enterRequested = true;
@@ -103,7 +153,7 @@ namespace TownServer::Network
                 || request->directionX < -1 || request->directionX > 1
                 || request->directionY < -1 || request->directionY > 1)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->ApplyMovementInput(GetSessionId(), *request);
@@ -117,7 +167,7 @@ namespace TownServer::Network
             const std::uint64_t authenticatedPlayerId = GetPlayerId();
             if (!request.has_value() || !enterRequested || authenticatedPlayerId == 0 || !roomControl)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->ValidateDungeonJoin(authenticatedPlayerId, request->roomId,
@@ -136,14 +186,14 @@ namespace TownServer::Network
         case TownProtocol::PacketType::SkillStateRequest:
         {
             if (!enterRequested || GetPlayerId() == 0 || !TownProtocol::DecodeSkillStateRequest(inPacket))
-            { tcpSession->Stop(); return; }
+            { Stop(); return; }
             town->RequestSkillState(GetPlayerId());
             return;
         }
         case TownProtocol::PacketType::LearnSkillRequest:
         {
             const auto request = TownProtocol::DecodeLearnSkillRequest(inPacket);
-            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            if (!request || !enterRequested || GetPlayerId() == 0) { Stop(); return; }
             town->LearnSkill(GetPlayerId(), request->skillId, request->expectedSkillLevel);
             return;
         }
@@ -155,7 +205,7 @@ namespace TownServer::Network
             const std::uint64_t authenticatedPlayerId = GetPlayerId();
             if (!request.has_value() || !enterRequested || authenticatedPlayerId == 0 || !roomControl)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             const std::weak_ptr<PlayerSession> weakSelf = weak_from_this();
@@ -193,7 +243,7 @@ namespace TownServer::Network
             const auto request = TownProtocol::DecodeDungeonCompletionRequest(inPacket);
             const auto roomControl = roomControlServer.lock();
             if (!request || !enterRequested || GetPlayerId() == 0 || !roomControl)
-            { tcpSession->Stop(); return; }
+            { Stop(); return; }
             const auto weakSelf = weak_from_this();
             const std::weak_ptr<Domain::TownInstance> weakTown = town;
             town->ValidateDungeonCompletion(GetSessionId(), request->roomId,
@@ -220,21 +270,21 @@ namespace TownServer::Network
         case TownProtocol::PacketType::PartyDetailRequest:
         {
             const auto request = TownProtocol::DecodePartyDetailRequest(inPacket);
-            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            if (!request || !enterRequested || GetPlayerId() == 0) { Stop(); return; }
             town->RequestPartyDetail(GetSessionId(), request->partyId);
             return;
         }
         case TownProtocol::PacketType::PartyJoinRequest:
         {
             const auto request = TownProtocol::DecodePartyJoinRequest(inPacket);
-            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            if (!request || !enterRequested || GetPlayerId() == 0) { Stop(); return; }
             town->RequestPartyJoin(GetSessionId(), request->partyId);
             return;
         }
         case TownProtocol::PacketType::PartyJoinAnswer:
         {
             const auto request = TownProtocol::DecodePartyJoinAnswer(inPacket);
-            if (!request || !enterRequested || GetPlayerId() == 0) { tcpSession->Stop(); return; }
+            if (!request || !enterRequested || GetPlayerId() == 0) { Stop(); return; }
             town->AnswerPartyJoin(GetSessionId(), request->requestId, request->accepted);
             return;
         }
@@ -244,7 +294,7 @@ namespace TownServer::Network
                 TownProtocol::DecodePartyInviteRequest(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->InviteToParty(GetSessionId(), request->targetPlayerId);
@@ -256,7 +306,7 @@ namespace TownServer::Network
                 TownProtocol::DecodePartyInviteAnswer(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->AnswerPartyInvitation(
@@ -268,7 +318,7 @@ namespace TownServer::Network
             if (!TownProtocol::DecodePartyLeaveRequest(inPacket).has_value()
                 || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->LeaveParty(GetSessionId());
@@ -280,7 +330,7 @@ namespace TownServer::Network
                 TownProtocol::DecodePartyKickRequest(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->KickPartyMember(GetSessionId(), request->targetPlayerId);
@@ -291,7 +341,7 @@ namespace TownServer::Network
             const auto request = TownProtocol::DecodePartySettingsRequest(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->UpdatePartySettings(GetSessionId(), request->title, request->isPublic);
@@ -302,7 +352,7 @@ namespace TownServer::Network
             const auto request = TownProtocol::DecodePartyCreateRequest(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->CreateParty(GetSessionId(), request->title, request->isPublic);
@@ -313,7 +363,7 @@ namespace TownServer::Network
             const auto request = TownProtocol::DecodePartyDirectoryPageRequest(inPacket);
             if (!request.has_value() || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->RequestPartyDirectoryPage(GetSessionId(), request->page);
@@ -324,14 +374,14 @@ namespace TownServer::Network
             if (!TownProtocol::DecodePartyDirectoryUnsubscribe(inPacket).has_value()
                 || !enterRequested || GetPlayerId() == 0)
             {
-                tcpSession->Stop();
+                Stop();
                 return;
             }
             town->UnsubscribePartyDirectory(GetSessionId());
             return;
         }
         default:
-            tcpSession->Stop();
+            Stop();
             return;
         }
     }

@@ -329,6 +329,7 @@ DB worker의 입력 바인딩·결과 매핑에서는 마을 상태를 접근하
 | `GetName()` | 고정된 프로시저 이름 반환. 영문·숫자·밑줄과 점으로 구분한 한정 이름만 허용 |
 | `BindParameters()` | 프로시저 선언 순서대로 IN/OUT/INOUT 값 등록 |
 | `ReadRow()` | 각 결과 행을 Res로 매핑. 결과 인덱스는 컬럼이 있는 결과 집합 기준 0부터 시작 |
+| `ValidateResults()` | 선택적 재정의. 빈 결과셋까지 포함한 결과셋·전체 행 개수와 Res를 커밋 전에 검사 |
 
 입력값은 `AddInput()`으로 등록한다. OUT/INOUT은 Res의 `std::optional<T>` 멤버를
 `AddOutput()`/`AddInputOutput()`에 등록한다. INOUT 초기값이 Req에 있으면 먼저 Res에 복사한다.
@@ -408,7 +409,8 @@ town 객체가 이미 소멸했다면 `RunStoreProcedure()`는 게임 상태 콜
   커밋이 확인된 후 성공 Res를 반환한다. 출력 파라미터만 반환하는 프로시저도 지원한다.
   `IsSuccess()`는 호출·결과 처리·커밋의 성공을 뜻한다. 게임 규칙의 승인 여부나 필수 결과 행의
   존재 여부는 해당 프로시저의 Res를 통해 콘텐츠에서 확인한다.
-- 프로시저는 내부 COMMIT/ROLLBACK·DDL·세션 설정 변경을 하지 않는 계약을 따른다.
+- 프로시저는 내부 COMMIT/전체 ROLLBACK·DDL·세션 설정 변경을 하지 않는 계약을 따른다.
+  합의된 savepoint 부분 롤백은 외부 트랜잭션을 종료하지 않는 범위에서만 사용한다.
   ODBC는 DBMS별 트랜잭션 의미를 통일하지 않는다. 대상 DBMS의 트랜잭션 지원, 테이블 엔진,
   프로시저 구현과 드라이버를 확인해야 한다. 트랜잭션 밖 외부 효과는 자동 복구되지 않는다.
 - 결과 컬럼은 1부터 증가하는 순서로 한 번씩 읽는다. NULL은 optional로 구분하고,
@@ -417,9 +419,100 @@ town 객체가 이미 소멸했다면 `RunStoreProcedure()`는 게임 상태 콜
   큰 목록은 프로시저의 페이지 단위 조회로 처리한다.
 - 오류는 고정된 문맥, SQLSTATE, native code, `executionMayHaveOccurred`로 전달한다.
   driver 원문 오류 메시지는 접속 정보나 SQL 값을 포함할 수 있어 전달·출력하지 않는다.
-- 현재는 DBMS·버전·적용 도구·스키마 계약이 미정이다. 이 소스 변경은 스키마/프로시저를
-  생성하거나 적용한 결과가 아니며, 적용 이력·스키마 버전 검증도 아직 연결하지 않는다.
-  실제 DB 사용 전 해당 계약과 버전 검증을 확정해야 한다.
+- ODBC 모듈 자체는 스키마/프로시저를 생성하거나 적용하지 않는다. Google 로그인의
+  대상 DBMS·논리 계약·SQL 파일은 아래 10절을 따른다. 실제 적용 도구와 적용 이력·
+  스키마 버전 검증은 아직 연결하지 않으며 실제 사용 전에 준비해야 한다.
 - 프로시저·스키마 변경은 [공통 DB 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)을 따라
   반드시 버전 파일로 관리한다.
   적용된 파일은 불변이며, 마을 서버가 기동하면서 마이그레이션을 자동 적용하지 않는다.
+
+## 10. Google 로그인 DB 계약
+
+계약 버전 1, 작업 `google-login-20261005`. 사용자 승인 범위는 Google 최초 로그인 시
+자동 가입과 접속 중인 게임 세션이다. 이메일·프로필·Google 토큰·재접속용 게임 토큰을
+영구 저장하지 않는다. 캐릭터·성장 영속화와 다른 제공자 연결은 별도 작업이다.
+서버 구현은 서버 담당이, 스키마와 저장 프로시저는 DB 담당이 맡는다.
+
+### 계정과 마이그레이션
+
+대상은 사용자 지정 MySQL 8.0.47이다. 서버의 ODBC 연결과 SQL의 대상 엔진을 구분한다.
+마이그레이션 파일은 공통 게임 DB 경로 `../Database/Migrations/MySQL/`에 둔다.
+
+| 버전 | 파일 | 선행 버전 / 목적 |
+|---|---|---|
+| 000001 | `V000001__create_login_accounts.sql` | 없음 / 계정과 외부 식별자 테이블 |
+| 000002 | `V000002__create_google_login_procedure.sql` | 000001 / Google 로그인 계정 조회·생성 |
+
+`accounts.account_id`는 unsigned 64비트 게임 계정 ID다. 현재 접속의 `PlayerId` 및
+캐릭터 타입 ID와 구분한다. `status`는 0 정상, 1 정지이며 생성 시각과 허용된 DB 로그인
+시각은 UTC `DATETIME(6)`로 저장한다. DB 커밋 후 접속이 끊겨도 `last_login_at`은 기록될
+수 있으므로 실제 게임 입장 완료 시각을 의미하지 않는다.
+
+`account_identities`는 계정 외래키와 `(provider, subject)` 기본키를 갖는다.
+두 식별자 컬럼은 `VARBINARY`여서 대소문자·뒤쪽 공백을 포함한 바이트가 정확히 비교된다.
+현재 provider는 `google`만 허용한다. subject는 검증된 Google `sub`의 ASCII 원문을
+최대 255바이트로 저장하며 숫자 변환·trim·대소문자 변경을 하지 않는다.
+계정 삭제/ID 변경의 참조 제약은 RESTRICT다.
+
+현재는 **SQL 파일만 준비하며 실제 DB에는 미적용**이다. 적용 도구는 미정이며 실행기,
+DB 적용 이력 테이블, 성공 버전/체크섬 기록, 단일 실행자 잠금, 서버의 이력 기반 버전 검증은
+구현하지 않았다. 소스의 버전 상수나 프로시저 존재만으로 실제 적용 버전을 인정하지 않는다.
+로그인 사용에는 000001 → 000002의 성공 적용과 이력 검증이 선행되어야 한다.
+
+실제 적용 전 [공통 DB 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)에 맞는 도구와
+대상 스키마를 확정한다. 빈 스키마를 전제로 하며 기존 데이터베이스를 자동 baseline하지 않는다.
+000001의 두 CREATE TABLE은 각각 커밋되므로 두 번째 문장 실패 시 첫 테이블이 남을 수 있다.
+후속 버전과 성공 이력 기록을 중단하고 실제 구조를 확인한 뒤 복구 범위를 협의한다.
+IF NOT EXISTS로 부분 적용이나 구조 불일치를 숨기지 않으며 파괴적인 자동 undo는 제공하지 않는다.
+000002의 DELIMITER는 클라이언트 지시문이다. 적용 도구가 이를 처리하거나 CREATE PROCEDURE
+전체를 한 문장으로 제출해야 한다. strict SQL mode에서 생성하며, 파일 전체 성공 이후 실제
+실행 파일 체크섬과 버전·선행 관계를 이력에 기록한다. 설치·DB 접속·적용은 별도 승인 범위다.
+
+프로시저의 SQL SECURITY DEFINER에는 생성한 DB 주체가 사용된다. 적용 전 수명과 최소
+권한을 가진 전용 주체를 정하고 유지해야 한다. 게임 서버 주체에는 이 프로시저 실행 권한만
+부여하는 것을 기준으로 하며 테이블 쓰기·DDL·마이그레이션 권한을 넘기지 않는다.
+실제 DB 사용자 생성이나 GRANT는 이 파일에 포함하지 않는다.
+
+### `login_google_account` Req/Res
+
+IN 파라미터는 `subject` 하나다. 서버가 Google 토큰의 서명·허용 알고리즘·발급자·audience·
+만료와 인증 흐름에 필요한 nonce를 검증한 뒤 그 `sub`를 전달한다. 검증된 Google 발급자를
+서버 설정으로 `google`에 연결하며 이메일이나 클라이언트의 provider/accountId를 신뢰하지 않는다.
+프로시저는 토큰 검증을 대신하지 않으며, 무효 입력과 SQL 오류에는 예외를 반환한다.
+입력 SQL 타입은 UTF-8 TEXT로 길이를 검사한 후 ASCII만 허용한다. C++에서는 `wstring`으로
+바인딩하며 NULL·빈 값·255바이트 초과·비ASCII·NUL 문자를 호출 전에도 거절한다.
+
+결과는 컬럼이 있는 결과셋 하나에 정확히 한 행이며 모든 컬럼은 NOT NULL이다.
+
+| 순서 | 컬럼 | C++ 읽기 타입 / 의미 |
+|---|---|---|
+| 1 | `result_code` | `int32_t`: 0 로그인 허용, 1 계정 정지 |
+| 2 | `account_id` | `uint64_t`: 게임 계정 ID, 0보다 큼 |
+| 3 | `account_status` | `int32_t`: 0 정상, 1 정지 |
+| 4 | `was_created` | `int32_t`: 0 기존, 1 이번 호출에서 생성 |
+
+`result_code`와 `account_status`는 일치해야 하며 정지에서는 `was_created=0`이다.
+서버는 결과셋·행 개수·컬럼 개수·NULL·값 범위를 검사한다. ODBC의 `IsSuccess()`가 참이어도
+`result_code=1`은 게임 로그인 거절이다. 결과 행이 없으면 기본값 0으로 로그인시키지 않는다.
+
+한 CALL은 기존 ODBC 실행기가 autocommit OFF로 실행하며 커밋/전체 롤백을 소유한다.
+프로시저 내부에서 트랜잭션을 시작하거나 커밋하지 않는다. 최초 가입의 유일키 충돌에만
+savepoint로 해당 호출이 만든 계정을 부분 롤백하고 현재 연결된 계정을 잠금 조회한다.
+이 savepoint 부분 롤백은 외부 트랜잭션을 종료하지 않는다. 정지 계정은 마지막 로그인 시각을
+갱신하지 않는다. 데드락·타임아웃·연결 오류는 기존 실행기로 전달하고 자동 재시도하지 않는다.
+불확실한 실행 결과가 있으면 계정 생성 실패나 미커밋을 단정하지 않는다.
+
+서버 인증 I/O와 DB 대기는 town strand를 막지 않아야 한다. 완료 시 같은 세션·로그인 시도가
+여전히 유효한지 확인하고 검증된 계정 ID를 게임 세션에 연결한다. 미인증 게임 요청과
+DB 미구성·버전 불일치·인증 실패를 기존 게스트 입장 경로로 우회하지 않는다.
+서버 담당은 `Database/LoginGoogleAccountProcedure`의 바인딩·결과 검사와
+`TownAuthentication.cpp`의 DB 호출·세션 계정 연결 소스를 추가했다. 인증/스키마 증명은
+각 검증기만 생성할 수 있으며 해당 검증기는 아직 구현·설치하지 않았다. 네트워크 로그인
+진입점과 클라이언트 인증 흐름도 미연결이다. 현재 소스로는 로그인 성공 상태를 만들 수 없고
+기존 무인증 EnterTown도 거절하므로 실제 플레이 준비가 완료된 상태가 아니다.
+Google 검증과 클라이언트 인증 흐름, 실제 드라이버 결과 매핑·동시 로그인은 아직 실행 검증하지 않았다.
+
+설계 근거: [Google OIDC 식별자와 ID 토큰](https://developers.google.com/identity/openid-connect/openid-connect),
+[MySQL 바이너리 문자열 비교](https://dev.mysql.com/doc/refman/8.0/en/binary-varbinary.html),
+[savepoint 부분 롤백](https://dev.mysql.com/doc/refman/8.0/en/savepoint.html),
+[DDL의 원자성과 트랜잭션 구분](https://dev.mysql.com/doc/refman/8.0/en/atomic-ddl.html).

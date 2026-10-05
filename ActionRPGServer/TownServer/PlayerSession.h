@@ -33,9 +33,18 @@ namespace TownServer::Network
 
         [[nodiscard]] std::uint64_t GetSessionId() const noexcept;
         [[nodiscard]] std::uint64_t GetPlayerId() const noexcept;
+        [[nodiscard]] std::uint64_t GetAccountId() const noexcept;
         void SetPlayerId(std::uint64_t inPlayerId) noexcept;
 
     private:
+        friend class Domain::TownInstance;
+        enum class LoginState { Unauthenticated, VerifyingGoogle, ResolvingAccount, Authenticated, Closed };
+        // Begin/resolve/complete are owned by the town strand; close may invalidate them from any strand.
+        std::uint64_t BeginAuthentication() noexcept;
+        bool BeginAccountLookup(std::uint64_t inAttemptId) noexcept;
+        bool CompleteAuthentication(std::uint64_t inAttemptId, std::uint64_t inAccountId) noexcept;
+        [[nodiscard]] bool MatchesAuthentication(std::uint64_t inAttemptId) const noexcept;
+        void CloseAuthentication() noexcept;
         void HandlePacket(std::vector<std::uint8_t> inPacket);
 
         std::shared_ptr<ActionRPG::Network::TcpSession> tcpSession;
@@ -43,6 +52,9 @@ namespace TownServer::Network
         std::weak_ptr<RoomControlTcpServer> roomControlServer;
         std::atomic_uint64_t playerId{};
         std::atomic_uint32_t characterId{};
+        std::atomic_uint64_t accountId{};
+        std::atomic_uint64_t loginAttemptId{};
+        std::atomic<LoginState> loginState{ LoginState::Unauthenticated };
         bool enterRequested = false;
     };
 }

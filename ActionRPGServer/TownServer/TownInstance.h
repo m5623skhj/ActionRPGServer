@@ -7,6 +7,7 @@
 #include "TownMap.h"
 #include "../Shared/SkillTreeCatalog.h"
 #include "Database/OdbcDatabase.h"
+#include "Authentication/GoogleLogin.h"
 
 #include <asio.hpp>
 
@@ -36,6 +37,13 @@ namespace TownServer::Domain
         TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
             DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory,
             std::shared_ptr<Database::OdbcDatabase> inDatabase);
+
+        using GoogleLoginHandler = std::function<void(Authentication::LoginResult)>;
+        // Server-only adapter API, not a packet handler. Start verification off the town strand.
+        void BeginGoogleLogin(std::shared_ptr<Network::PlayerSession> inSession,
+            std::function<void(std::uint64_t)> inStarted, GoogleLoginHandler inCompleted);
+        void ResolveGoogleAccount(Authentication::VerifiedGoogleIdentity inIdentity,
+            Authentication::VerifiedLoginSchema inSchema);
 
         /// Handler runs on the town strand. Re-find players by ID and validate their current session/state.
         template <typename TProcedure, typename THandler>
@@ -122,7 +130,18 @@ namespace TownServer::Domain
             std::string activeTransitionZoneId;
             ActionRPG::PlayerSkills::CharacterProgression progression;
             std::chrono::steady_clock::time_point lastSimulationTime{ std::chrono::steady_clock::now() };
+            std::uint64_t accountId{};
         };
+
+        struct PendingGoogleLogin
+        {
+            std::weak_ptr<Network::PlayerSession> session;
+            std::uint64_t attemptId{};
+            std::shared_ptr<asio::steady_timer> deadline;
+            GoogleLoginHandler completed;
+        };
+        void FinishGoogleLogin(std::uint64_t inSessionId, std::uint64_t inAttemptId,
+            Authentication::LoginResult inResult);
 
         void ScheduleTick();
         void Tick();
@@ -171,6 +190,7 @@ namespace TownServer::Domain
 
         asio::strand<asio::io_context::executor_type> strand;
         std::shared_ptr<Database::OdbcDatabase> database;
+        std::unordered_map<std::uint64_t, PendingGoogleLogin> pendingGoogleLogins;
         asio::steady_timer tickTimer;
         std::chrono::steady_clock::time_point nextTickTime{};
         std::unordered_map<std::string, TownMap> maps;

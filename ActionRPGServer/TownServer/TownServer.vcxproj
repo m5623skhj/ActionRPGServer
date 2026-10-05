@@ -154,6 +154,8 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Database\OdbcDatabase.cpp" />
+    <ClCompile Include="Database\LoginGoogleAccountProcedure.cpp" />
+    <ClCompile Include="TownAuthentication.cpp" />
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
     <ClCompile Include="..\Shared\TcpAcceptServer.cpp" />
     <ClCompile Include="..\Shared\TcpSession.cpp" />
@@ -171,6 +173,8 @@
     <ClInclude Include="NetworkConstants.h" />
     <ClInclude Include="Database\OdbcDatabase.h" />
     <ClInclude Include="Database\StoreProcedure.h" />
+    <ClInclude Include="Database\LoginGoogleAccountProcedure.h" />
+    <ClInclude Include="Authentication\GoogleLogin.h" />
     <ClInclude Include="..\Shared\NetworkConstants.h" />
     <ClInclude Include="..\Shared\RoomControlProtocol.h" />
     <ClInclude Include="..\Shared\TcpAcceptServer.h" />

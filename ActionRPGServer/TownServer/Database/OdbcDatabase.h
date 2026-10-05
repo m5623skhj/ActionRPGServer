@@ -29,7 +29,8 @@ namespace TownServer::Database
         ProcedureConnection& operator=(const ProcedureConnection&) = delete;
 
         void Execute(std::wstring_view inName, ProcedureParameters& inParameters,
-            const std::function<void(ProcedureRow&, std::size_t)>& inReadRow);
+            const std::function<void(ProcedureRow&, std::size_t)>& inReadRow,
+            const std::function<void(std::size_t, std::size_t)>& inValidateResults);
 
     private:
         struct Impl;
@@ -79,6 +80,10 @@ namespace TownServer::Database
                             [&](ProcedureRow& inRow, std::size_t inIndex)
                             {
                                 procedure->ReadRow(inRow, inIndex, response);
+                            },
+                            [&](std::size_t inResultSetCount, std::size_t inRowCount)
+                            {
+                                procedure->ValidateResults(inResultSetCount, inRowCount, response);
                             });
                         executionCompleted = true;
                         result.response = std::move(response);

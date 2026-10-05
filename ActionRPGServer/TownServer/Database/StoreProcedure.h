@@ -173,6 +173,8 @@ namespace TownServer::Database
         virtual void BindParameters(ProcedureParameters& inParameters, TRes& outResponse) const = 0;
         // Called on the DB worker, for each row; result index counts only result sets with columns.
         virtual void ReadRow(ProcedureRow& inRow, std::size_t inResultIndex, TRes& outResponse) const = 0;
+        // Optional strict shape check, including empty result sets; runs before the transaction commits.
+        virtual void ValidateResults(std::size_t, std::size_t, const TRes&) const {}
     };
 
     template <typename TRes>
