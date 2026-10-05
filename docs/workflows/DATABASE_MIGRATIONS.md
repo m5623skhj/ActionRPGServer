@@ -1,8 +1,10 @@
 # DB 담당 및 마이그레이션 규칙
 
-문서 버전: 1.0.0
+문서 버전: 1.1.1
 
 작성일: 2026-10-05
+
+수정일: 2026-10-06 — 수동 Up/Down 및 원본 SHOW CREATE 기반 프로시저 검증 계약.
 
 적용 범위: ActionRPG 총괄·DB 담당, DB 연계가 필요한 서버 및 다른 담당
 
@@ -22,11 +24,14 @@ DB 담당은 데이터 모델, 스키마·인덱스·제약·프로시저, 영�
 빌드·실제 DB 접속·프로시저/스키마 생성·마이그레이션 적용은 수행하지 않았다.
 이후 사용자는 MySQL 8.0.47과 Google 최초 로그인 자동 가입·접속 세션 유지 정책을 지정했다.
 `ActionRPGServer/Database/Migrations/MySQL/`에 계정 테이블 000001과 Google 로그인 프로시저
-000002의 SQL 파일을 준비하며 계약은 위 개발 가이드의 Google 로그인 DB 절을 따른다.
-적용 도구·대상 환경은 미정이고 실제 DB에는 미적용이다. 적용 이력·단일 실행자 잠금·스키마
-버전 검증의 구현은 남아 있으며 파일 작성만으로 운영 DB 사용 준비가 완료된 것은 아니다.
+000002의 SQL 파일을 준비했다. 이후 AuthServer 분리 승인으로 계정 조회·인증 소스를
+AuthServer로 이전하는 작업을 진행하며, 계정 상태 재확인 프로시저 000003을 추가한다.
+기존 Google 로그인 SQL 계약은 유지하고 AuthServer 연계 DB 계약은 아래 8절을 따른다.
+사용자 승인으로 Windows PowerShell 5.1 / System.Data.Odbc 기반 수동 Up/Down 도구와 적용
+이력 SQL을 추가했다. 실행 계약은 아래 9절을 따른다. 실제 대상 환경은 미정이고 DB에는 미적용이다.
+실제 DB 적용·서버 연결 검증까지 완료된 상태는 아니다.
 
-이 문서는 작업 규칙이다. 마이그레이션 실행기·이력 테이블·DB 연결을 구현하거나 실제 DB에 적용한 상태를 뜻하지 않는다.
+이 문서는 작업 규칙과 소스 실행 계약이다. 파일 작성으로 실제 DB 적용을 증명하지 않는다.
 
 ## 2. 공통 작업 원칙
 
@@ -99,3 +104,230 @@ DB 작업에 따른 서버 연계가 필요하면 DB 담당은 스키마/쿼리 
 * 사용자 형식의 `*` 커밋 로그. 실제 Git 실행 여부는 별도로 명시.
 
 새 DB 담당의 첫 작업은 이 문서와 기존 프로젝트 현황을 읽고 역할·마이그레이션 원칙·미정 항목을 확인하는 것이다. 별도 승인 없이 실제 DB 도입, 마이그레이션 실행기 구현, 이력 테이블 생성이나 영속화 기능을 시작하지 않는다.
+
+## 8. AuthServer 분리 DB 계약
+
+2026-10-06 승인된 분리 작업의 DB 계약이다. AuthServer 한 대가 Google 인증과 계정 DB
+호출·메모리 게임 세션을 소유하고, TownServer는 대상 서버 전용 일회 입장 티켓을 AuthServer에
+확인한다. 계정 프로시저는 AuthServer만 호출하며 TownServer에 계정 DB 실행 권한을 주지 않는다.
+세션·티켓·로그아웃을 위한 영속 테이블과 재접속 토큰·캐릭터·성장 테이블은 추가하지 않는다.
+
+### SQL 버전과 적용 조건
+
+대상은 MySQL 8.0.47 / InnoDB이며 파일 경로는 `ActionRPGServer/Database/Migrations/MySQL/`다.
+
+| 버전 | 선행 버전 | 실행 파일 | 목적 |
+|---|---|---|---|
+| 000001 | 없음 | `V000001__create_login_accounts.sql` | 계정·외부 식별자 테이블 |
+| 000002 | 000001 | `V000002__create_google_login_procedure.sql` | Google 로그인 조회·자동 가입 |
+| 000003 | 000002 | `V000003__create_auth_account_status_procedure.sql` | 티켓 발급·입장 승인 전 계정 상태 재확인 |
+
+000001/000002의 SQL은 변경하지 않는다. `login_google_account(subject)`의 결과는 기존대로
+`result_code(int32), account_id(uint64), account_status(int32), was_created(int32)` 한 행이다.
+0 정상/1 정지, was_created 0/1, 모든 값 NOT NULL, 정지에서는 was_created=0 계약을 유지한다.
+AuthServer의 전체 기능에 필요한 논리 버전은 이제 000003이다. 향후 상위 버전 호환성은 별도로
+선언하며 단순히 `MAX(version) >= 3`이라는 이유로 허용하지 않는다.
+
+적용 도구와 이력 테이블은 9절처럼 확정했으며 실제 대상 DB는 미정이고 SQL은 모두 미적용이다.
+SQL 파일 작성과 서버 분리 승인은 설치·DB 접속·마이그레이션 실행 승인에 해당하지 않는다.
+000001은 두 DDL 문장이 각각 커밋되므로 일부 생성 후 실패할 수 있다. 000002/000003은
+DELIMITER 처리가 필요한 CREATE PROCEDURE이며 이력 기록과 DDL 전체를 하나의 롤백 가능한
+트랜잭션으로 가정하지 않는다. 중간 실패 시 후속 적용과 성공 기록을 중단하고 상태를 확인한다.
+부분 실패를 자동 DROP/undo하거나 IF NOT EXISTS로 숨겨 재적용하지 않는다. 성공 적용된
+최신 버전을 수동으로 되돌리는 별도의 Down SQL만 제공한다.
+DEFINER는 생성 주체를 사용하므로 실제 적용 전에 전용 주체의 수명·최소 권한을 정해야 한다.
+AuthServer에는 필요한 프로시저 실행 권한과 향후 이력 조회 권한만 부여하며 DDL·이력 쓰기
+권한을 주지 않는다. 사용자 생성·GRANT와 서버 기동 시 자동 적용은 포함하지 않는다.
+
+### 계정 상태 재확인: `get_auth_account_status`
+
+입력은 AuthServer가 인증된 메모리 세션에 연결한 `account_id` 하나다.
+SQL 타입은 BIGINT UNSIGNED, C++ 바인딩 타입은 uint64_t이며 NULL·0을 거절한다.
+클라이언트나 TownServer가 주장한 계정 ID만으로 호출·승인하지 않는다.
+
+결과는 정확히 한 결과셋·한 행·세 컬럼이며 다음 순서다.
+
+| 순서 | 컬럼 | C++ 읽기 타입 / 의미 |
+|---|---|---|
+| 1 | `result_code` | int32_t, NOT NULL: 0 정상, 1 정지, 2 계정 없음 |
+| 2 | `account_id` | uint64_t, NOT NULL: 요청 계정 ID와 일치, 0보다 큼 |
+| 3 | `account_status` | optional<int32_t>: 정상 0, 정지 1, 계정 없음에서만 NULL |
+
+서버는 행·결과셋·컬럼 개수와 위 값 조합을 커밋 전에 검사한다. 통신·커밋 성공과 게임 입장
+허용을 구분한다. result_code=0만 승인 가능하며 정지/계정 없음/DB 오류/무효 결과는 거절한다.
+이 조회는 인증 증명이 아니며 Google 로그인이나 마지막 로그인 시각 갱신을 대신하지 않는다.
+
+기존 ODBC 실행기가 autocommit OFF로 전체 트랜잭션과 결과 처리·커밋을 소유한다.
+프로시저는 FOR SHARE 잠금 조회로 현재 커밋된 상태를 읽고 내부 DDL·커밋·세션 변경을 하지 않는다.
+계정 상태 변경과 잠금 대기가 발생할 수 있으므로 AuthServer 상태 소유 스레드에서 DB I/O를
+기다리지 않고, DB 타임아웃·오류에는 자동 재시도나 승인 우회를 하지 않는다.
+
+AuthServer는 티켓 발급 전과 TownServer의 티켓 소비·입장 승인 요청 시 이 조회를 새로 수행한다.
+DB 응답 후 메모리 세션의 생존·세대, 티켓의 미사용·만료·대상 서버를 같은 상태 소유 실행 문맥에서
+다시 검사한 뒤 생성/소비해야 한다. 조회 중 로그아웃된 세션이나 취소된 티켓은 늦은 성공 응답으로
+되살리지 않는다. 정지/계정 없음으로 확인한 세션과 미사용 티켓은 무효화한다.
+
+DB 조회의 잠금은 커밋 후 해제된다. 따라서 조회 직후의 계정 정지를 메모리 티켓 생성/소비 및
+이미 입장한 Town 세션까지 원자적으로 반영하지는 않는다. 즉시 정지·강제 퇴장이 필요하면
+정지 변경 경로와 Auth/Town 세션 취소 통지를 함께 설계하는 별도 작업이 필요하다.
+로그아웃 자체는 DB 조회나 정상 계정 상태를 전제로 하지 않고 메모리 세션·미사용 티켓을
+폐기해야 한다. 실제 Town 연결 종료는 서버 간 취소 통신 범위에 따른다.
+
+근거: [MySQL 잠금 조회](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html).
+
+### 적용 이력 검증 계약
+
+승인된 도구는 `schema_migrations` 이력과 `get_schema_migration_history()` 조회를 사용한다.
+정확한 결과·체크섬·잠금 계약은 9절을 따른다. `SELECT 3`, 설정 파일의 성공 버전 플래그,
+프로시저 존재, 소스 파일의 체크섬만으로 실제 적용 이력 검증을 대체할 수 없다.
+
+실제 이력을 읽는 서버 어댑터는 다음 정보를 검증한다.
+
+* 대상 DB 식별과 실제 DBMS·버전, 실행 파일/마이그레이션 이름, 논리 버전과 선행 관계.
+* 실제 실행 순서와 성공·실패 상태, 성공 적용 시각, 실행 파일의 체크섬과 알고리즘/정규화 규칙.
+* 실패·누락·알 수 없는 버전을 숨기지 않은 전체 관련 이력. 단순 성공 행의 MAX 조회는 불충분하다.
+
+AuthServer는 승인된 배포 SQL 목록을 기준으로 000001 → 000002 → 000003이 누락 없이 성공했고,
+이름·순서·실행 파일 체크섬이 해당 도구의 규칙과 일치하는지 확인한다. 원본 SHA-256과 도구의
+다른 알고리즘 체크섬을 같은 값으로 비교하지 않는다. 도구가 선행 관계를 저장하지 않으면 승인된
+버전 파일 순서와 실제 이력을 대조한다. 이후 실패 이력·미지원 버전·체크섬 불일치도 거절한다.
+필요한 테이블/프로시저의 실제 계약 역시 확인하며 이력만으로 구조가 동일하다고 가정하지 않는다.
+
+검증은 실제 사용할 계정 DB를 대상으로, 마이그레이션 실행자 잠금과 서비스/DDL 배포 순서가
+협의된 상태에서 수행한다. 검증 도중 변경된 이력이나 서비스 중 임의 DDL을 허용하지 않는
+배포 절차가 필요하다. 조회 불가·대상 불명·검증 실패 시 로그인·새 티켓 발급/입장 승인을 차단하며,
+성공을 가정하는 증명 객체를 생성하지 않는다. 로그아웃과 이미 발급된 권한 취소는 계속 허용한다.
+
+남은 배포 결정은 실제 대상 DB/스키마·환경, ODBC 드라이버와 접속 보안, 실행 주체의 최소 권한,
+서비스 정지·코드 배포 순서다. 000003은 계정 상태 조회이며 이력 조회는 Infrastructure의 000000이다.
+
+## 9. 수동 Up/Down 실행 계약
+
+### 파일과 실행
+
+정식 도구는 `Tool/Database/UpMigration.bat`, `DownMigration.bat`이며 공통 실행기는
+`Migrate.ps1`이다. 64비트 Windows PowerShell 5.1과 동일 비트의 MySQL ODBC 드라이버를 사용한다.
+별도 마이그레이션 제품 설치 없이 ODBC로 실행한다. 서비스용 접속 문자열을 자동으로 재사용하지
+않으며 전용 환경 변수 `ACTIONRPG_MIGRATION_CONNECTION_STRING`을 사용한다. 암호가 포함된
+값을 명령 인자·배치 파일·Git에 넣거나 로그로 출력하지 않는다. DB 접속의 TLS/인증 설정은 실제
+환경에 맞게 별도로 준비한다. 로컬 PowerShell 실행 정책은 존중하며 도구가 자동 우회하지 않는다.
+
+모든 DB 사용 서비스를 정지한 뒤 실행한다. 다음 `actionrpg`는 실제 DB 이름으로 바꾸는 예시다.
+`-Database`는 접속 문자열이 선택한 스키마와 정확히 일치해야 한다.
+`-ServicesStopped`는 운영자가 정지를 확인했다는 표시이며 프로세스를 자동 종료하거나 정지를
+검증하는 기능이 아니다. DB 생성·계정 생성·권한 부여 역시 자동 수행하지 않는다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -ServicesStopped
+Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
+```
+
+* Up: 실제 성공 이력을 재생해 현재 상태를 계산한 뒤 모든 미적용 버전을 오름차순 적용한다.
+  현재 배포 계약은 000001~000003이며 최신 상태에서는 새 실행 이력을 만들지 않는다.
+* Down: 현재 적용된 가장 높은 버전 하나만 역변환하고 DOWN 성공 이력을 추가한다.
+  과거 UP 기록은 삭제하지 않는다. 이후 Up은 되돌린 버전부터 다시 적용한다.
+* 000000: 이력 관리 기반이다. 빈 스키마에 최초 Up할 때만 생성하며 Down 대상에서 제외한다.
+  테이블만 남은 중단된 초기화나 기존 비어 있지 않은 DB를 성공 상태로 추정해 등록하지 않는다.
+* 파일은 Up `VNNNNNN__name.sql`, Down `Down/동일파일명.sql` 한 쌍이다. 이미 적용된 Up/Down과
+  Infrastructure 파일은 모두 고정한다. 새 버전에는 변경에 맞는 실행기·Auth 실제 구조 검증 계약도
+  함께 갱신해야 한다. 현재 코드에 파일만 추가해 미지원 스키마를 승인하지 않는다.
+
+| Down 버전 | 역변환 | 데이터 조건 |
+|---|---|---|
+| 000003 | `get_auth_account_status` 삭제 | 계정 데이터 유지; 최신 Auth 코드와 호환되지 않음 |
+| 000002 | `login_google_account` 삭제 | 계정 데이터 유지 |
+| 000001 | `account_identities`, `accounts` 삭제 | 두 테이블이 모두 비어 있을 때만 허용 |
+
+000001 Down은 두 계정 테이블과 이력 테이블에 WRITE 잠금을 잡고 빈 상태를 확인한 뒤 두 계정
+테이블을 한 DROP 문장으로 삭제한다. 빈 상태 검사를 통과하지 못하면 DDL과 실행 이력 추가를
+하지 않는다. 잠금 대기와 연결 오류는 실패로 처리한다. 런타임 계정이 있는 DB의 계정 테이블 삭제나
+데이터 복원은 이 도구의 범위가 아니다. [MySQL 테이블 잠금](https://dev.mysql.com/doc/refman/8.0/en/lock-tables.html).
+
+### 잠금·체크섬·감사 이력
+
+한 ODBC 연결이 전체 실행 동안 이름 기반 DB 잠금을 보유한다. 이름은
+`CONCAT('actionrpg:migrate:', LEFT(SHA2(DATABASE(), 256), 40))`이다. `GET_LOCK(name, 0)`으로
+즉시 획득하지 못하면 중단하며, 각 실행 전에 `IS_USED_LOCK(name)=CONNECTION_ID()`를 확인한다.
+연결을 재생성하거나 실패한 SQL을 자동 재시도하지 않는다. 종료 시 잠금을 해제하고 연결을 닫는다.
+잠금은 같은 MySQL 인스턴스 안의 실행자를 직렬화한다. 다중 쓰기 인스턴스 토폴로지는 지원하지
+않는다. [MySQL 이름 기반 잠금](https://dev.mysql.com/doc/refman/8.0/en/locking-functions.html).
+
+체크섬 형식은 `sha256-utf8-lf-v1`이다. 엄격한 UTF-8로 읽고 최초 UTF-8 BOM 하나만 제외하며
+CRLF와 나머지 CR을 LF로 바꾼다. 공백·주석·마지막 줄바꿈은 그대로 보존한다. BOM 없는 UTF-8
+바이트의 SHA-256을 소문자 64자리로 기록한다. 원시 파일 SHA-256과 혼동하지 않는다.
+실행 전 모든 Up/Down 파일을 읽고 문장 분리까지 완료해 같은 메모리 내용으로 실행한다.
+DELIMITER `;`/`$$`, 문자열·식별자·일반 주석을 처리하며 실행형 `/*!...*/` 주석은 거절한다.
+
+`Infrastructure/V000000__migration_history.sql`은 이력 테이블과 조회 프로시저를 만든다.
+`schema_migrations` 컬럼 순서는 execution_id, version, name, direction, up_checksum,
+down_checksum, state, started_at, finished_at이다. 이름은 파일의 `__` 뒤 확장자를 제외한 부분이며
+000000만 `migration_history`다. 000000의 down_checksum은 NULL, 나머지는 항상 Up/Down 두
+체크섬을 기록한다. 실행 전 RUNNING, DDL·실제 구조 검사 후 SUCCEEDED로 UTC 시각을 기록하고,
+오류는 연결과 잠금이 유효하면 FAILED로 남긴다. 종료/통신 실패로 RUNNING이 남을 수도 있다.
+
+현재 버전은 execution_id 증가 순서 전체 이력을 재생해 판단한다. 최초 행은 000000 UP 성공,
+이후 UP은 현재+1, DOWN은 현재 버전이며 0은 되돌리지 않는다. 실행 ID 간격은 허용하되 역순,
+중복·버전 누락·알 수 없는 버전·이름/체크섬 불일치·FAILED/RUNNING은 거절한다. 실패를 걸러낸
+MAX(version) 조회나 이력 삭제로 현재 버전을 계산하지 않는다. 완료 시각은 시작 시각 이후여야 한다.
+
+MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초기 이력 테이블 생성 직후 감사 행
+쓰기 이전에도 중단될 수 있다. SQL 실패·이력 쓰기 실패·구조 검사 실패에는 다음 버전을 적용하지
+않는다. 실제 구조와 마지막 감사 상태를 확인해 별도로 승인받은 복구를 한다. 일반 Down은 성공
+적용된 버전의 역변환이며 부분 실패 복구 명령이 아니다. [MySQL 암묵적 커밋](https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html).
+
+### AuthServer 조회 계약
+
+`get_schema_migration_history()`는 같은 이름 기반 잠금을 획득해 조회하고 해제한다. 잠금 획득
+실패 시 SQL 오류이며 성공 플래그를 반환하지 않는다. 실행기 연결이 이미 잠금을 가진 경우 MySQL의
+재귀 잠금 횟수 중 조회가 추가한 횟수만 해제한다. 데이터 결과셋은 정확히 10개이며 첫 7개는
+문자열로 캐스팅한다. 추가 3개는 원본 SHOW CREATE 결과다. 각 결과셋은 SQL 파일의 순서를 따른다.
+
+| 결과셋 | 컬럼 순서 |
+|---|---|
+| 0 (5) | history_format=`1`, checksum_format, database_name, engine_version, engine_comment |
+| 1 (9) | execution_id, version, name, direction, up_checksum, down_checksum, state, started_at, finished_at |
+| 2 (9) | table_name, column_name, column_type, is_nullable, collation_name, extra, engine, column_default, character_set_name |
+| 3 (11) | table_name, constraint_name, constraint_type, column_name, referenced_table_name, referenced_column_name, check_clause, enforced, referenced_table_schema, update_rule, delete_rule |
+| 4 (6) | table_name, index_name, non_unique, seq_in_index, column_name, sub_part |
+| 5 (4) | routine_name, security_type, sql_data_access, routine_definition |
+| 6 (7) | routine_name, ordinal_position, parameter_mode, parameter_name, dtd_identifier, character_set_name, collation_name |
+| 7 (6) | get_schema_migration_history의 SHOW CREATE: Procedure, sql_mode, Create Procedure, character_set_client, collation_connection, Database Collation |
+| 8 (6) | login_google_account의 동일 SHOW CREATE 컬럼 |
+| 9 (6) | get_auth_account_status의 동일 SHOW CREATE 컬럼 |
+
+NULL은 원본 NULL과 동일하며 임의로 빈 문자열과 합치지 않는다. 대상 테이블은 schema_migrations,
+accounts, account_identities, 대상 루틴은 get_schema_migration_history, login_google_account,
+get_auth_account_status다. 실제 기본값·InnoDB·CHECK 활성화·PK/인덱스·현재 스키마를 가리키는
+FK RESTRICT·프로시저 본문/입력 문자셋을 대조한다. 정보 조회 권한 부족이나 본문 NULL도 거절한다.
+
+ROUTINE_DEFINITION은 내부 definition_utf8에서 가져오며 `_binary` 같은 문자셋 introducer가
+제거되므로 배포 원문과 직접 본문을 비교하지 않는다. 결과셋 5의 이름·보안·접근 특성을 확인하고,
+실제 본문은 결과셋 7~9의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
+사용한다. 문자열 내용과 `_binary`를 보존하고 일반 주석·공백·식별자 표기 차이를 토큰으로 정규화한다.
+SHOW는 프로시저 안에서 결과셋을 반환할 수 있다.
+근거: [MySQL SHOW CREATE](https://dev.mysql.com/doc/refman/8.0/en/show-create-procedure.html),
+[프로시저 내 SHOW](https://dev.mysql.com/doc/refman/8.0/en/create-procedure.html),
+[원본 definition을 사용하는 구현](https://github.com/mysql/mysql-server/blob/8.0/sql/sp.cc),
+[definition_utf8 조회](https://github.com/mysql/mysql-server/blob/8.0/sql/dd/impl/system_views/routines.cc).
+
+각 SHOW 결과는 정확히 6열·1행이다. Up/Down 중 실제 존재하지 않는 루틴만 6개 값이 모두 NULL인
+동일 형태의 행으로 대체한다. 존재해야 하는 버전에서 NULL 또는 이름 불일치는 거절하며, 존재하면
+SHOW의 다른 메타데이터도 비어 있으면 안 된다. 생성 당시 sql_mode는 strict 모드가 있어야 하고
+NO_BACKSLASH_ESCAPES·ANSI_QUOTES·PIPES_AS_CONCAT은 허용하지 않는다. 실행 연결에도 같은
+조건을 요구한다. 형식이 확정되기 전 V0 SQL은 실제 DB에 적용되지 않았다.
+
+AuthServer는 서비스 접속 변수와 함께 기대 DB 이름 `ACTIONRPG_DB_SCHEMA`, 배포 SQL 절대
+경로 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`를 사용한다. Runtime에는 세 프로시저 EXECUTE만
+필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
+하며 테이블 접근과 루틴 정의 조회에 필요한 범위를 실제 환경에서 검토한다. SHOW 원문은 해당
+루틴의 DEFINER이거나 SHOW_ROUTINE 등의 전체 조회 권한이 있어야 보인다. EXECUTE만 가진
+주체는 Create Procedure가 NULL일 수 있다. 세 루틴의 DEFINER를 전용 생성 주체로 유지하면
+런타임에 광범위 조회 권한을 추가하지 않고 조회 프로시저의 DEFINER 문맥에서 확인할 수 있다.
+권한 부족을 성공으로 처리하지 않는다. 도구용 주체와 런타임 주체를 분리하며 GRANT는 포함하지 않는다.
+
+마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000003과
+구조를 검증한 뒤 DB 연계 기능을 활성화한다. 000003 Down 후 최신 Auth 코드는 시작할 수 없다.
+서버 시작은 마이그레이션 실행 시점이 아니며 서비스 기동 중 DDL을 직접 변경하지 않는다.
+
+현재 검증은 파일·PowerShell 구문·연계 계약에 대한 정적 확인이다. 빌드·기능 테스트·서버 실행·DB
+접속·SQL 적용은 수행하지 않았다. 실제 환경 적용과 ODBC/MySQL 왕복 동작은 별도 승인 후 확인한다.
