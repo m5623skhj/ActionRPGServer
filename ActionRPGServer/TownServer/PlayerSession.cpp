@@ -38,9 +38,9 @@ namespace TownServer::Network
         CloseAuthentication();
         if (const std::shared_ptr<Domain::TownInstance> town = townInstance.lock())
         {
-            town->Leave(GetSessionId(), [weakControl = roomControlServer](const auto inRoomId, const auto inPlayerId)
+            town->Leave(GetSessionId(), [weakControl = roomControlServer](const auto inRoomId, const auto inPlayerId, std::function<void()> inReleased)
             {
-                if (const auto control = weakControl.lock()) control->LeaveRoom(inRoomId, inPlayerId);
+                if (const auto control = weakControl.lock()) control->LeaveRoom(inRoomId, inPlayerId, std::move(inReleased));
             });
         }
     }
@@ -73,7 +73,8 @@ namespace TownServer::Network
 
     std::uint64_t PlayerSession::GetAccountId() const noexcept
     {
-        return loginState.load(std::memory_order_acquire) == LoginState::Authenticated
+        return admissionDeadline.load(std::memory_order_acquire) > std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()
+            && loginState.load(std::memory_order_acquire) == LoginState::Authenticated
             ? accountId.load(std::memory_order_acquire) : 0;
     }
 
@@ -81,7 +82,7 @@ namespace TownServer::Network
     {
         if (loginAttemptId.load() == std::numeric_limits<std::uint64_t>::max()) return 0;
         auto expected = LoginState::Unauthenticated;
-        if (!loginState.compare_exchange_strong(expected, LoginState::VerifyingGoogle)) return 0;
+        if (!loginState.compare_exchange_strong(expected, LoginState::ResolvingAccount)) return 0;
         return loginAttemptId.fetch_add(1) + 1;
     }
 
@@ -89,14 +90,7 @@ namespace TownServer::Network
     {
         const auto state = loginState.load(std::memory_order_acquire);
         return inAttemptId != 0 && loginAttemptId.load(std::memory_order_acquire) == inAttemptId
-            && (state == LoginState::VerifyingGoogle || state == LoginState::ResolvingAccount);
-    }
-
-    bool PlayerSession::BeginAccountLookup(const std::uint64_t inAttemptId) noexcept
-    {
-        if (!MatchesAuthentication(inAttemptId)) return false;
-        auto expected = LoginState::VerifyingGoogle;
-        return loginState.compare_exchange_strong(expected, LoginState::ResolvingAccount);
+            && state == LoginState::ResolvingAccount;
     }
 
     bool PlayerSession::CompleteAuthentication(const std::uint64_t inAttemptId,
@@ -110,6 +104,11 @@ namespace TownServer::Network
         return false;
     }
 
+    void PlayerSession::SetAdmissionDeadline(std::chrono::steady_clock::time_point inDeadline) noexcept
+    {
+        admissionDeadline.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+            inDeadline.time_since_epoch()).count(), std::memory_order_release);
+    }
     void PlayerSession::CloseAuthentication() noexcept
     {
         loginState.store(LoginState::Closed, std::memory_order_release);
@@ -120,14 +119,16 @@ namespace TownServer::Network
     {
         const std::optional<TownProtocol::PacketType> type = TownProtocol::ReadPacketType(inPacket);
         const std::shared_ptr<Domain::TownInstance> town = townInstance.lock();
-        // No ID token is accepted over this plaintext protocol. A trusted login adapter must
-        // authenticate the session first; all game requests, including EnterTown, fail closed.
-        if (!type.has_value() || !town || GetAccountId() == 0)
+        if (!type || !town) { Stop(); return; }
+        if (*type == TownProtocol::PacketType::AdmissionTicketRequest)
         {
-            Stop();
+            const auto request = TownProtocol::DecodeAdmissionTicketRequest(inPacket);
+            if (!request || !tcpSession->IsSecure() || GetAccountId() != 0)
+            { Stop(); return; }
+            town->Admit(shared_from_this(), request->ticket);
             return;
         }
-
+        if (GetAccountId() == 0) { Stop(); return; }
         switch (*type)
         {
         case TownProtocol::PacketType::EnterTownRequest:

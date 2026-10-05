@@ -299,7 +299,7 @@ S2C 결과는 다음 세 곳에 등록한다.
 
 ## 9. ODBC 저장 프로시저 실행
 
-`Database/OdbcDatabase`는 마을 서버 안에서 DB 전용 작업 큐와 커넥션 풀을 운영한다.
+`../Shared/Database/OdbcDatabase`는 각 서버 프로세스 안에서 DB 전용 작업 큐와 커넥션 풀을 운영한다.
 `TownInstance::RunStoreProcedure()`로 실행하면 완료 콜백이 town strand에서 호출된다.
 DB worker의 입력 바인딩·결과 매핑에서는 마을 상태를 접근하지 않는다.
 
@@ -342,7 +342,7 @@ OUT/INOUT의 대상 멤버는 결과 매핑 중에도 같은 위치에 유지한
 이름과 파라미터·결과 형태가 일치하는 실제 저장 프로시저가 먼저 있어야 한다.
 
 ```cpp
-namespace Db = TownServer::Database;
+namespace Db = ActionRPG::Database;
 
 struct EchoReq
 {
@@ -426,93 +426,37 @@ town 객체가 이미 소멸했다면 `RunStoreProcedure()`는 게임 상태 콜
   반드시 버전 파일로 관리한다.
   적용된 파일은 불변이며, 마을 서버가 기동하면서 마이그레이션을 자동 적용하지 않는다.
 
-## 10. Google 로그인 DB 계약
+## 10. AuthServer 분리와 타운 입장
 
-계약 버전 1, 작업 `google-login-20261005`. 사용자 승인 범위는 Google 최초 로그인 시
-자동 가입과 접속 중인 게임 세션이다. 이메일·프로필·Google 토큰·재접속용 게임 토큰을
-영구 저장하지 않는다. 캐릭터·성장 영속화와 다른 제공자 연결은 별도 작업이다.
-서버 구현은 서버 담당이, 스키마와 저장 프로시저는 DB 담당이 맡는다.
+Google ID 토큰 검증과 `login_google_account` 계정 조회는 별도 AuthServer가 담당한다.
+[Auth API 및 실행 계약](../AuthServer/DEVELOPMENT.md)을 따른다. TownServer의 공통 ODBC
+실행기는 유지하지만 로그인 계정 프로시저와 Google 인증 증명을 소유하지 않는다.
 
-### 계정과 마이그레이션
+타운 클라이언트 TCP는 TLS 1.2 이상이 필수다. `ACTIONRPG_TOWN_TLS_CERT`,
+`ACTIONRPG_TOWN_TLS_KEY`, `ACTIONRPG_AUTH_HOST`, `ACTIONRPG_AUTH_CA_FILE`,
+`ACTIONRPG_TOWN_ID`, `ACTIONRPG_TOWN_AUTH_KEY`가 필요하다. TLS 설정이 없으면
+시작에 실패하며, 평문 입장이나 게스트 입장으로 우회하지 않는다.
 
-대상은 사용자 지정 MySQL 8.0.47이다. 서버의 ODBC 연결과 SQL의 대상 엔진을 구분한다.
-마이그레이션 파일은 공통 게임 DB 경로 `../Database/Migrations/MySQL/`에 둔다.
+클라이언트는 Auth HTTPS에서 목적 타운 ID가 지정된 30초 단일 사용 티켓을 받은 뒤,
+TLS 타운 연결의 첫 패킷으로 `AdmissionTicketRequest(36)`을 전송한다.
+타운은 Auth 내부 HTTPS `/internal/consume` 승인으로만 계정 ID를 설정하고
+`AdmissionResult(37, result=0)`을 응답한다. 이후 기존 `EnterTownRequest(1)`을 보낸다.
+계정 ID나 Google ID 토큰을 타운 패킷으로 제출하지 않는다.
+기존 패킷 ID 1~35는 유지하며 새 패킷은 YAML 마지막에 추가했다. 클라이언트 헤더와
+로그인/TLS 연결 작업은 이 서버 변경에 포함하지 않았다. 서버 헤더는 실행 금지 범위에서
+생성기 출력 형식에 맞춰 정적으로 반영했다.
 
-| 버전 | 파일 | 선행 버전 / 목적 |
-|---|---|---|
-| 000001 | `V000001__create_login_accounts.sql` | 없음 / 계정과 외부 식별자 테이블 |
-| 000002 | `V000002__create_google_login_procedure.sql` | 000001 / Google 로그인 계정 조회·생성 |
+Auth HTTP 작업은 제한된 별도 worker에서 처리하며 town strand를 막지 않는다.
+15초 권한을 5초 주기로 갱신하고 권한 만료/갱신 실패/새 로그인/타운 이동 시 연결을 종료한다.
+늦은 응답은 요청 시작 시각과 세션 시도 ID로 검사한다. 타운 계정 ID 조회는 로컬 만료를
+확인하므로 완료 콜백 대기로 권한을 연장하지 않는다.
 
-`accounts.account_id`는 unsigned 64비트 게임 계정 ID다. 현재 접속의 `PlayerId` 및
-캐릭터 타입 ID와 구분한다. `status`는 0 정상, 1 정지이며 생성 시각과 허용된 DB 로그인
-시각은 UTC `DATETIME(6)`로 저장한다. DB 커밋 후 접속이 끊겨도 `last_login_at`은 기록될
-수 있으므로 실제 게임 입장 완료 시각을 의미하지 않는다.
+연결 종료 시 타운 객체를 제거한다. 던전 참여 또는 입장 예약이 있었다면 RoomServer의
+멤버 제거/부재 확인 응답 이후 Auth 소유권을 해제한다. RoomControl 연결 단절을 퇴장
+확인으로 간주하지 않는다. 퇴장 확인 또는 Auth 해제 응답을 잃으면 새 타운 입장을 차단한다.
+재시도와 캐릭터 진행 상태 이관은 구현하지 않았다. 관련 운영 제한은 Auth 문서를 따른다.
 
-`account_identities`는 계정 외래키와 `(provider, subject)` 기본키를 갖는다.
-두 식별자 컬럼은 `VARBINARY`여서 대소문자·뒤쪽 공백을 포함한 바이트가 정확히 비교된다.
-현재 provider는 `google`만 허용한다. subject는 검증된 Google `sub`의 ASCII 원문을
-최대 255바이트로 저장하며 숫자 변환·trim·대소문자 변경을 하지 않는다.
-계정 삭제/ID 변경의 참조 제약은 RESTRICT다.
-
-현재는 **SQL 파일만 준비하며 실제 DB에는 미적용**이다. 적용 도구는 미정이며 실행기,
-DB 적용 이력 테이블, 성공 버전/체크섬 기록, 단일 실행자 잠금, 서버의 이력 기반 버전 검증은
-구현하지 않았다. 소스의 버전 상수나 프로시저 존재만으로 실제 적용 버전을 인정하지 않는다.
-로그인 사용에는 000001 → 000002의 성공 적용과 이력 검증이 선행되어야 한다.
-
-실제 적용 전 [공통 DB 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)에 맞는 도구와
-대상 스키마를 확정한다. 빈 스키마를 전제로 하며 기존 데이터베이스를 자동 baseline하지 않는다.
-000001의 두 CREATE TABLE은 각각 커밋되므로 두 번째 문장 실패 시 첫 테이블이 남을 수 있다.
-후속 버전과 성공 이력 기록을 중단하고 실제 구조를 확인한 뒤 복구 범위를 협의한다.
-IF NOT EXISTS로 부분 적용이나 구조 불일치를 숨기지 않으며 파괴적인 자동 undo는 제공하지 않는다.
-000002의 DELIMITER는 클라이언트 지시문이다. 적용 도구가 이를 처리하거나 CREATE PROCEDURE
-전체를 한 문장으로 제출해야 한다. strict SQL mode에서 생성하며, 파일 전체 성공 이후 실제
-실행 파일 체크섬과 버전·선행 관계를 이력에 기록한다. 설치·DB 접속·적용은 별도 승인 범위다.
-
-프로시저의 SQL SECURITY DEFINER에는 생성한 DB 주체가 사용된다. 적용 전 수명과 최소
-권한을 가진 전용 주체를 정하고 유지해야 한다. 게임 서버 주체에는 이 프로시저 실행 권한만
-부여하는 것을 기준으로 하며 테이블 쓰기·DDL·마이그레이션 권한을 넘기지 않는다.
-실제 DB 사용자 생성이나 GRANT는 이 파일에 포함하지 않는다.
-
-### `login_google_account` Req/Res
-
-IN 파라미터는 `subject` 하나다. 서버가 Google 토큰의 서명·허용 알고리즘·발급자·audience·
-만료와 인증 흐름에 필요한 nonce를 검증한 뒤 그 `sub`를 전달한다. 검증된 Google 발급자를
-서버 설정으로 `google`에 연결하며 이메일이나 클라이언트의 provider/accountId를 신뢰하지 않는다.
-프로시저는 토큰 검증을 대신하지 않으며, 무효 입력과 SQL 오류에는 예외를 반환한다.
-입력 SQL 타입은 UTF-8 TEXT로 길이를 검사한 후 ASCII만 허용한다. C++에서는 `wstring`으로
-바인딩하며 NULL·빈 값·255바이트 초과·비ASCII·NUL 문자를 호출 전에도 거절한다.
-
-결과는 컬럼이 있는 결과셋 하나에 정확히 한 행이며 모든 컬럼은 NOT NULL이다.
-
-| 순서 | 컬럼 | C++ 읽기 타입 / 의미 |
-|---|---|---|
-| 1 | `result_code` | `int32_t`: 0 로그인 허용, 1 계정 정지 |
-| 2 | `account_id` | `uint64_t`: 게임 계정 ID, 0보다 큼 |
-| 3 | `account_status` | `int32_t`: 0 정상, 1 정지 |
-| 4 | `was_created` | `int32_t`: 0 기존, 1 이번 호출에서 생성 |
-
-`result_code`와 `account_status`는 일치해야 하며 정지에서는 `was_created=0`이다.
-서버는 결과셋·행 개수·컬럼 개수·NULL·값 범위를 검사한다. ODBC의 `IsSuccess()`가 참이어도
-`result_code=1`은 게임 로그인 거절이다. 결과 행이 없으면 기본값 0으로 로그인시키지 않는다.
-
-한 CALL은 기존 ODBC 실행기가 autocommit OFF로 실행하며 커밋/전체 롤백을 소유한다.
-프로시저 내부에서 트랜잭션을 시작하거나 커밋하지 않는다. 최초 가입의 유일키 충돌에만
-savepoint로 해당 호출이 만든 계정을 부분 롤백하고 현재 연결된 계정을 잠금 조회한다.
-이 savepoint 부분 롤백은 외부 트랜잭션을 종료하지 않는다. 정지 계정은 마지막 로그인 시각을
-갱신하지 않는다. 데드락·타임아웃·연결 오류는 기존 실행기로 전달하고 자동 재시도하지 않는다.
-불확실한 실행 결과가 있으면 계정 생성 실패나 미커밋을 단정하지 않는다.
-
-서버 인증 I/O와 DB 대기는 town strand를 막지 않아야 한다. 완료 시 같은 세션·로그인 시도가
-여전히 유효한지 확인하고 검증된 계정 ID를 게임 세션에 연결한다. 미인증 게임 요청과
-DB 미구성·버전 불일치·인증 실패를 기존 게스트 입장 경로로 우회하지 않는다.
-서버 담당은 `Database/LoginGoogleAccountProcedure`의 바인딩·결과 검사와
-`TownAuthentication.cpp`의 DB 호출·세션 계정 연결 소스를 추가했다. 인증/스키마 증명은
-각 검증기만 생성할 수 있으며 해당 검증기는 아직 구현·설치하지 않았다. 네트워크 로그인
-진입점과 클라이언트 인증 흐름도 미연결이다. 현재 소스로는 로그인 성공 상태를 만들 수 없고
-기존 무인증 EnterTown도 거절하므로 실제 플레이 준비가 완료된 상태가 아니다.
-Google 검증과 클라이언트 인증 흐름, 실제 드라이버 결과 매핑·동시 로그인은 아직 실행 검증하지 않았다.
-
-설계 근거: [Google OIDC 식별자와 ID 토큰](https://developers.google.com/identity/openid-connect/openid-connect),
-[MySQL 바이너리 문자열 비교](https://dev.mysql.com/doc/refman/8.0/en/binary-varbinary.html),
-[savepoint 부분 롤백](https://dev.mysql.com/doc/refman/8.0/en/savepoint.html),
-[DDL의 원자성과 트랜잭션 구분](https://dev.mysql.com/doc/refman/8.0/en/atomic-ddl.html).
+Auth 기동 시 실제 DB 적용 이력·체크섬·구조 검증에 실패하면 로그인/입장을 503으로 차단한다.
+[DB 마이그레이션 규칙 v1.1.1](../../docs/workflows/DATABASE_MIGRATIONS.md)의 수동 Up/Down을
+사용하며 관련 서비스 종료 → Up → 동일 SQL 배포 → Auth 검증 기동 → 타운/룸 기동 순서를 따른다.
+빌드, 테스트, 서버 실행, 패키지 설치, 실제 DB/Google 요청은 수행하지 않았다.

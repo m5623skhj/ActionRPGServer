@@ -12,7 +12,7 @@
 #include <mutex>
 #include <thread>
 
-namespace TownServer::Database
+namespace ActionRPG::Database
 {
     namespace
     {

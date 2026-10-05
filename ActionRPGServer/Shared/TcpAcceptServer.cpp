@@ -8,10 +8,10 @@ namespace ActionRPG::Network
 {
     TcpAcceptServer::TcpAcceptServer(
         asio::io_context& inIoContext,
-        const asio::ip::tcp::endpoint& inEndpoint)
+        const asio::ip::tcp::endpoint& inEndpoint, std::shared_ptr<asio::ssl::context> inTlsContext)
         : ioContext(inIoContext),
           endpoint(inEndpoint),
-          acceptor(asio::make_strand(inIoContext))
+          acceptor(asio::make_strand(inIoContext)), tlsContext(std::move(inTlsContext))
     {
     }
 
@@ -64,7 +64,7 @@ namespace ActionRPG::Network
                         [this](const std::uint64_t inClosedSessionId)
                         {
                             RemoveSession(inClosedSessionId);
-                        });
+                        }, tlsContext);
                     sessions.emplace(sessionId, session);
                     HandleAcceptedSession(std::move(session));
                 }

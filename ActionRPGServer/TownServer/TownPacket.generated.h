@@ -44,6 +44,8 @@ namespace TownProtocol
         PartyJoinAnswer = 33,
         PartyJoinRequestUpdate = 34,
         PartyKicked = 35,
+        AdmissionTicketRequest = 36,
+        AdmissionResult = 37,
     };
 
     struct EnterTownRequest
@@ -274,6 +276,16 @@ namespace TownProtocol
     {
         std::uint64_t partyId{};
         std::uint64_t leaderPlayerId{};
+    };
+
+    struct AdmissionTicketRequest
+    {
+        std::string ticket{};
+    };
+
+    struct AdmissionResult
+    {
+        std::uint8_t result{};
     };
 
 }

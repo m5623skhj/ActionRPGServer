@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <vector>
 
@@ -38,13 +39,13 @@ namespace TownServer::Network
 
     private:
         friend class Domain::TownInstance;
-        enum class LoginState { Unauthenticated, VerifyingGoogle, ResolvingAccount, Authenticated, Closed };
-        // Begin/resolve/complete are owned by the town strand; close may invalidate them from any strand.
+        enum class LoginState { Unauthenticated, ResolvingAccount, Authenticated, Closed };
+        // Admission start/complete belong to the town strand; close invalidates them from any strand.
         std::uint64_t BeginAuthentication() noexcept;
-        bool BeginAccountLookup(std::uint64_t inAttemptId) noexcept;
         bool CompleteAuthentication(std::uint64_t inAttemptId, std::uint64_t inAccountId) noexcept;
         [[nodiscard]] bool MatchesAuthentication(std::uint64_t inAttemptId) const noexcept;
         void CloseAuthentication() noexcept;
+        void SetAdmissionDeadline(std::chrono::steady_clock::time_point inDeadline) noexcept;
         void HandlePacket(std::vector<std::uint8_t> inPacket);
 
         std::shared_ptr<ActionRPG::Network::TcpSession> tcpSession;
@@ -54,6 +55,7 @@ namespace TownServer::Network
         std::atomic_uint32_t characterId{};
         std::atomic_uint64_t accountId{};
         std::atomic_uint64_t loginAttemptId{};
+        std::atomic_int64_t admissionDeadline{};
         std::atomic<LoginState> loginState{ LoginState::Unauthenticated };
         bool enterRequested = false;
     };

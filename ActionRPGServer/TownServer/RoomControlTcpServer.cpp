@@ -136,12 +136,13 @@ namespace TownServer::Network
         roomServers.at(sessionId).session->Start();
     }
 
-    void RoomControlTcpServer::LeaveRoom(const Protocol::RoomId inRoomId, const Protocol::PlayerId inPlayerId)
+    void RoomControlTcpServer::LeaveRoom(const Protocol::RoomId inRoomId, const Protocol::PlayerId inPlayerId, std::function<void()> inReleased)
     {
-        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId]()
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, released = std::move(inReleased)]() mutable
         {
             const auto room = roomToServerSession.find(inRoomId);
             if (room == roomToServerSession.end()) return;
+            if (released) pendingReleases[{inRoomId, inPlayerId}] = PendingRelease{room->second, std::move(released)};
             const auto server = roomServers.find(room->second);
             if (server != roomServers.end()) server->second.session->Send(
                 Protocol::Encode(Protocol::LeaveRoom{inRoomId, inPlayerId}));
@@ -154,8 +155,7 @@ namespace TownServer::Network
         {
             if (iterator->second == inSessionId)
             {
-                townInstance->HandleRoomEnded(Protocol::RoomEnded{
-                    iterator->first, Protocol::RoomEndReason::Aborted, {}});
+                townInstance->HandleRoomControlLost(iterator->first);
                 iterator = roomToServerSession.erase(iterator);
             }
             else
@@ -334,6 +334,14 @@ namespace TownServer::Network
             const std::optional<Protocol::LeaveRoom> packet = Protocol::DecodeLeaveRoom(inPacket);
             if (!packet.has_value())
             { CloseInvalidSession(state); return; }
+            const auto release = pendingReleases.find({packet->roomId, packet->playerId});
+            if (release != pendingReleases.end())
+            {
+                if (release->second.serverSessionId != inSessionId) { CloseInvalidSession(state); return; }
+                auto completed = std::move(release->second.released);
+                pendingReleases.erase(release);
+                completed();
+            }
             // A disconnect notification may arrive after a successful finish removed the mapping.
             if (!roomToServerSession.contains(packet->roomId)) return;
             if (roomToServerSession.at(packet->roomId) != inSessionId)

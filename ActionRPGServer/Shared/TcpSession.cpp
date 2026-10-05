@@ -10,11 +10,14 @@ namespace ActionRPG::Network
     TcpSession::TcpSession(
         const std::uint64_t inSessionId,
         asio::ip::tcp::socket inSocket,
-        CloseHandler inCloseHandler)
+        CloseHandler inCloseHandler, std::shared_ptr<asio::ssl::context> inTlsContext)
         : sessionId(inSessionId),
           socket(std::move(inSocket)),
+          tlsContext(std::move(inTlsContext)),
+          handshakeDeadline(socket.get_executor()),
           closeHandler(std::move(inCloseHandler))
     {
+        if (tlsContext) tls = std::make_unique<asio::ssl::stream<asio::ip::tcp::socket&>>(socket, *tlsContext);
     }
 
     void TcpSession::Start()
@@ -22,7 +25,17 @@ namespace ActionRPG::Network
         const std::shared_ptr<TcpSession> self = shared_from_this();
         asio::dispatch(socket.get_executor(), [self]()
         {
-            self->ReadHeader();
+            if (self->stopped) return;
+            if (!self->tls) { self->ReadHeader(); return; }
+            self->handshakeDeadline.expires_after(std::chrono::seconds(10));
+            self->handshakeDeadline.async_wait([self](const asio::error_code& inError)
+            { if (!inError) self->Close(); });
+            self->tls->async_handshake(asio::ssl::stream_base::server, [self](const asio::error_code& inError)
+            {
+                self->handshakeDeadline.cancel();
+                if (inError || self->stopped) { self->Close(); return; }
+                self->ReadHeader();
+            });
         });
     }
 
@@ -57,7 +70,7 @@ namespace ActionRPG::Network
     void TcpSession::ReadHeader()
     {
         const std::shared_ptr<TcpSession> self = shared_from_this();
-        asio::async_read(socket, asio::buffer(receiveHeader), [self](const asio::error_code& inError, const std::size_t)
+        Read(asio::buffer(receiveHeader), [self](const asio::error_code& inError, const std::size_t)
         {
             if (inError)
             {
@@ -87,7 +100,7 @@ namespace ActionRPG::Network
         }
 
         const std::shared_ptr<TcpSession> self = shared_from_this();
-        asio::async_read(socket, asio::buffer(receiveBody), [self](const asio::error_code& inError, const std::size_t)
+        Read(asio::buffer(receiveBody), [self](const asio::error_code& inError, const std::size_t)
         {
             if (inError)
             {
@@ -148,7 +161,7 @@ namespace ActionRPG::Network
         const auto packet = std::make_shared<std::vector<std::uint8_t>>(std::move(sendQueue.front()));
         sendQueue.pop_front();
         writeInProgress = true;
-        asio::async_write(socket, asio::buffer(*packet), [self, packet](const asio::error_code& inError, const std::size_t)
+        Write(asio::buffer(*packet), [self, packet](const asio::error_code& inError, const std::size_t)
         {
             if (self->stopped) return;
             self->writeInProgress = false;
@@ -172,6 +185,7 @@ namespace ActionRPG::Network
 
         stopped = true;
         asio::error_code ignoredError;
+        handshakeDeadline.cancel(ignoredError);
         socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignoredError);
         socket.close(ignoredError);
         sendQueue.clear();

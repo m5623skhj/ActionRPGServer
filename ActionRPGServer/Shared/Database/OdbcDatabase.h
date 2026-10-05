@@ -5,7 +5,7 @@
 #include <asio.hpp>
 #include <memory>
 
-namespace TownServer::Database
+namespace ActionRPG::Database
 {
     struct DatabaseOptions
     {

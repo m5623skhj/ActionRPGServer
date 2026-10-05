@@ -4,7 +4,7 @@
 #include "DungeonCatalog.h"
 #include "TownInstance.h"
 #include "TownMap.h"
-#include "Database/OdbcDatabase.h"
+#include "../Shared/Database/OdbcDatabase.h"
 
 #include <asio.hpp>
 #include <Windows.h>
@@ -126,8 +126,14 @@ int main(const int inArgumentCount, char* inArguments[])
             if (const auto control = weakControl.lock())
                 control->UpdatePlayerProgress(inRoomId, inPlayerId, std::move(inProgression));
         });
+        auto tls = std::make_shared<asio::ssl::context>(asio::ssl::context::tls_server);
+        if (SSL_CTX_set_min_proto_version(tls->native_handle(), TLS1_2_VERSION) != 1)
+            throw std::runtime_error("Unable to configure Town TLS minimum version.");
+        tls->use_certificate_chain_file(ActionRPG::Authentication::RequiredEnvironment("ACTIONRPG_TOWN_TLS_CERT"));
+        tls->use_private_key_file(ActionRPG::Authentication::RequiredEnvironment("ACTIONRPG_TOWN_TLS_KEY"), asio::ssl::context::pem);
+        if (SSL_CTX_check_private_key(tls->native_handle()) != 1) throw std::runtime_error("Town TLS key mismatch.");
         TownClientTcpServer server(
-            ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer);
+            ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer, tls);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
 
         shutdownSignals.async_wait([&server, &roomControlServer, database](const asio::error_code& inError, const int)

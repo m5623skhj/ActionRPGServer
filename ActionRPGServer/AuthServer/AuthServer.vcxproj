@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion><Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{f46ff118-31bb-4436-9b25-c758ae897ed9}</ProjectGuid><RootNamespace>AuthServer</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest><VcpkgManifestRoot>$(MSBuildThisFileDirectory)..\..\</VcpkgManifestRoot>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets"><Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" /></ImportGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel><SDLCheck>true</SDLCheck><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <PreprocessorDefinitions>CPPHTTPLIB_OPENSSL_SUPPORT;JWT_DISABLE_PICOJSON;ASIO_STANDALONE;WIN32_LEAN_AND_MEAN;NOMINMAX;_WIN32_WINNT=0x0A00;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link><SubSystem>Console</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation><AdditionalDependencies>odbc32.lib;ws2_32.lib;libssl.lib;libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Database\LoginGoogleAccountProcedure.cpp" />
+    <ClCompile Include="Database\GetAuthAccountStatusProcedure.cpp" />
+    <ClCompile Include="Database\LoginSchemaVerifier.cpp" />
+    <ClCompile Include="Database\SchemaHistoryProcedure.cpp" />
+    <ClCompile Include="..\Shared\Database\OdbcDatabase.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SessionRegistry.h" /><ClInclude Include="GoogleIdTokenVerifier.h" />
+    <ClInclude Include="Database\LoginGoogleAccountProcedure.h" /><ClInclude Include="Database\GetAuthAccountStatusProcedure.h" /><ClInclude Include="Database\LoginSchemaVerifier.h" />
+    <ClInclude Include="Database\SchemaHistoryProcedure.h" />
+    <ClInclude Include="..\Shared\AuthTransport.h" /><ClInclude Include="..\Shared\Database\OdbcDatabase.h" /><ClInclude Include="..\Shared\Database\StoreProcedure.h" />
+    <None Include="DEVELOPMENT.md" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

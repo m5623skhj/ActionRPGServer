@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asio.hpp>
+#include <asio/ssl.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -13,7 +14,8 @@ namespace ActionRPG::Network
     class TcpAcceptServer
     {
     public:
-        TcpAcceptServer(asio::io_context& inIoContext, const asio::ip::tcp::endpoint& inEndpoint);
+        TcpAcceptServer(asio::io_context& inIoContext, const asio::ip::tcp::endpoint& inEndpoint,
+            std::shared_ptr<asio::ssl::context> inTlsContext = {});
         virtual ~TcpAcceptServer() = default;
 
         void Start();
@@ -35,6 +37,7 @@ namespace ActionRPG::Network
         asio::io_context& ioContext;
         asio::ip::tcp::endpoint endpoint;
         asio::ip::tcp::acceptor acceptor;
+        std::shared_ptr<asio::ssl::context> tlsContext;
         std::unordered_map<std::uint64_t, std::shared_ptr<TcpSession>> sessions;
         std::uint64_t nextSessionId = 1;
         bool running = false;

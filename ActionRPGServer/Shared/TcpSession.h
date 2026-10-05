@@ -1,13 +1,16 @@
 #pragma once
 
 #include <asio.hpp>
+#include <asio/ssl.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <vector>
+#include <utility>
 
 namespace ActionRPG::Network
 {
@@ -17,7 +20,9 @@ namespace ActionRPG::Network
         using CloseHandler = std::function<void(std::uint64_t)>;
         using ReceiveHandler = std::function<void(std::vector<std::uint8_t>)>;
 
-        TcpSession(std::uint64_t inSessionId, asio::ip::tcp::socket inSocket, CloseHandler inCloseHandler);
+        TcpSession(std::uint64_t inSessionId, asio::ip::tcp::socket inSocket, CloseHandler inCloseHandler,
+            std::shared_ptr<asio::ssl::context> inTlsContext = {});
+        [[nodiscard]] bool IsSecure() const noexcept { return tls != nullptr; }
 
         void Start();
         void Stop();
@@ -39,6 +44,21 @@ namespace ActionRPG::Network
 
         std::uint64_t sessionId;
         asio::ip::tcp::socket socket;
+        std::shared_ptr<asio::ssl::context> tlsContext;
+        std::unique_ptr<asio::ssl::stream<asio::ip::tcp::socket&>> tls;
+        asio::steady_timer handshakeDeadline;
+        template<typename TBuffer, typename THandler>
+        void Read(const TBuffer& inBuffer, THandler inHandler)
+        {
+            if (tls) asio::async_read(*tls, inBuffer, std::move(inHandler));
+            else asio::async_read(socket, inBuffer, std::move(inHandler));
+        }
+        template<typename TBuffer, typename THandler>
+        void Write(const TBuffer& inBuffer, THandler inHandler)
+        {
+            if (tls) asio::async_write(*tls, inBuffer, std::move(inHandler));
+            else asio::async_write(socket, inBuffer, std::move(inHandler));
+        }
         CloseHandler closeHandler;
         ReceiveHandler receiveHandler;
         std::array<std::uint8_t, 4> receiveHeader{};

@@ -375,6 +375,29 @@ namespace TownProtocol
         return writer.Finish();
     }
 
+    std::vector<std::uint8_t> Encode(const AdmissionTicketRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::AdmissionTicketRequest);
+        writer.WriteString(inPacket.ticket);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const AdmissionResult& inPacket)
+    {
+        PacketWriter writer(PacketType::AdmissionResult);
+        writer.WriteUInt8(inPacket.result);
+        return writer.Finish();
+    }
+
+    std::optional<AdmissionTicketRequest> DecodeAdmissionTicketRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        AdmissionTicketRequest packet;
+        if (!ReadExpectedType(reader, PacketType::AdmissionTicketRequest) || !reader.ReadString(packet.ticket)
+            || !reader.Finished() || packet.ticket.size() != 64) return std::nullopt;
+        return packet;
+    }
+
     std::vector<std::uint8_t> Encode(const EnterTownResponse& inPacket)
     {
         PacketWriter writer(PacketType::EnterTownResponse);

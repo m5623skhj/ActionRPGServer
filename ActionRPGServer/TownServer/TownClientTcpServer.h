@@ -21,7 +21,8 @@ namespace TownServer::Network
     public:
         TownClientTcpServer(asio::io_context& inIoContext, const asio::ip::tcp::endpoint& inEndpoint,
             std::shared_ptr<Domain::TownInstance> inTownInstance,
-            std::weak_ptr<RoomControlTcpServer> inRoomControlServer);
+            std::weak_ptr<RoomControlTcpServer> inRoomControlServer,
+            std::shared_ptr<asio::ssl::context> inTlsContext);
 
         void Start();
         void Stop();

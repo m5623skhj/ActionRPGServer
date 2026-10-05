@@ -309,12 +309,12 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, request = inRequest]()
         {
             const auto room = self->rooms.find(request.roomId);
-            if (room == self->rooms.end()) return;
-            room->second->Leave(request.playerId, [self, request](const bool removed, const bool empty)
+            if (room == self->rooms.end()) { self->Send(Protocol::Encode(request)); return; }
+            room->second->Leave(request.playerId, [self, request](const bool, const bool empty)
             {
-                asio::dispatch(self->strand, [self, request, removed, empty]()
+                asio::dispatch(self->strand, [self, request, empty]()
                 {
-                    if (removed) self->Send(Protocol::Encode(request));
+                    self->Send(Protocol::Encode(request)); // Both removal and confirmed absence release ownership.
                     if (empty) self->RemoveRoom(request.roomId, true);
                 });
             });

@@ -338,3 +338,15 @@ Packet:
         Name: partyId
       - Type: std::uint64_t
         Name: leaderPlayerId
+
+  - Type: RequestPacket
+    PacketName: AdmissionTicketRequest
+    Items:
+      - Type: std::string
+        Name: ticket
+
+  - Type: ReplyPacket
+    PacketName: AdmissionResult
+    Items:
+      - Type: std::uint8_t
+        Name: result

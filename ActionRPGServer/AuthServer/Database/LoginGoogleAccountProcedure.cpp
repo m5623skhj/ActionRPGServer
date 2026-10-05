@@ -1,6 +1,6 @@
 #include "LoginGoogleAccountProcedure.h"
 
-namespace TownServer::Database
+namespace ActionRPG::Database
 {
     namespace
     {

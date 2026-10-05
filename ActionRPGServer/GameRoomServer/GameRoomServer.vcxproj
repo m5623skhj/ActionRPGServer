@@ -151,6 +151,7 @@
     </Manifest>
   </ItemDefinitionGroup>
 
+  <ItemDefinitionGroup><Link><AdditionalDependencies>libssl.lib;libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
     <ClCompile Include="..\Shared\TcpSession.cpp" />

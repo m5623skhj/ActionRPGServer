@@ -1,24 +1,23 @@
 #pragma once
 
-#include "StoreProcedure.h"
+#include "../../Shared/Database/StoreProcedure.h"
 
-namespace TownServer::Database
+namespace ActionRPG::Database
 {
-    struct LoginGoogleAccountRequest { std::wstring subject; };
-    struct LoginGoogleAccountResponse
+    struct GetAuthAccountStatusRequest { std::uint64_t accountId{}; };
+    struct GetAuthAccountStatusResponse
     {
         std::int32_t resultCode{};
         std::uint64_t accountId{};
-        std::int32_t accountStatus{};
-        bool wasCreated{};
+        std::optional<std::int32_t> accountStatus;
         bool hasRow{};
     };
 
-    class LoginGoogleAccountProcedure final
-        : public IStoreProcedure<LoginGoogleAccountRequest, LoginGoogleAccountResponse>
+    class GetAuthAccountStatusProcedure final
+        : public IStoreProcedure<GetAuthAccountStatusRequest, GetAuthAccountStatusResponse>
     {
     public:
-        [[nodiscard]] std::wstring_view GetName() const noexcept override { return L"login_google_account"; }
+        [[nodiscard]] std::wstring_view GetName() const noexcept override { return L"get_auth_account_status"; }
         void BindParameters(ProcedureParameters& inParameters, Response& outResponse) const override;
         void ReadRow(ProcedureRow& inRow, std::size_t inResultIndex, Response& outResponse) const override;
         void ValidateResults(std::size_t inResultSetCount, std::size_t inRowCount,

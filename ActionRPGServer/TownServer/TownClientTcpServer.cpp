@@ -12,11 +12,12 @@ namespace TownServer::Network
         asio::io_context& inIoContext,
         const asio::ip::tcp::endpoint& inEndpoint,
         std::shared_ptr<Domain::TownInstance> inTownInstance,
-        std::weak_ptr<RoomControlTcpServer> inRoomControlServer)
-        : TcpAcceptServer(inIoContext, inEndpoint),
+        std::weak_ptr<RoomControlTcpServer> inRoomControlServer, std::shared_ptr<asio::ssl::context> inTlsContext)
+        : TcpAcceptServer(inIoContext, inEndpoint, inTlsContext),
           townInstance(std::move(inTownInstance)),
           roomControlServer(std::move(inRoomControlServer))
     {
+        if (!inTlsContext) throw std::invalid_argument("Town client TLS is required.");
     }
 
     void TownClientTcpServer::Start()

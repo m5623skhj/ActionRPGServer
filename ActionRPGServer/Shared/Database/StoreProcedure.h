@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 
-namespace TownServer::Database
+namespace ActionRPG::Database
 {
     inline constexpr std::size_t MAX_STRING_CHARACTERS = 32768;
 

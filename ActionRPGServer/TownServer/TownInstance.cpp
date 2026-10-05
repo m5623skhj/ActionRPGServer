@@ -218,11 +218,9 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self]()
         {
             self->running = false;
-            while (!self->pendingGoogleLogins.empty())
-            {
-                const auto& pending = *self->pendingGoogleLogins.begin();
-                self->FinishGoogleLogin(pending.first, pending.second.attemptId, Authentication::LoginResult::Stopped);
-            }
+            if (self->admissionTimer) self->admissionTimer->cancel();
+            for (const auto& [id, admission] : self->admissions)
+                if (const auto session = admission.session.lock()) session->Stop();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
         });
@@ -240,14 +238,12 @@ namespace TownServer::Domain
     }
 
     void TownInstance::Leave(const std::uint64_t inSessionId,
-        std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId)> inDungeonLeaveHandler)
+        std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId, std::function<void()>)> inDungeonLeaveHandler)
     {
         const std::shared_ptr<TownInstance> self = shared_from_this();
         asio::dispatch(strand, [self, inSessionId, handler = std::move(inDungeonLeaveHandler)]()
         {
-            if (const auto pending = self->pendingGoogleLogins.find(inSessionId);
-                pending != self->pendingGoogleLogins.end())
-                self->FinishGoogleLogin(inSessionId, pending->second.attemptId, Authentication::LoginResult::Stopped);
+            bool awaitingRoom = false;
             ActionRPG::RoomControlProtocol::RoomId previousRoomId = 0;
             const auto session = self->sessionToPlayer.find(inSessionId);
             if (session != self->sessionToPlayer.end())
@@ -258,10 +254,16 @@ namespace TownServer::Domain
                     previousRoomId = player->second.dungeonRoomId;
                     const auto roomId = player->second.dungeonRoomId != 0
                         ? player->second.dungeonRoomId : player->second.reservedDungeonRoomId;
-                    if (roomId != 0) handler(roomId, session->second);
+                    if (roomId != 0)
+                    {
+                        awaitingRoom = true;
+                        handler(roomId, session->second, [weakTown = self->weak_from_this(), inSessionId]
+                        { if (const auto town = weakTown.lock()) town->ReleaseAdmission(inSessionId); });
+                    }
                 }
             }
             self->LeaveOnStrand(inSessionId);
+            if (!awaitingRoom) self->ReleaseAdmission(inSessionId);
             if (previousRoomId != 0) self->RefreshDungeonLeader(previousRoomId);
         });
     }
@@ -956,6 +958,18 @@ namespace TownServer::Domain
         });
     }
 
+    void TownInstance::HandleRoomControlLost(ActionRPG::RoomControlProtocol::RoomId inRoomId)
+    {
+        const auto self = shared_from_this();
+        asio::post(strand, [self, inRoomId]
+        {
+            // Preserve the room association until Disconnect: channel loss is not proof of removal.
+            for (const auto& [id, entry] : self->players)
+                if (entry.dungeonRoomId == inRoomId || entry.reservedDungeonRoomId == inRoomId)
+                    entry.session->Stop();
+        });
+    }
+
     std::size_t TownInstance::SectorHash::operator()(const SectorCoordinate& inCoordinate) const noexcept
     {
         const std::uint64_t x = static_cast<std::uint32_t>(inCoordinate.x);
@@ -991,6 +1005,7 @@ namespace TownServer::Domain
         std::vector<PlayerId> changedSectorPlayers;
         for (auto& [playerId, entry] : players)
         {
+            if (entry.session->GetAccountId() == 0) { entry.session->Stop(); continue; }
             if (entry.dungeonRoomId != 0)
             {
                 continue;

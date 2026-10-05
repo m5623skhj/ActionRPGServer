@@ -6,8 +6,8 @@
 #include "DungeonCatalog.h"
 #include "TownMap.h"
 #include "../Shared/SkillTreeCatalog.h"
-#include "Database/OdbcDatabase.h"
-#include "Authentication/GoogleLogin.h"
+#include "../Shared/Database/OdbcDatabase.h"
+#include "Authentication/AuthControlClient.h"
 
 #include <asio.hpp>
 
@@ -21,6 +21,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+namespace TownServer { namespace Database = ActionRPG::Database; }
 
 namespace TownServer::Network
 {
@@ -38,12 +40,8 @@ namespace TownServer::Domain
             DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory,
             std::shared_ptr<Database::OdbcDatabase> inDatabase);
 
-        using GoogleLoginHandler = std::function<void(Authentication::LoginResult)>;
-        // Server-only adapter API, not a packet handler. Start verification off the town strand.
-        void BeginGoogleLogin(std::shared_ptr<Network::PlayerSession> inSession,
-            std::function<void(std::uint64_t)> inStarted, GoogleLoginHandler inCompleted);
-        void ResolveGoogleAccount(Authentication::VerifiedGoogleIdentity inIdentity,
-            Authentication::VerifiedLoginSchema inSchema);
+        void Admit(std::shared_ptr<Network::PlayerSession> inSession, std::string inTicket);
+        void ReleaseAdmission(std::uint64_t inSessionId);
 
         /// Handler runs on the town strand. Re-find players by ID and validate their current session/state.
         template <typename TProcedure, typename THandler>
@@ -70,7 +68,7 @@ namespace TownServer::Domain
         void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
             std::uint32_t inCharacterId);
         void Leave(std::uint64_t inSessionId,
-            std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId)> inDungeonLeaveHandler);
+            std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId, std::function<void()>)> inDungeonLeaveHandler);
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
         void ValidateDungeonRequest(std::uint64_t inSessionId, std::string inZoneId,
             std::uint32_t inDungeonId, DungeonRequestHandler inHandler);
@@ -100,6 +98,7 @@ namespace TownServer::Domain
             bool inNotify = true);
         void HandleRoomStarted(ActionRPG::RoomControlProtocol::RoomStarted inRoomStarted);
         void HandleRoomEnded(ActionRPG::RoomControlProtocol::RoomEnded inRoomEnded);
+        void HandleRoomControlLost(ActionRPG::RoomControlProtocol::RoomId inRoomId);
 
     private:
         struct SectorCoordinate
@@ -133,15 +132,17 @@ namespace TownServer::Domain
             std::uint64_t accountId{};
         };
 
-        struct PendingGoogleLogin
+        struct Admission
         {
             std::weak_ptr<Network::PlayerSession> session;
             std::uint64_t attemptId{};
-            std::shared_ptr<asio::steady_timer> deadline;
-            GoogleLoginHandler completed;
+            std::string connection;
+            std::string lease;
+            std::chrono::steady_clock::time_point deadline;
+            std::chrono::steady_clock::time_point nextRenewal;
+            bool renewing{};
         };
-        void FinishGoogleLogin(std::uint64_t inSessionId, std::uint64_t inAttemptId,
-            Authentication::LoginResult inResult);
+        void PollAdmissions();
 
         void ScheduleTick();
         void Tick();
@@ -190,7 +191,9 @@ namespace TownServer::Domain
 
         asio::strand<asio::io_context::executor_type> strand;
         std::shared_ptr<Database::OdbcDatabase> database;
-        std::unordered_map<std::uint64_t, PendingGoogleLogin> pendingGoogleLogins;
+        std::shared_ptr<Authentication::AuthControlClient> authClient = std::make_shared<Authentication::AuthControlClient>();
+        std::unordered_map<std::uint64_t, Admission> admissions;
+        std::shared_ptr<asio::steady_timer> admissionTimer;
         asio::steady_timer tickTimer;
         std::chrono::steady_clock::time_point nextTickTime{};
         std::unordered_map<std::string, TownMap> maps;

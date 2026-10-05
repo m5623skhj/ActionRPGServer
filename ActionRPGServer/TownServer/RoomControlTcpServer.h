@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -38,9 +39,15 @@ namespace TownServer::Network
         void UpdatePlayerProgress(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::string inProgression);
         void LeaveRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId,
-            ActionRPG::RoomControlProtocol::PlayerId inPlayerId);
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::function<void()> inReleased = {});
 
     private:
+        struct PendingRelease
+        {
+            std::uint64_t serverSessionId{};
+            std::function<void()> released;
+        };
+        std::map<std::pair<std::uint64_t, std::uint64_t>, PendingRelease> pendingReleases;
         struct RoomServerState
         {
             std::shared_ptr<ActionRPG::Network::TcpSession> session;

@@ -1,153 +1,114 @@
 #include "TownInstance.h"
-
-#include "Database/LoginGoogleAccountProcedure.h"
 #include "PlayerSession.h"
+#include "Protocol.h"
 
 namespace TownServer::Domain
 {
-    namespace
-    {
-        constexpr auto LOGIN_TIMEOUT = std::chrono::seconds(60);
-    }
-
-    void TownInstance::BeginGoogleLogin(std::shared_ptr<Network::PlayerSession> inSession,
-        std::function<void(std::uint64_t)> inStarted, GoogleLoginHandler inCompleted)
+    void TownInstance::Admit(std::shared_ptr<Network::PlayerSession> inSession, std::string inTicket)
     {
         const auto self = shared_from_this();
-        asio::dispatch(strand, [self, session = std::move(inSession),
-            started = std::move(inStarted), completed = std::move(inCompleted)]() mutable
+        asio::post(strand, [self, session = std::move(inSession), ticket = std::move(inTicket)]
         {
-            if (!session || !started || !completed) return;
-            const auto sessionId = session->GetSessionId();
-            if (!self->running || !self->database || !self->database->IsConfigured())
+            if (!self->running || !ActionRPG::Authentication::IsToken(ticket)) { session->Stop(); return; }
+            const auto attempt = session->BeginAuthentication();
+            if (!attempt || self->admissions.size() >= 10000) { session->Stop(); return; }
+            const auto id = session->GetSessionId();
+            const auto connection = ActionRPG::Authentication::RandomToken();
+            const auto started = std::chrono::steady_clock::now();
+            self->admissions.emplace(id, Admission{session, attempt, connection, {}, started + std::chrono::seconds(10), {}});
+            if (!self->admissionTimer)
             {
-                session->Stop();
-                started(0);
-                completed(Authentication::LoginResult::Unavailable);
-                return;
+                self->admissionTimer = std::make_shared<asio::steady_timer>(self->strand);
+                self->PollAdmissions();
             }
-            if (self->pendingGoogleLogins.contains(sessionId) || session->GetPlayerId() != 0)
+            self->authClient->Request("/internal/consume", {{"ticket", ticket}, {"connection", connection}}, self->strand,
+                [weakTown = self->weak_from_this(), id, attempt, connection, started](auto response)
             {
-                started(0);
-                completed(Authentication::LoginResult::Busy);
-                return;
-            }
-            const auto attemptId = session->BeginAuthentication();
-            if (attemptId == 0)
-            {
-                started(0);
-                completed(Authentication::LoginResult::Busy);
-                return;
-            }
-            auto deadline = std::make_shared<asio::steady_timer>(self->strand);
-            deadline->expires_after(LOGIN_TIMEOUT);
-            self->pendingGoogleLogins.emplace(sessionId,
-                PendingGoogleLogin{ session, attemptId, deadline, std::move(completed) });
-            deadline->async_wait([weakTown = self->weak_from_this(), sessionId, attemptId](const asio::error_code& inError)
-            {
-                if (!inError)
-                    if (const auto town = weakTown.lock())
-                        town->FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Expired);
-            });
-            // This callback only hands the attempt context to the trusted adapter. The adapter must
-            // schedule HTTPS/JWKS/crypto work elsewhere; it must never block this strand.
-            started(attemptId);
-        });
-    }
-
-    /** Consume verified proofs once, then resolve an account on DB workers. Never retry a failed transaction. */
-    void TownInstance::ResolveGoogleAccount(Authentication::VerifiedGoogleIdentity inIdentity,
-        Authentication::VerifiedLoginSchema inSchema)
-    {
-        const auto self = shared_from_this();
-        asio::dispatch(strand, [self, identity = std::move(inIdentity), schema = std::move(inSchema)]()
-        {
-            const auto sessionId = identity.GetSessionId();
-            const auto attemptId = identity.GetAttemptId();
-            const auto pending = self->pendingGoogleLogins.find(sessionId);
-            if (pending == self->pendingGoogleLogins.end() || pending->second.attemptId != attemptId) return;
-            const auto session = pending->second.session.lock();
-            if (!session || session->GetSessionId() != sessionId || !session->MatchesAuthentication(attemptId))
-            {
-                self->FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Stopped);
-                return;
-            }
-            if (identity.IsExpired() || std::chrono::steady_clock::now() >= pending->second.deadline->expiry())
-            {
-                self->FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Expired);
-                return;
-            }
-            if (!self->running || !self->database->IsConfigured() || !schema.Matches(self->database))
-            {
-                self->FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Unavailable);
-                return;
-            }
-            if (!session->BeginAccountLookup(attemptId)) return;
-            auto procedure = std::make_unique<Database::LoginGoogleAccountProcedure>();
-            const auto& subject = identity.GetSubject();
-            procedure->req.subject.assign(subject.begin(), subject.end());
-            self->RunStoreProcedure(std::move(procedure), [identity](TownInstance& inTown,
-                Database::ProcedureResult<Database::LoginGoogleAccountResponse> inResult)
-            {
-                const auto sessionId = identity.GetSessionId();
-                const auto attemptId = identity.GetAttemptId();
-                const auto pending = inTown.pendingGoogleLogins.find(sessionId);
-                if (pending == inTown.pendingGoogleLogins.end() || pending->second.attemptId != attemptId) return;
-                const auto session = pending->second.session.lock();
-                if (!session || session->GetSessionId() != sessionId || !session->MatchesAuthentication(attemptId))
+                const auto town = weakTown.lock();
+                if (!town) return;
+                std::string lease;
+                std::uint64_t accountId{};
+                try
                 {
-                    inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Stopped);
+                    if (response && response->at("expiresIn") == 15)
+                    {
+                        lease = response->at("lease").template get<std::string>();
+                        accountId = response->at("accountId").template get<std::uint64_t>();
+                        if (!ActionRPG::Authentication::IsToken(lease)) lease.clear();
+                    }
+                }
+                catch (...) { lease.clear(); }
+                const auto found = town->admissions.find(id);
+                const auto session = found != town->admissions.end() ? found->second.session.lock() : nullptr;
+                const auto deadline = started + std::chrono::seconds(15);
+                if (!town->running || !session || !session->MatchesAuthentication(attempt)
+                    || lease.empty() || accountId == 0 || std::chrono::steady_clock::now() >= deadline)
+                {
+                    if (!lease.empty()) town->authClient->Request("/internal/release",
+                        {{"lease", lease}, {"connection", connection}}, town->strand, [](auto) {});
+                    if (session) session->Stop();
+                    town->admissions.erase(id);
                     return;
                 }
-                if (identity.IsExpired() || std::chrono::steady_clock::now() >= pending->second.deadline->expiry())
-                {
-                    inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Expired);
-                    return;
-                }
-                if (!inTown.running || !inResult.IsSuccess() || !inResult.response->hasRow)
-                {
-                    inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Failed);
-                    return;
-                }
-                // Transport success alone does not grant admission. A suspended account remains unauthenticated.
-                const auto& response = *inResult.response;
-                if (response.resultCode == 1)
-                {
-                    inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::AccountSuspended);
-                    return;
-                }
-                if (response.resultCode != 0 || response.accountStatus != 0
-                    || !session->CompleteAuthentication(attemptId, response.accountId))
-                {
-                    inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Failed);
-                    return;
-                }
-                inTown.FinishGoogleLogin(sessionId, attemptId, Authentication::LoginResult::Succeeded);
+                found->second.lease = lease;
+                found->second.deadline = deadline;
+                found->second.nextRenewal = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                session->SetAdmissionDeadline(deadline);
+                if (!session->CompleteAuthentication(attempt, accountId)) { session->Stop(); return; }
+                session->Send(TownProtocol::Encode(TownProtocol::AdmissionResult{0}));
             });
         });
     }
 
-    void TownInstance::FinishGoogleLogin(const std::uint64_t inSessionId, const std::uint64_t inAttemptId,
-        const Authentication::LoginResult inResult)
+    void TownInstance::ReleaseAdmission(std::uint64_t inSessionId)
     {
-        const auto found = pendingGoogleLogins.find(inSessionId);
-        if (found == pendingGoogleLogins.end() || found->second.attemptId != inAttemptId) return;
-        auto pending = std::move(found->second);
-        pendingGoogleLogins.erase(found);
-        asio::error_code ignoredError;
-        pending.deadline->cancel(ignoredError);
-        const auto session = pending.session.lock();
-        if (!session || session->GetSessionId() != inSessionId) return;
-        if (inResult == Authentication::LoginResult::Succeeded)
+        const auto self = shared_from_this();
+        asio::post(strand, [self, inSessionId]
         {
-            if (session->GetAccountId() == 0) return;
-        }
-        else
+            const auto found = self->admissions.find(inSessionId);
+            if (found == self->admissions.end()) return;
+            const auto admission = found->second;
+            self->admissions.erase(found);
+            if (!admission.lease.empty()) self->authClient->Request("/internal/release",
+                {{"lease", admission.lease}, {"connection", admission.connection}}, self->strand, [](auto) {});
+        });
+    }
+
+    void TownInstance::PollAdmissions()
+    {
+        if (!running) return;
+        const auto now = std::chrono::steady_clock::now();
+        for (auto& [id, admission] : admissions)
         {
-            const bool currentAttempt = session->MatchesAuthentication(inAttemptId);
-            session->Stop();
-            if (!currentAttempt) return;
+            const auto session = admission.session.lock();
+            if (!session) continue; // An unconfirmed dungeon release retains ownership in Auth.
+            if (admission.deadline <= now) { session->Stop(); continue; }
+            if (admission.lease.empty() || admission.renewing || admission.nextRenewal > now) continue;
+            admission.renewing = true;
+            const auto connection = admission.connection;
+            authClient->Request("/internal/renew", {{"lease", admission.lease}, {"connection", connection}}, strand,
+                [weakTown = weak_from_this(), id, connection, now](auto response)
+            {
+                const auto town = weakTown.lock();
+                if (!town) return;
+                const auto found = town->admissions.find(id);
+                if (found == town->admissions.end() || found->second.connection != connection) return;
+                auto& admission = found->second;
+                admission.renewing = false;
+                const auto session = admission.session.lock();
+                if (!session) return;
+                bool valid{};
+                try { valid = response && response->at("valid") == true && response->at("expiresIn") == 15; }
+                catch (...) {}
+                if (!valid || std::chrono::steady_clock::now() >= admission.deadline)
+                { session->Stop(); return; }
+                admission.deadline = now + std::chrono::seconds(15);
+                admission.nextRenewal = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                session->SetAdmissionDeadline(admission.deadline);
+            });
         }
-        pending.completed(inResult);
+        admissionTimer->expires_after(std::chrono::seconds(1));
+        admissionTimer->async_wait([weakTown = weak_from_this()](const asio::error_code& inError)
+        { if (!inError) if (const auto town = weakTown.lock()) town->PollAdmissions(); });
     }
 }

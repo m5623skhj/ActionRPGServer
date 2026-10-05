@@ -296,6 +296,8 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, resultHandler = std::move(inResultHandler)]() mutable
         {
             const bool removed = self->enteredPlayers.erase(inPlayerId) > 0;
+            // Revoke the reservation as well: an outstanding join must not re-enter after release.
+            self->expectedPlayers.erase(inPlayerId);
             const auto player = self->players.find(inPlayerId);
             if (player != self->players.end())
             {
