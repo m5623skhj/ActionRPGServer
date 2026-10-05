@@ -296,3 +296,130 @@ S2C 결과는 다음 세 곳에 등록한다.
 - `Player.h/.cpp`: 네트워크 비종속 플레이어 상태
 - `TcpSession.h/.cpp`: TCP framing과 비동기 송수신
 - `NetworkConstants.h`: body 및 송신 큐 상한
+
+## 9. ODBC 저장 프로시저 실행
+
+`Database/OdbcDatabase`는 마을 서버 안에서 DB 전용 작업 큐와 커넥션 풀을 운영한다.
+`TownInstance::RunStoreProcedure()`로 실행하면 완료 콜백이 town strand에서 호출된다.
+DB worker의 입력 바인딩·결과 매핑에서는 마을 상태를 접근하지 않는다.
+
+### 연결과 실행 범위
+
+- 프로세스 환경 변수 `ACTIONRPG_DB_CONNECTION_STRING`으로 ODBC 연결 문자열을 전달한다.
+  비밀정보를 소스·설정 사본·로그·명령 인자에 남기지 않는다. 실행 환경에 대상 DB용
+  ODBC 드라이버가 필요하며 드라이버와 서버 프로그램의 32/64비트 구성이 일치해야 한다.
+- 변수가 없으면 DB 기능이 비활성화되고 기존 마을 기능은 유지된다. DB 요청에는
+  `NotConfigured` 오류가 비동기로 반환된다.
+- 연결은 첫 요청에서 생성하고 worker별로 유지한다. 기본 연결 수 2, 대기 요청 상한 128,
+  큐 대기 제한 30초, 연결 제한 5초, statement 제한 10초다. 값은 `DatabaseOptions`에서 지정한다.
+- 연결 실패나 실행·매핑 오류 후 해당 연결을 폐기한다. 다음 새 요청에서 다시 연결하며,
+  실패한 요청 자체를 자동 재실행하지 않는다. 경고·잘림·타임아웃 옵션 대체도 오류로 취급한다.
+- 연결·query 타임아웃을 설정하고 확인할 수 있는 드라이버가 필요하다. 타임아웃의 실제
+  적용 범위는 드라이버별로 검증해야 한다. 이 설정은 전체 작업의 강제 종료 시각을 보장하지 않는다.
+- `Stop()`은 새 요청을 거절하고 접수된 요청을 처리한다. 큐에서 만료된 요청은 실행하지 않는다.
+  소멸자는 worker 종료를 기다리므로 town strand에서 서비스 소멸자를 실행하지 않는다.
+  완료 executor의 work guard는 접수·거절된 요청의 콜백 전달까지 I/O context가 종료되는 것을 막는다.
+
+### Req/Res와 사용 예시
+
+실행 클래스는 `IStoreProcedure<Req, Res>`를 상속하고 아래 세 함수를 정의한다.
+
+| 함수 | 역할 |
+|---|---|
+| `GetName()` | 고정된 프로시저 이름 반환. 영문·숫자·밑줄과 점으로 구분한 한정 이름만 허용 |
+| `BindParameters()` | 프로시저 선언 순서대로 IN/OUT/INOUT 값 등록 |
+| `ReadRow()` | 각 결과 행을 Res로 매핑. 결과 인덱스는 컬럼이 있는 결과 집합 기준 0부터 시작 |
+
+입력값은 `AddInput()`으로 등록한다. OUT/INOUT은 Res의 `std::optional<T>` 멤버를
+`AddOutput()`/`AddInputOutput()`에 등록한다. INOUT 초기값이 Req에 있으면 먼저 Res에 복사한다.
+OUT/INOUT의 대상 멤버는 결과 매핑 중에도 같은 위치에 유지한다. 매핑하면서 재할당할
+컨테이너 요소를 출력 파라미터 대상으로 등록하지 않는다.
+지원 타입은 `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `double`, `bool`, `wstring`과 그 optional이다.
+문자열은 ODBC Unicode API를 사용한다. 바이너리·날짜·정밀 소수 등은 실제 필요 시 별도 계약을 추가한다.
+
+다음은 **사용 형태를 설명하는 예시**다. `EchoProcedure`나 DB 프로시저를 자동 생성·등록·실행하지 않는다.
+이름과 파라미터·결과 형태가 일치하는 실제 저장 프로시저가 먼저 있어야 한다.
+
+```cpp
+namespace Db = TownServer::Database;
+
+struct EchoReq
+{
+    std::int32_t value{};
+    std::wstring text;
+};
+
+struct EchoRow
+{
+    std::optional<std::int32_t> value;
+    std::optional<std::wstring> text;
+};
+
+struct EchoRes
+{
+    std::vector<EchoRow> rows;
+};
+
+class EchoProcedure final : public Db::IStoreProcedure<EchoReq, EchoRes>
+{
+public:
+    std::wstring_view GetName() const noexcept override { return L"EchoProcedure"; }
+
+    void BindParameters(Db::ProcedureParameters& inParameters, EchoRes&) const override
+    {
+        inParameters.AddInput(req.value);
+        inParameters.AddInput(req.text);
+    }
+
+    void ReadRow(Db::ProcedureRow& inRow, std::size_t inResultIndex, EchoRes& outResponse) const override
+    {
+        if (inResultIndex != 0 || inRow.GetColumnCount() != 2)
+            throw Db::DatabaseException({ Db::DatabaseErrorCode::InvalidResult, "Unexpected echo result." });
+        outResponse.rows.push_back({ inRow.Read<std::int32_t>(1), inRow.Read<std::wstring>(2) });
+    }
+};
+
+// townInstance is the existing shared_ptr<TownInstance>.
+auto procedure = std::make_unique<EchoProcedure>();
+procedure->req.value = 123;
+procedure->req.text = L"hello";
+townInstance->RunStoreProcedure(std::move(procedure),
+    [](TownServer::Domain::TownInstance& inTown, Db::ProcedureResult<EchoRes> inResult)
+    {
+        if (!inResult.IsSuccess())
+        {
+            // Inspect inResult.error. An uncertain execution must not be retried blindly.
+            return;
+        }
+        // Use inResult.response->rows on the town strand.
+        // Re-find the target by persistent ID/session ID and validate its current state before applying.
+    });
+```
+
+`Run()`에 `unique_ptr`를 넘긴 뒤에는 객체나 멤버의 별도 포인터로 수정하지 않는다.
+콜백은 예외를 던지지 않아야 하며, 호출자 executor/context는 완료까지 살아 있어야 한다.
+town 객체가 이미 소멸했다면 `RunStoreProcedure()`는 게임 상태 콜백을 호출하지 않는다.
+여러 요청은 worker 간에 실행 순서가 바뀔 수 있다. 같은 캐릭터의 연속 변경은 콘텐츠에서
+이전 결과를 기다리거나 DB의 조건부 갱신·버전·제약으로 충돌을 검증한다.
+
+### 트랜잭션·결과·마이그레이션
+
+- 한 객체의 CALL 전체를 같은 연결·트랜잭션에서 처리한다. 모든 결과와 OUT 값의 처리가 끝나고
+  커밋이 확인된 후 성공 Res를 반환한다. 출력 파라미터만 반환하는 프로시저도 지원한다.
+  `IsSuccess()`는 호출·결과 처리·커밋의 성공을 뜻한다. 게임 규칙의 승인 여부나 필수 결과 행의
+  존재 여부는 해당 프로시저의 Res를 통해 콘텐츠에서 확인한다.
+- 프로시저는 내부 COMMIT/ROLLBACK·DDL·세션 설정 변경을 하지 않는 계약을 따른다.
+  ODBC는 DBMS별 트랜잭션 의미를 통일하지 않는다. 대상 DBMS의 트랜잭션 지원, 테이블 엔진,
+  프로시저 구현과 드라이버를 확인해야 한다. 트랜잭션 밖 외부 효과는 자동 복구되지 않는다.
+- 결과 컬럼은 1부터 증가하는 순서로 한 번씩 읽는다. NULL은 optional로 구분하고,
+  컬럼 타입 불일치·값 범위 초과·잘린 문자열을 성공으로 처리하지 않는다.
+- 문자열당 32768 UTF-16 코드 단위, 전체 행 4096, 결과 집합 16, 읽은 결과 값 4MiB를 제한한다.
+  큰 목록은 프로시저의 페이지 단위 조회로 처리한다.
+- 오류는 고정된 문맥, SQLSTATE, native code, `executionMayHaveOccurred`로 전달한다.
+  driver 원문 오류 메시지는 접속 정보나 SQL 값을 포함할 수 있어 전달·출력하지 않는다.
+- 현재는 DBMS·버전·적용 도구·스키마 계약이 미정이다. 이 소스 변경은 스키마/프로시저를
+  생성하거나 적용한 결과가 아니며, 적용 이력·스키마 버전 검증도 아직 연결하지 않는다.
+  실제 DB 사용 전 해당 계약과 버전 검증을 확정해야 한다.
+- 프로시저·스키마 변경은 [공통 DB 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)을 따라
+  반드시 버전 파일로 관리한다.
+  적용된 파일은 불변이며, 마을 서버가 기동하면서 마이그레이션을 자동 적용하지 않는다.

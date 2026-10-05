@@ -4,6 +4,7 @@
 #include "DungeonCatalog.h"
 #include "TownInstance.h"
 #include "TownMap.h"
+#include "Database/OdbcDatabase.h"
 
 #include <asio.hpp>
 #include <Windows.h>
@@ -108,13 +109,15 @@ int main(const int inArgumentCount, char* inArguments[])
     try
     {
         asio::io_context ioContext;
+        auto database = std::make_shared<TownServer::Database::OdbcDatabase>(
+            TownServer::Database::DatabaseOptions::FromEnvironment());
         const std::filesystem::path dataDirectory = GetExecutableDirectory() / "Data";
         std::vector<TownServer::Domain::TownMap> townMaps = LoadTownMaps(dataDirectory);
         TownServer::Domain::DungeonCatalog dungeonCatalog = TownServer::Domain::DungeonCatalog::Load(
             dataDirectory / "DungeonCatalog.json");
         std::shared_ptr<TownServer::Domain::TownInstance> townInstance =
             std::make_shared<TownServer::Domain::TownInstance>(
-                ioContext, std::move(townMaps), std::move(dungeonCatalog), dataDirectory);
+                ioContext, std::move(townMaps), std::move(dungeonCatalog), dataDirectory, database);
         std::shared_ptr<RoomControlTcpServer> roomControlServer = std::make_shared<RoomControlTcpServer>(
             ioContext, asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), roomControlPort), townInstance);
         townInstance->SetProgressionChangedHandler([weakControl = std::weak_ptr<RoomControlTcpServer>(roomControlServer)](
@@ -127,10 +130,11 @@ int main(const int inArgumentCount, char* inArguments[])
             ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
 
-        shutdownSignals.async_wait([&server, &roomControlServer](const asio::error_code& inError, const int)
+        shutdownSignals.async_wait([&server, &roomControlServer, database](const asio::error_code& inError, const int)
         {
             if (!inError)
             {
+                database->Stop();
                 server.Stop();
                 roomControlServer->Stop();
             }
@@ -157,6 +161,7 @@ int main(const int inArgumentCount, char* inArguments[])
         {
             ioThread.join();
         }
+        database->Stop();
     }
     catch (const std::exception& inException)
     {

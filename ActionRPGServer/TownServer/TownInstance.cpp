@@ -47,14 +47,18 @@ namespace
 namespace TownServer::Domain
 {
     TownInstance::TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
-        DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory)
+        DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory,
+        std::shared_ptr<Database::OdbcDatabase> inDatabase)
         : strand(asio::make_strand(inIoContext)),
+          database(std::move(inDatabase)),
           tickTimer(strand),
           dungeonCatalog(std::move(inDungeonCatalog)),
           progressionPolicy(ActionRPG::PlayerSkills::ProgressionPolicy::Load(inDataDirectory / "CharacterProgression.json")),
           playerSkills(ActionRPG::PlayerSkills::Catalog::Load(inDataDirectory / "PlayerSkills.json")),
           skillTrees(ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inDataDirectory / "SkillTrees.json", playerSkills))
     {
+        if (!database)
+            throw std::invalid_argument("TownInstance requires a DB execution service, even when disabled.");
         if (inMaps.empty())
         {
             throw std::invalid_argument("TownInstance requires at least one map.");

@@ -6,6 +6,7 @@
 #include "DungeonCatalog.h"
 #include "TownMap.h"
 #include "../Shared/SkillTreeCatalog.h"
+#include "Database/OdbcDatabase.h"
 
 #include <asio.hpp>
 
@@ -33,7 +34,20 @@ namespace TownServer::Domain
         using DungeonRequestHandler = std::function<void(bool, std::vector<PlayerId>)>;
 
         TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
-            DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory);
+            DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory,
+            std::shared_ptr<Database::OdbcDatabase> inDatabase);
+
+        /// Handler runs on the town strand. Re-find players by ID and validate their current session/state.
+        template <typename TProcedure, typename THandler>
+        void RunStoreProcedure(std::unique_ptr<TProcedure> inProcedure, THandler inHandler)
+        {
+            database->Run(std::move(inProcedure), strand,
+                [weakTown = weak_from_this(), handler = std::move(inHandler)](auto inResult) mutable
+                {
+                    if (const auto town = weakTown.lock())
+                        std::invoke(handler, *town, std::move(inResult));
+                });
+        }
 
         using ProgressionChangedHandler = std::function<void(ActionRPG::RoomControlProtocol::RoomId,
             PlayerId, std::string)>;
@@ -156,6 +170,7 @@ namespace TownServer::Domain
         [[nodiscard]] std::unordered_set<PlayerId> FindVisiblePlayers(PlayerId inPlayerId) const;
 
         asio::strand<asio::io_context::executor_type> strand;
+        std::shared_ptr<Database::OdbcDatabase> database;
         asio::steady_timer tickTimer;
         std::chrono::steady_clock::time_point nextTickTime{};
         std::unordered_map<std::string, TownMap> maps;
