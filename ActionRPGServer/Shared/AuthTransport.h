@@ -1,6 +1,15 @@
 #pragma once
 
+#if defined(_MSC_VER)
+// cpp-httplib 0.40.0's compatibility wrappers call its own deprecated APIs.
+// Keep the suppression inside this dependency header; restore checks below.
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
 #include <httplib.h>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 #include <openssl/rand.h>
 #include <openssl/crypto.h>
 #include <nlohmann/json.hpp>

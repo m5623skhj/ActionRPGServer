@@ -9,6 +9,8 @@
 
 Visual Studio의 C++ 도구 집합(`v145`), Windows SDK, vcpkg를 사용합니다. `TownServer`의 Asio와 JSON 의존성은 저장소의 `vcpkg.json`에 정의되어 있습니다.
 
+한국어 Windows에서 CMake 3.31.10이 `cpp-httplib`의 일본어 테스트 경로를 tar.gz에서 추출하지 못하는 문제를 피하도록 `Tool/vcpkg-overlay-ports/cpp-httplib` 포트를 사용합니다. 기존 0.40.0 버전과 OpenSSL 기능을 유지하고, 같은 소스의 SHA512 검증된 ZIP으로 설치합니다.
+
 `GameRoomServer`를 빌드하려면 `External/MultiSocketRUDP` 서브모듈이 필요합니다. 새로 체크아웃했다면 다음 명령을 실행합니다.
 
 ```powershell

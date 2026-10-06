@@ -2,6 +2,9 @@
   "name": "action-rpg-server",
   "version-string": "0.1.0",
   "builtin-baseline": "cb2981c4e03d421fa03b9bb5044cd1986180e7e4",
+  "configuration": {
+    "overlay-ports": ["Tool/vcpkg-overlay-ports"]
+  },
   "dependencies": [
     "asio",
     "nlohmann-json",
