@@ -6,11 +6,13 @@ AuthServer는 계정 로그인과 게임 세션을 소유한다. TownServer는 A
 ## 실행 전제와 현재 상태
 
 솔루션에 C++20/x64 AuthServer 프로젝트를 추가했다. 기존 vcpkg manifest에 OpenSSL,
-jwt-cpp, cpp-httplib의 HTTPS 기능을 선언했다. 의존성 설치·빌드·테스트·서버 실행은
-수행하지 않았다. 고정 vcpkg baseline에서 실제 헤더/링크 호환성도 실행 확인하지 않았다.
+jwt-cpp, cpp-httplib의 HTTPS 기능을 선언했다. cpp-httplib 0.40.0 ZIP 오버레이와 MSVC
+외부 헤더 경고 처리도 반영했다. 이 문서는 2026-10-06 소스 정적 대조 결과이며 이번 문서
+작업에서는 설치·빌드·테스트·서버 실행을 수행하지 않았다. 기존 빌드 산출물이 있다는 사실을
+현재 인증 왕복과 배포 환경의 검증 완료로 간주하지 않는다.
 
 계정 DB는 MySQL 8.0.47의 V000001 → V000002 → V000003 계약이다.
-[DB 마이그레이션 규칙 v1.1.1](../../docs/workflows/DATABASE_MIGRATIONS.md)에 따라 서비스가 종료된
+[DB 마이그레이션 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)에 따라 서비스가 종료된
 상태에서 별도 수동 Up/Down 실행기를 사용한다. Auth가 마이그레이션을 자동 실행하지 않는다.
 배포 순서는 관련 서비스 종료 → 수동 Up → 같은 SQL 파일 배포 → Auth 검증 기동 → 타운/룸
 기동이다. Up은 미적용 버전을 순서대로 모두 적용하고 Down은 현재 최상위 버전 한 단계만
@@ -34,7 +36,7 @@ BOM 없는 UTF-8 SHA256 소문자 hex64다. 미적용·진행 중·실패 이력
 기동 검증은 15초까지 기다리며 시간 초과/실패 후에는 DB가 정상화되어도 재시작하여 재검증한다.
 이 증명은 기동 시점 확인이며 서비스 중 DDL/파일 변경을 허용하지 않는 배포 조건이 필수다.
 
-현재 실제 DB 접속/적용은 수행하지 않았다. 파일과 코드 작성만으로 운영 준비를 확인한 것은
+이번 문서 작업에서 실제 DB 접속/적용은 수행하지 않았다. 파일과 코드 작성만으로 운영 준비를 확인한 것은
 아니다. 공통 ODBC 한도는 전체 결과 4096행/16셋/4MiB이며 누적 이력이 이를 넘으면 차단한다.
 실제 MySQL 메타데이터 표기와 프로시저 본문 매핑도 실행 확인이 필요하다.
 
@@ -84,7 +86,9 @@ ID를 선택할 수 없다. 권한을 해제하는 release는 타운이 모든 �
 제출 → 게임 토큰 보관 → 목적 타운 티켓 발급 → 타운 TLS 첫 패킷 36 → 성공 패킷 37 →
 기존 EnterTown. `ready=false`이면 기존 접속 종료 후 새 티켓을 받아야 한다. 아직 소유자가
 남아 있을 때 소비한 티켓도 재사용되지 않는다. 토큰을 URL/로그에 넣지 않는다.
-클라이언트의 Google SDK 선택과 nonce 연결 구현은 별도 작업이다.
+현재 클라이언트 소스의 AuthClient/LoginFlow에는 시스템 브라우저·PKCE·state·loopback
+callback과 nonce 연동 경로가 있다. 실제 Google 등록·배포 설정과 왕복 동작은 별도 검증 대상이다.
+클라이언트 설정은 [클라이언트 사용 문서](../../../ActionRPGClient/ActionRPGClient/README.md)를 따른다.
 
 ## 검증과 중복 로그인
 
@@ -101,7 +105,7 @@ authorized party, exp, iat, sub, 일회성 challenge nonce를 검사한다. 하�
 티켓 발급·소비·갱신에서 거절하고 기존 게임 토큰과 미사용 티켓을 폐기한다.
 상태 조회 절차는 계정 로그인 시각을 갱신하지 않는다.
 
-메모리 상태 변경은 하나의 mutex로 직렬화하고 DB/HTTPS 호출은 그 잠금 밖에서 수행한다.
+SessionRegistry의 메모리 상태 변경은 하나의 mutex로 직렬화하고 DB/HTTPS 호출은 그 잠금 밖에서 수행한다.
 Auth HTTP worker 8개/대기 64개, challenge·계정·티켓 각각 최대 10000개다. 만료 challenge와
 티켓, 소유자가 없는 만료 계정은 제거한다. Auth DB 완료는 독립 I/O 스레드에서 전달된다.
 
@@ -122,3 +126,137 @@ Auth HTTP worker 8개/대기 64개, challenge·계정·티켓 각각 최대 1000
 근거: [Google ID 토큰 서버 검증](https://developers.google.com/identity/sign-in/web/backend-auth),
 [Google OIDC nonce](https://developers.google.com/identity/openid-connect/openid-connect),
 [cpp-httplib HTTPS](https://github.com/yhirose/cpp-httplib), [jwt-cpp](https://github.com/Thalhammer/jwt-cpp).
+
+## 로그인 단계별 실행 경로
+
+```mermaid
+sequenceDiagram
+    participant C as 클라이언트
+    participant G as Google
+    participant A as Auth
+    participant D as MySQL
+    participant T as Town
+    C->>A: POST /v1/challenges {}
+    A-->>C: challengeId, nonce (300초)
+    C->>G: 브라우저 인증 (nonce, state, PKCE)
+    G-->>C: authorization code
+    C->>G: code + verifier로 토큰 교환
+    G-->>C: Google ID 토큰
+    C->>A: POST /v1/login (challengeId, idToken)
+    A->>A: challenge 소비, RS256/클레임/nonce 검증
+    A->>D: CALL login_google_account(sub)
+    D-->>A: 정상 계정 또는 거절 결과
+    A-->>C: gameToken (8시간)
+    C->>A: POST /v1/tickets (Bearer, serverId)
+    A->>D: CALL get_auth_account_status(accountId)
+    A-->>C: ticket (30초), ready
+    C->>T: TLS 연결, AdmissionTicketRequest(36)
+    T->>A: /internal/consume (ticket, connection)
+    A->>D: 계정 상태 재확인
+    A->>A: 목적 타운·현재 토큰·소유권 검사/소비
+    A-->>T: accountId, lease (15초)
+    T-->>C: AdmissionResult(37, result=0)
+    C->>T: EnterTownRequest(1)
+    T-->>C: 마을·플레이어·스킬 상태
+    loop 연결 유지 중 5초마다
+        T->>A: /internal/renew (lease, connection)
+        A->>D: 계정 상태 재확인
+        A-->>T: valid, expiresIn
+    end
+```
+
+Auth는 Google 로그인 페이지나 OAuth callback을 제공하지 않으며 authorization code를
+교환하지 않는다. 현재 네이티브 클라이언트가 Google 인증 코드 교환을 처리하고, Auth에는
+ID 토큰만 제출한다. Google access token과 Auth gameToken은 ID 토큰의 대체 입력이 아니다.
+
+1. `main.cpp`가 요청 body와 내부 키/DB 준비 게이트를 확인한다. login은 challenge를 먼저
+   소비하므로 JWT 검증이나 DB 단계가 실패해도 그 challenge로 다시 시도할 수 없다.
+2. `GoogleIdTokenVerifier::Verify()`가 최대 16KiB JWT의 alg=RS256, RSA 서명과 Google issuer,
+   설정 client ID의 aud/azp, exp/iat, nonce 및 sub를 검사한다. 다중 aud에는 azp가 필요하다.
+   Google sub는 비어 있지 않은 최대 255바이트 ASCII 값이며 계정 키는 `(google, sub)`다.
+   이메일·클라이언트 이름·클라이언트가 선택한 accountId로 계정을 결정하지 않는다.
+3. `login_google_account`가 정상 계정을 조회하거나 최초 계정/외부 식별자를 생성한다.
+   ODBC 어댑터는 결과 형식·필수 행·범위를 커밋 전에 검증한다. Auth는 DB 실행 성공과
+   resultCode=0을 모두 만족해야 게임 세션을 발급한다.
+4. `SessionRegistry::Login()`이 기존 토큰을 무효화하고 새 토큰을 발급한다. gameToken은
+   JWT가 아니라 OpenSSL 난수 32바이트의 64자리 소문자 hex다. 클라이언트가 내용을 해석하지 않는다.
+5. 티켓 발급·소비·권한 갱신은 `get_auth_account_status`로 계정 상태를 다시 확인한다.
+   정상=0, 정지=1, 부재=2이며 정지/부재가 확인되면 현재 토큰과 미사용 티켓을 폐기한다.
+   DB 오류는 정상 계정으로 간주하지 않는다. 상태 조회는 로그인 시각을 갱신하지 않는다.
+
+## 자격 정보와 상태 전이
+
+| 값 | 발급/검사 | 수명과 결합 |
+|---|---|---|
+| challengeId + nonce | Auth 발급, ID 토큰 nonce와 대조 | 300초, 검증 시도 한 번 |
+| Google ID 토큰 | Google 발급, Auth 서명/클레임 검증 | Google exp; Auth 게임 연결에 직접 사용하지 않음 |
+| gameToken | Auth 발급, 공개 API Bearer 검사 | 28800초, 계정당 현재 토큰 하나 |
+| ticket | Auth 발급, 내부 consume 검사 | 30초, 목적 타운·현재 게임 토큰, 한 번 소비 |
+| connection | Town이 연결마다 생성 | 256비트 난수, 해당 Town 연결 |
+| lease | Auth consume에서 발급 | 15초, Town ID·connection에 결합 |
+| 던전 challenge | Room 연결에 발급, Town을 통해 확인 | 별도 던전 연결 검증; Auth 티켓이 아님 |
+
+한 계정의 새 티켓 발급은 이전 미사용 티켓을 대체한다. 기존 owner가 있으면 draining으로
+전환하고 ready=false를 반환한다. 목적 타운·연결 검사가 맞더라도 이전 소유권이 남아 있으면
+소비에 실패하며, 해당 소비 경로에서 제거된 티켓은 재사용할 수 없다. ready=false 상태로
+타운에 보내지 말고 이전 연결 종료 확인 후 새 티켓을 받아야 한다.
+
+새 Google 로그인과 타운 이동 모두 이전 lease를 즉시 지우지 않는다. 이전 Town이 갱신 거절을
+확인해 클라이언트를 종료하고 Room의 퇴장/부재를 확인한 다음 release한다. release는 동일
+Town·connection·lease 조합에 한해 소유권을 해제한다. 갱신 불가나 lease 만료만으로는
+잔류 Room 플레이어가 없어졌다고 증명할 수 없으므로 owner를 자동 제거하지 않는다.
+
+## 요청 한도와 스레드 구조
+
+`main()`이 DB 완료용 io_context와 work guard를 만들고 별도 jthread로 실행한다. 기동 DB
+검증은 promise/future로 최대 15초 기다린다. HTTP worker가 저장 프로시저 완료를 기다릴
+때도 이 완료 스레드가 동작한다. ODBC worker에서 직접 SessionRegistry나 Town 상태를 수정하지 않는다.
+
+HTTP worker는 8개, 대기 큐는 64개다. POST body는 32768바이트, 읽기/쓰기 timeout은
+각각 5초, keep-alive 요청 수는 8이다. DB 요청의 HTTP 측 대기는 15초이며 이미 시작된 DB
+작업을 그 시각에 취소하는 기능은 아니다. 결과 불명확 시 같은 로그인을 자동 재실행하지 않는다.
+
+SessionRegistry mutex는 challenge·계정 세션·티켓·owner의 검사를 상태 변경과 함께
+직렬화한다. 각각 최대 10000개이며 만료 항목 정리를 수행한다. 외부 DB/JWKS 호출은 이 mutex
+밖에 있다. Google 키 캐시에는 별도 mutex가 있으며 갱신 HTTPS 대기 중에도 키 접근을
+직렬화한다. 두 mutex를 같은 잠금이라고 해석하거나 모든 외부 작업이 무잠금이라고 가정하지 않는다.
+
+JWKS는 고정 `https://www.googleapis.com/oauth2/v3/certs`에서 CA/호스트명 검증과
+리다이렉트 금지 조건으로 받는다. 연결/읽기/쓰기 제한은 각각 3초, 본문은 1MiB, 키는 최대
+32개다. 만료 캐시와 unknown kid 정책은 위 검증 절을 따른다. 키 조회 장애 시 만료 키를
+사용해 로그인 성공으로 낮추지 않는다.
+
+## 실패·취소·재접속 처리
+
+| 상황 | 서버 처리 | 사용 흐름에서의 의미 |
+|---|---|---|
+| DB 이력/구조 증명 실패 | 기동은 HTTPS를 제공할 수 있으나 인증 경로 503 | 재시작 재검증 전 로그인 불가 |
+| 잘못된 토큰·nonce·목적 서버·재사용 | 403, body `{}` | 새 challenge/티켓으로 명시적 새 시도 |
+| 정지/부재 계정 | 해당 요청 거절, 기존 세션 폐기/갱신 차단 | 이후 게임 연결 종료 흐름 진행 |
+| 중복 로그인 | 새 토큰 허용, 이전 토큰 무효화·owner draining | 이전 연결 종료 확인 후 새 타운 입장 |
+| Auth/DB timeout·응답 유실 | 거절 또는 결과 불명확; 무조건 재시도 없음 | 403만으로 계정 정지나 중복 원인을 단정하지 않음 |
+| Town/Room 단절·release 유실 | 기존 owner 자동 해제 없음 | 운영상 이전 접속 정리 확인 필요 |
+| Auth 재시작 | 모든 메모리 자격 정보 소실 | 기존 Town/Room 접속 종료 확인 후 재로그인 |
+
+사용자가 로그인 중 취소하면 클라이언트는 늦은 결과를 현재 로그인 성공으로 적용하지 않는다.
+이미 완료된 HTTP/DB 작업을 UI 취소가 롤백하지는 않는다. 세부 오류 코드·인증서 설정·재시도 UI는
+현재 클라이언트 문서를 따른다. Auth는 server list, OAuth callback, refresh, 관리자 강제 owner
+해제 API를 제공하지 않는다. 상세 계정 상태나 실패 원인을 공개 403 응답에서 구별할 수 없다.
+
+## 소스 탐색과 변경 위치
+
+| 파일 | 읽을 부분 / 변경 책임 |
+|---|---|
+| [main.cpp](main.cpp) | 환경·listener, 기동 게이트, 7개 POST API, DB 완료 대기 |
+| [GoogleIdTokenVerifier.h](GoogleIdTokenVerifier.h) | Google JWT·JWKS 검증; 허용 aud/azp 변경은 클라이언트 등록과 함께 협의 |
+| [SessionRegistry.h](SessionRegistry.h) | 토큰/티켓/owner 수명, 중복 로그인, 이동, release |
+| [AuthTransport.h](../Shared/AuthTransport.h) | 비밀 값 형식·난수·상수 시간 비교·HTTPS 검증 설정 |
+| [LoginSchemaVerifier.cpp](Database/LoginSchemaVerifier.cpp) | 배포 SQL과 실제 이력/구조 증명 |
+| [LoginGoogleAccountProcedure.h](Database/LoginGoogleAccountProcedure.h) | 로그인 Req/Res·입력·결과 계약 |
+| [GetAuthAccountStatusProcedure.h](Database/GetAuthAccountStatusProcedure.h) | 계정 정상/정지/부재 조회 계약 |
+| [OdbcDatabase.cpp](../Shared/Database/OdbcDatabase.cpp) | 공통 worker/큐/연결·트랜잭션·결과 제한 |
+| [TownAuthentication.cpp](../TownServer/TownAuthentication.cpp) | 타운의 소비·갱신·퇴장 후 release 호출 |
+
+인증 규칙 변경은 API 입력·게임 토큰 수명·owner 전이·Town local deadline을 함께 대조한다.
+DB 변경은 별도 버전 SQL과 DB 담당 계약을 먼저 맞추며 Auth 기동 검증 기준도 함께 갱신한다.
+룸 전투나 캐릭터 데이터 저장을 인증 HTTP handler에 넣지 않는다.

@@ -1,7 +1,8 @@
 # TownServer 콘텐츠 및 패킷 개발 가이드
 
 이 문서는 TownServer에 거래, 파티, 채팅 같은 마을 콘텐츠를 추가하고 해당 콘텐츠의
-TCP 패킷을 클라이언트까지 연결하는 방법을 설명한다.
+TCP 패킷을 클라이언트까지 연결하는 방법을 설명한다. 10~13절은 현재 인증·던전 입장과
+런타임 구조를 설명한다. 2026-10-06 소스를 기준으로 하며 이번 문서 작업은 정적 대조만 수행했다.
 
 ## 1. 현재 책임 구분
 
@@ -124,6 +125,32 @@ packet body = [uint16 packetType, big-endian][payload]
 | 9 | `EnterDungeonResponse` | Server → Client |
 | 10 | `MapChanged` | Server → Client |
 | 11 | `DungeonSelectionOpen` | Server → Client |
+| 12 | `PartyInviteRequest` | Client → Server |
+| 13 | `PartyInviteAnswer` | Client → Server |
+| 14 | `PartyLeaveRequest` | Client → Server |
+| 15 | `PartyKickRequest` | Client → Server |
+| 16 | `PartyInvitation` | Server → Client |
+| 17 | `PartySnapshot` | Server → Client |
+| 18 | `PartyOperationResult` | Server → Client |
+| 19 | `PartySettingsRequest` | Client → Server |
+| 20 | `PartyDirectoryPageRequest` | Client → Server |
+| 21 | `PartyDirectoryUnsubscribe` | Client → Server |
+| 22 | `PartyDirectoryPage` | Server → Client |
+| 23 | `PartyDirectoryChanged` | Server → Client |
+| 24 | `PartyCreateRequest` | Client → Server |
+| 25 | `DungeonCompletionRequest` | Client → Server |
+| 26 | `DungeonCompletionResponse` | Server → Client |
+| 27 | `SkillStateRequest` | Client → Server |
+| 28 | `LearnSkillRequest` | Client → Server |
+| 29 | `SkillStateResponse` | Server → Client |
+| 30 | `PartyDetailRequest` | Client → Server |
+| 31 | `PartyDetailResponse` | Server → Client |
+| 32 | `PartyJoinRequest` | Client → Server |
+| 33 | `PartyJoinAnswer` | Client → Server |
+| 34 | `PartyJoinRequestUpdate` | Server → Client |
+| 35 | `PartyKicked` | Server → Client |
+| 36 | `AdmissionTicketRequest` | Client → Server |
+| 37 | `AdmissionResult` | Server → Client |
 
 `TownMap*.json` 버전 3은 `entryPoints`와 `transitionZones`를 포함한다. `MapTransfer`는
 대상 `mapId`/`entryPointId`로 이동하고, `DungeonSelection`은 `DungeonCatalog.json`의
@@ -146,7 +173,8 @@ packet body = [uint16 packetType, big-endian][payload]
 현재 서버와 클라이언트는 `Protocol`을 별도로 보유한다. 두 파일의 패킷 ID, 필드 순서,
 자료형은 반드시 동일해야 한다. 일치하지 않으면 해당 연결은 malformed packet으로 종료된다.
 
-거래 요청과 결과를 추가한다고 가정한다.
+거래 요청과 결과를 추가한다고 가정한다. 아래 Trade 패킷은 미구현 예시이며 현재 마지막
+ID 37 다음의 38/39를 예시로 사용한다. 실제 추가 시 YAML 정의와 양쪽 생성 헤더를 함께 맞춘다.
 
 ### 5.1 패킷 ID와 데이터 정의
 
@@ -156,8 +184,8 @@ packet body = [uint16 packetType, big-endian][payload]
 enum class PacketType : std::uint16_t
 {
     // 기존 값 유지
-    TradeRequest = 7,
-    TradeResult = 8
+    TradeRequest = 38,
+    TradeResult = 39
 };
 
 struct TradeRequest
@@ -259,6 +287,8 @@ S2C 결과는 다음 세 곳에 등록한다.
 
 ## 7. 검증 체크리스트
 
+아래는 기능 변경 후 사용할 검증 절차다. 이번 문서 작업에서 이 절차를 실행했다는 의미가 아니다.
+
 ### 패킷 단위 검증
 
 - encode 후 decode한 값이 원본과 같은가
@@ -294,8 +324,9 @@ S2C 결과는 다음 세 곳에 등록한다.
 - `Data/TownMap*.json`: 맵·도착 지점·전환 영역
 - `Data/DungeonCatalog.json`: 던전 그룹과 표시 정보
 - `Player.h/.cpp`: 네트워크 비종속 플레이어 상태
-- `TcpSession.h/.cpp`: TCP framing과 비동기 송수신
-- `NetworkConstants.h`: body 및 송신 큐 상한
+- `../Shared/TcpSession.h/.cpp`: TCP framing·TLS·비동기 송수신
+- `../Shared/NetworkConstants.h`: body 및 송신 큐 상한
+- `NetworkConstants.h`: 타운 기본 포트·I/O 스레드 수
 
 ## 9. ODBC 저장 프로시저 실행
 
@@ -309,7 +340,8 @@ DB worker의 입력 바인딩·결과 매핑에서는 마을 상태를 접근하
   비밀정보를 소스·설정 사본·로그·명령 인자에 남기지 않는다. 실행 환경에 대상 DB용
   ODBC 드라이버가 필요하며 드라이버와 서버 프로그램의 32/64비트 구성이 일치해야 한다.
 - 변수가 없으면 DB 기능이 비활성화되고 기존 마을 기능은 유지된다. DB 요청에는
-  `NotConfigured` 오류가 비동기로 반환된다.
+  `NotConfigured` 오류가 비동기로 반환된다. 이는 Town의 일반 DB 모듈에 대한 설명이다.
+  클라이언트 입장은 별도 Auth의 계정 DB 검증·소비 승인이 반드시 필요하며 인증 우회는 없다.
 - 연결은 첫 요청에서 생성하고 worker별로 유지한다. 기본 연결 수 2, 대기 요청 상한 128,
   큐 대기 제한 30초, 연결 제한 5초, statement 제한 10초다. 값은 `DatabaseOptions`에서 지정한다.
 - 연결 실패나 실행·매핑 오류 후 해당 연결을 폐기한다. 다음 새 요청에서 다시 연결하며,
@@ -420,8 +452,8 @@ town 객체가 이미 소멸했다면 `RunStoreProcedure()`는 게임 상태 콜
 - 오류는 고정된 문맥, SQLSTATE, native code, `executionMayHaveOccurred`로 전달한다.
   driver 원문 오류 메시지는 접속 정보나 SQL 값을 포함할 수 있어 전달·출력하지 않는다.
 - ODBC 모듈 자체는 스키마/프로시저를 생성하거나 적용하지 않는다. Google 로그인의
-  대상 DBMS·논리 계약·SQL 파일은 아래 10절을 따른다. 실제 적용 도구와 적용 이력·
-  스키마 버전 검증은 아직 연결하지 않으며 실제 사용 전에 준비해야 한다.
+  대상 DBMS·논리 계약·SQL 파일은 아래 10절을 따른다. 수동 Up/Down 도구와 Auth의
+  기동 적용 이력·실제 스키마 검증은 구현되어 있다. 실제 DB 적용·운영 검증은 별도 절차다.
 - 프로시저·스키마 변경은 [공통 DB 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)을 따라
   반드시 버전 파일로 관리한다.
   적용된 파일은 불변이며, 마을 서버가 기동하면서 마이그레이션을 자동 적용하지 않는다.
@@ -442,9 +474,15 @@ TLS 타운 연결의 첫 패킷으로 `AdmissionTicketRequest(36)`을 전송한�
 타운은 Auth 내부 HTTPS `/internal/consume` 승인으로만 계정 ID를 설정하고
 `AdmissionResult(37, result=0)`을 응답한다. 이후 기존 `EnterTownRequest(1)`을 보낸다.
 계정 ID나 Google ID 토큰을 타운 패킷으로 제출하지 않는다.
-기존 패킷 ID 1~35는 유지하며 새 패킷은 YAML 마지막에 추가했다. 클라이언트 헤더와
-로그인/TLS 연결 작업은 이 서버 변경에 포함하지 않았다. 서버 헤더는 실행 금지 범위에서
-생성기 출력 형식에 맞춰 정적으로 반영했다.
+기존 패킷 ID 1~35는 유지하며 새 패킷은 YAML 마지막에 추가했다. 클라이언트의 헤더·
+로그인/TLS 연결은 별도 클라이언트 담당 소스에 구현 경로가 있다. 실제 설정과 사용 절차는
+[클라이언트 문서](../../../ActionRPGClient/ActionRPGClient/README.md)를 따른다.
+현재 소스의 존재를 실제 인증 왕복 검증 완료로 간주하지 않는다.
+
+36의 payload는 64자리 소문자 hex ticket 문자열이며 body는 타입 2바이트 + 문자열 길이
+2바이트 + 값 64바이트로 총 68바이트다. 37은 타입 2바이트 + result 1바이트로 총 3바이트다.
+둘 다 앞에 별도 uint32 body 길이가 붙는다. 현재 서버는 성공 result=0만 보내며 인증 거절은
+연결 종료로 나타난다. 클라이언트가 종료만 보고 정지/중복/만료 중 특정 원인을 확정할 수 없다.
 
 Auth HTTP 작업은 제한된 별도 worker에서 처리하며 town strand를 막지 않는다.
 15초 권한을 5초 주기로 갱신하고 권한 만료/갱신 실패/새 로그인/타운 이동 시 연결을 종료한다.
@@ -457,6 +495,152 @@ Auth HTTP 작업은 제한된 별도 worker에서 처리하며 town strand를 �
 재시도와 캐릭터 진행 상태 이관은 구현하지 않았다. 관련 운영 제한은 Auth 문서를 따른다.
 
 Auth 기동 시 실제 DB 적용 이력·체크섬·구조 검증에 실패하면 로그인/입장을 503으로 차단한다.
-[DB 마이그레이션 규칙 v1.1.1](../../docs/workflows/DATABASE_MIGRATIONS.md)의 수동 Up/Down을
+[DB 마이그레이션 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)의 수동 Up/Down을
 사용하며 관련 서비스 종료 → Up → 동일 SQL 배포 → Auth 검증 기동 → 타운/룸 기동 순서를 따른다.
-빌드, 테스트, 서버 실행, 패키지 설치, 실제 DB/Google 요청은 수행하지 않았다.
+이번 문서 작업에서 빌드, 테스트, 서버 실행, 패키지 설치, 실제 DB/Google 요청은 수행하지 않았다.
+
+## 11. 기동·인증된 플레이어의 수명
+
+`main.cpp`는 인자와 환경을 검사하고 실행 파일 기준 Data의 맵·던전 목록·성장/스킬 정의를
+읽는다. 하나의 io_context에 TownInstance, 클라이언트 TLS acceptor, loopback RoomControl
+acceptor를 연결하고 지정한 I/O 스레드가 실행한다. 공유 상태의 권위는 TownInstance strand다.
+
+| 단계 | 현재 실행 경로 | 거절/종료 조건 |
+|---|---|---|
+| TCP/TLS 연결 | TownClientTcpServer → Shared/TcpSession | TLS 설정/handshake 실패, 10초 handshake 제한 |
+| 인증 전 | PlayerSession::HandlePacket → AdmissionTicketRequest | 인증 전 다른 게임 패킷, malformed, 중복 인증 시도 |
+| Auth 소비 중 | TownInstance::Admit → AuthControlClient | 10초 admission 제한, 과다 대기, Auth 거절/timeout |
+| 인증 완료 | 계정 ID·lease/local deadline 설정, 패킷 37 | 지연 결과의 이전 시도/종료 세션은 적용하지 않음 |
+| 마을 입장 | EnterTownRequest → EnterOnStrand | 미인증, 이미 입장 요청, 존재하지 않는 캐릭터 정의 |
+| 게임 중 | 마을 이동·파티·스킬·던전 요청 | 계정 local deadline 만료 시 이후 게임 요청 차단 |
+| 연결 종료 | Disconnect → CloseAuth → TownInstance::Leave | 던전/예약 정리 확인 후 Auth release |
+
+PlayerSession은 Unauthenticated → ResolvingAccount → Authenticated → Closed 상태를
+갖는다. ResolvingAccount는 현재 Auth HTTPS 승인을 기다리는 상태 이름이며 Town이 Google
+로그인 프로시저를 직접 실행한다는 뜻이 아니다. 계정 ID는 클라이언트 EnterTown 입력이 아니라
+Auth consume 응답에서만 설정한다.
+
+새 EnterTown은 Town의 nextPlayerId로 ID를 발급하고 선택 캐릭터의 기본 성장 상태를 만든다.
+기본 맵의 spawn에 배치하여 EnterTownResponse, 가시성 갱신, 스킬 상태를 보낸다.
+`Character<characterId>` 정의가 있어야 하지만 DB의 캐릭터 소유권 조회/복원은 없다.
+연결이 새로 입장할 때 이전 레벨·SP·습득 스킬을 저장 데이터에서 불러오지 않는다.
+
+### Auth 대기와 만료
+
+AuthControlClient의 별도 worker 2개와 pending 상한 64개가 HTTPS를 수행하고, 완료를
+호출자 executor로 post한다. work guard가 완료 전달까지 io_context 수명을 유지한다.
+인증서 CA/호스트명을 검증하며 리다이렉트를 허용하지 않는다. 연결/읽기/쓰기 timeout은
+각각 3초다. 결과가 불명확한 consume/renew/release를 자동 재전송하지 않는다.
+
+Town의 admission 레코드는 활성 연결을 포함해 최대 10000개이고 1초 주기로 만료/갱신을 확인한다.
+15초 lease의 local deadline은 요청 시작 시각을 기준으로 설정하며 응답이 늦게 왔다고
+응답 수신 시각부터 새 15초를 더하지 않는다. 세션 시도 ID, 연결 상태, 현재 admission 상태를
+함께 확인한다. 갱신은 5초 주기이며 실패/만료 시 TLS 연결을 종료한다. 새 로그인 통보 push는 없다.
+
+### 종료와 소유권 해제
+
+클라이언트 TCP 종료만으로 Room의 플레이어가 제거되었다고 판단하지 않는다. 타운에 던전
+참여/예약이 있으면 RoomControl LeaveRoom을 요청하고 멤버 제거 또는 부재 확인을 기다린다.
+확인 후 해당 lease/connection을 Auth release에 제출한다. 응답이 없거나 RoomControl이
+끊기면 소유권을 자동 해제하지 않는다. RoomControl 장애 시 관련 세션을 종료하면서 기존
+룸 관계를 보존하여 종료 확인을 우회하지 않는다. 자동 복구/재연결은 구현하지 않았다.
+
+## 12. 던전 생성·입장·전투·복귀
+
+```mermaid
+sequenceDiagram
+    participant C as 클라이언트
+    participant T as Town
+    participant M as RoomManager
+    participant R as GameRoom/DungeonSession
+    C->>T: EnterDungeonRequest(8)
+    T->>T: 위치/선택 영역/파티 조건 검사, 참가 예약
+    T->>M: RoomControl CreateRoom
+    M->>R: 예상 참가자와 던전 정의로 룸 생성
+    M-->>T: 생성 결과와 브로커 주소
+    T-->>C: EnterDungeonResponse(9)
+    C->>R: 브로커/RUDP 연결
+    R-->>C: DungeonChallenge
+    C->>T: ConfirmDungeonJoin(7, roomId, challenge)
+    T->>M: ConfirmJoin(검증된 playerId, 캐릭터, 성장)
+    M->>R: challenge/연결 세대/예상 참가자 확인
+    R-->>C: DungeonAuthResult, WorldData
+    M-->>T: EnterRoom/RoomStarted
+    T->>T: 실제 참가자 Town 이동 중단, 미입장 예약 해제
+    C->>R: MoveInput/ActionRequest/SkillRequest
+    R-->>C: 서버 판정·실시간 상태
+    R-->>T: RoomEnded(Cleared, 실제 보상 대상)
+    C->>T: DungeonCompletionRequest(25)
+    T->>M: 완료/재도전 요청
+    M-->>T: FinishRoom 결과
+    T-->>C: DungeonCompletionResponse(26)
+```
+
+생성 전 Town은 요청한 zoneId가 플레이어의 실제 위치에서 열리는 DungeonSelection 영역인지,
+그 그룹에서 dungeonId를 선택할 수 있는지 검사한다. 이미 룸에 있거나 예약 중이면 거절한다.
+파티는 리더와 진행 중 요청/참가자 상태를 검증한다. 클라이언트가 보고한 UID·위치로 참가를 승인하지 않는다.
+
+RoomControl은 등록된 룸 서버의 용량과 현재 룸 수를 보고 가능한 서버를 선택한다. 생성 응답은
+requestId와 해당 룸 서버를 대조한다. 룸 ID는 상위 32비트의 roomServerId와 하위 생성 번호로
+구성된다. 현재 단일 타운 안의 등록/예약 관리이며 전역 분산 룸 디렉터리가 아니다.
+
+ConfirmDungeonJoin은 현재 세션의 playerId와 예약 roomId를 대조한다. 캐릭터/성장 상태도
+서버 보유 값을 Room에 전달한다. RoomManager는 challenge로 대기 DungeonSession을 찾고
+연결 세대와 예상 참가 여부를 검사한다. 다른 연결의 늦은 확인으로 새 연결을 인증하지 않는다.
+GameRoomServer가 Google ID 토큰이나 Auth gameToken을 다시 검증하는 흐름은 없다.
+
+GameRoom 상태는 WaitingForPlayers → Running → Cleared/Stopped다. 참가자가 모두 들어오면
+시작하며, 30초 입장 제한 시점에는 실제 입장자를 기준으로 시작한다. 아무도 없으면 중단한다.
+월드 초기 데이터 전송이 완료되기 전에는 게임 요청/실시간 상태를 허용하지 않는다.
+
+Room의 몬스터는 생성 때 한 번 배치한다. 현재 방에 살아 있는 몬스터가 없으면 게이트 이동을
+허용하고, 같은 룸에서 처치한 몬스터는 재방문해도 부활하지 않는다. 보스 처치 클리어 순간의
+잔류 플레이어가 보상 대상이며 현재는 대상 전달/로그까지다. 실제 지급/인벤토리 저장은 없다.
+재도전은 새 룸 생성 성공 후 이전 룸을 정리하며 새 몬스터 상태로 시작한다.
+
+정상 복귀/재도전은 실제 참가자 집합과 완료 상태를 검증한다. 클리어 뒤 바로 타운 상태로
+전환하는 대신 완료 요청/응답 흐름을 사용한다. 상세 전투 메시지·스킬 판정은
+[전투 계약](../GameRoomServer/COMBAT_PROTOCOL.md), [스킬 계약](../GameRoomServer/PLAYER_SKILLS.md)을 따른다.
+
+## 13. 실행 경계·스레드·확장 위치
+
+| 상태/작업 | 실행 경계 | 주의할 점 |
+|---|---|---|
+| acceptor·서버 세션 목록 | Shared/TcpAcceptServer strand | 닫힘 콜백으로 서버의 세션 제거 |
+| 세션 프레이밍·송신 큐 | 연결별 socket executor/strand | async_write 버퍼 수명·송신 순서 유지 |
+| 마을 플레이어·파티·예약·스킬 | TownInstance strand | 별도 worker에서 컨테이너/Player를 직접 접근하지 않음 |
+| Auth HTTPS | AuthControlClient worker → Town strand | 완료 시 시도/현재 상태/deadline 재검사 |
+| ODBC | DB worker → 요청한 executor | 결과 커밋 후 현재 플레이어를 ID로 다시 조회 |
+| 룸 목록·challenge 대기 | RoomManager strand | Room 연결의 generation 대조 |
+| 룸 이동·AI·전투 | 각 GameRoom strand | 룸 안 상태를 전투 tick과 함께 직렬화 |
+| RUDP callbacks·연결/스트림 바인딩 | DungeonSession 동기화 → 룸/관리자 post | 바인딩 mutex와 세대/weak stream lease 유지 |
+
+Town은 50ms tick(20Hz)과 매 2tick 상태 전송(10Hz)을 사용한다. 실제 경과 시간은 최대
+0.25초로 제한하며 500ms 동안 새 이동 입력이 없으면 멈춘다. 룸 참가자는 Town 이동 계산에서
+제외된다. Room은 1/30초 고정 전투 tick과 15Hz 실시간 전송을 사용하며, 늦은 tick을 무제한
+따라잡지 않는다. Room 이동 입력 제한은 1초다. 이는 서로 다른 서버의 규칙이다.
+
+TCP body 1MiB와 송신 대기 4MiB 상한은 Shared/NetworkConstants에 있다. Room 월드는
+총 4MiB 이내 분할 전송이며 실시간 프레임/대역폭 한도는 별도 전투 계약을 따른다.
+I/O 스레드 수를 늘려도 하나의 TownInstance나 GameRoom 공유 상태를 동시에 수정하지 않는다.
+strand의 동기 DB/HTTPS 호출이나 큰 파일 처리로 서버 업데이트를 막지 않도록 변경한다.
+
+| 파일 | 런타임 책임 / 수정 위치 |
+|---|---|
+| [main.cpp](main.cpp) | CLI, 실행 파일 기준 데이터 로딩, I/O 스레드와 서버 수명 |
+| [TownClientTcpServer.cpp](TownClientTcpServer.cpp) | TLS 수신과 PlayerSession 생성/닫힘 |
+| [PlayerSession.cpp](PlayerSession.cpp) | 인증 전 게이트, C2S 형식·상태 검증 |
+| [TownAuthentication.cpp](TownAuthentication.cpp) | consume/renew/release, 시도와 local deadline |
+| [AuthControlClient.h](Authentication/AuthControlClient.h) | Auth HTTPS worker/한도/완료 executor |
+| [TownInstance.cpp](TownInstance.cpp) | 입장·이동·가시성·파티·예약·복귀·성장 상태 |
+| [RoomControlTcpServer.cpp](RoomControlTcpServer.cpp) | 룸 등록·선택·생성/퇴장 확인과 응답 대응 |
+| [TcpSession.cpp](../Shared/TcpSession.cpp) | 공통 framing/TLS/비동기 송신 수명 |
+| [TownPacketDefine.yml](../../Tool/TownPacketDefine.yml) | 패킷 ID·필드의 정의 원본 |
+| [RoomControlProtocol.h](../Shared/RoomControlProtocol.h) | Town↔Room 내부 메시지 계약 |
+| [RoomManager.cpp](../GameRoomServer/RoomManager.cpp) | 룸 생성·입장 인증·종료 관리 |
+| [GameRoom.cpp](../GameRoomServer/GameRoom.cpp) | tick·몬스터·전투·완료 판정 |
+| [DungeonSession.cpp](../GameRoomServer/DungeonSession.cpp) | RUDP 연결 challenge, 월드/실시간 전송 |
+
+설정·서비스 시작 순서는 [저장소 README](../../README.md)를 따른다. 캐릭터 영속 저장,
+타운 간 성장 이관, 원격 RoomControl, 제어 연결 장애 복구는 현재 API/데이터 소유권 밖의
+별도 설계 대상이다. 이번 문서 변경으로 이 기능을 추가하거나 실제 실행을 검증하지 않았다.
