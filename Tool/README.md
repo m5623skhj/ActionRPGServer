@@ -27,6 +27,8 @@ Tool\PacketGenerate.bat --check
 
 ## DB 마이그레이션
 
+DB 개요와 버전 SQL 구성은 [계정 DB README](../ActionRPGServer/Database/README.md)를 참조한다.
+
 현재 구현은 MySQL 8.0.47 / InnoDB, 64비트 Windows PowerShell 5.1 / System.Data.Odbc의
 수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000003이며 실제 DB
 적용 버전은 이 문서 작업에서 미확인이다.

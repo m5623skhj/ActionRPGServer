@@ -4,6 +4,12 @@
 2026-10-06 소스를 기준으로 설명하며, 문서 작성 중 빌드·실행·실제 DB/Google 요청은 수행하지 않았다.
 소스 구현과 실제 환경에서의 동작 검증을 구분한다.
 
+이 파일은 서버 저장소의 대표 진입 문서다. 처음 구성할 때는 아래 서버 구조와
+[설정·실행 순서](#설정과-실행-순서)를 읽고, 작업할 영역의 상세 문서로 이동한다.
+로그인 API와 검증은 [Auth 개발 계약](ActionRPGServer/AuthServer/DEVELOPMENT.md),
+마을·던전 입장과 패킷 확장은 [Town 개발 가이드](ActionRPGServer/TownServer/DEVELOPMENT.md),
+룸 전투는 [전투 계약](ActionRPGServer/GameRoomServer/COMBAT_PROTOCOL.md)을 따른다.
+
 ## 서버 구성과 통신
 
 ```mermaid
@@ -46,37 +52,26 @@ DB의 accountId는 영속 계정 ID다. playerId는 타운 프로세스에서 �
 
 ## 로그인에서 전투까지
 
-1. 클라이언트가 Auth `/v1/challenges`에서 일회성 challengeId와 nonce를 받는다.
-2. 시스템 브라우저의 Google 인증에 nonce를 연결한다. 현재 클라이언트 소스에는 state 검증,
-   PKCE와 loopback callback을 사용하는 인증 코드 교환 및 ID 토큰 수신 경로가 있다.
-3. `/v1/login`에 challengeId와 Google ID 토큰을 제출한다. Auth가 서명·클레임·nonce를
-   검증하고 MySQL `login_google_account`로 정상 계정을 조회하거나 처음 가입시킨다.
-4. Auth의 게임 토큰으로 `/v1/tickets`에 목적 타운 ID를 지정한다. ready=true인 30초 티켓으로
-   타운 TLS에 연결하여 첫 패킷 AdmissionTicketRequest(36)을 보낸다. gameToken은 타운에 보내지 않는다.
-5. Town이 내부 `/internal/consume`으로 계정·연결 소유권을 승인받고 AdmissionResult(37, 0)을
-   보낸다. 이후 EnterTownRequest(1)로 이름과 캐릭터를 선택하고 마을 상태를 받는다.
-6. 실제 던전 선택 영역과 파티 조건을 만족하면 Town이 참가자를 예약하고 Room에 생성 요청을
-   보낸다. Room은 예상 참가자와 실제 입장 참가자를 분리하여 관리한다.
-7. 클라이언트가 Room 브로커/RUDP에 연결해 던전 challenge를 받고, 기존의 인증된 Town 연결로
-   ConfirmDungeonJoin(7)을 보낸다. Town이 자신의 playerId와 캐릭터·성장 상태를 Room에 전달한다.
-8. Room이 해당 연결의 challenge와 세대, 예상 참가자를 확인해 입장을 완료한다. 클라이언트는
-   월드 데이터를 분할 수신한 뒤 이동·공격·스킬을 보낸다. 판정과 HP 변경은 Room이 수행한다.
+1. 클라이언트가 Auth의 challenge/nonce를 Google 브라우저 인증에 연결하고 ID 토큰을 받는다.
+   현재 클라이언트에는 PKCE·state·loopback callback과 인증 코드 교환 경로가 있다.
+2. Auth `/v1/login`이 ID 토큰을 검증하고 MySQL 계정을 조회/첫 가입한 뒤 gameToken을 발급한다.
+   클라이언트는 이 토큰으로 `/v1/tickets`에서 목적 타운의 단일 사용 티켓을 받는다.
+3. ready=true 티켓으로 Town TLS의 첫 패킷 36을 보낸다. Town의 Auth consume 승인을 받은
+   성공 패킷 37 이후에 EnterTownRequest(1)을 보내 마을에 입장한다.
+4. Town이 던전 참가자를 예약하고 룸을 생성한다. Room 연결의 challenge를 인증된 Town
+   연결로 확인하고 월드를 받은 뒤 플레이한다. 이동·전투 판정과 HP 변경은 Room이 수행한다.
 
 Google ID 토큰, Auth 게임 토큰, 타운 티켓, 타운 lease, 던전 challenge는 서로 다른 자격 정보다.
-검증 위치와 종료 흐름은 [Auth 가이드](ActionRPGServer/AuthServer/DEVELOPMENT.md) 및
-[Town 가이드](ActionRPGServer/TownServer/DEVELOPMENT.md)의 런타임 절을 따른다.
+검증 위치와 종료 흐름은 [Auth 로그인 상세](ActionRPGServer/AuthServer/DEVELOPMENT.md#로그인-단계별-실행-경로) 및
+[Town·던전 입장 상세](ActionRPGServer/TownServer/DEVELOPMENT.md#12-던전-생성입장전투복귀)를 따른다.
 
 ## 스레드와 업데이트 주기
 
-| 구성 | 실행과 직렬화 | 주기/한도 |
-|---|---|---|
-| Auth | HTTP worker, ODBC worker, 별도 DB 완료 io_context; SessionRegistry mutex | HTTP worker 8, 대기 64; DB 대기 최대 15초 |
-| Town | 하나의 io_context를 여러 I/O 스레드가 실행; 공유 상태는 TownInstance strand | 이동 20Hz, 상태 전송 10Hz |
-| Room | RoomManager와 각 GameRoom의 strand; RUDP 스레드와 세션 바인딩 동기화 | 전투 30Hz, 실시간 상태 15Hz |
-
-주기는 코드의 목표값이며 실제 처리 성능 측정값이 아니다. Town의 외부 Auth/DB 호출 결과는
-strand로 돌아와 적용한다. Room은 매 전투 프레임마다 Auth나 DB를 호출하지 않는다.
-RUDP 코어 옵션의 worker frame과 GameRoom 전투 tick은 별개다.
+Town은 이동 20Hz/상태 전송 10Hz, Room은 전투 30Hz/실시간 상태 15Hz를 목표로 한다.
+공유 상태는 TownInstance와 각 GameRoom의 strand에서 직렬화하며 외부 Auth/DB 작업은
+별도 worker에서 처리한다. 실제 성능 측정값은 아니며 RUDP worker frame과 전투 tick도 별개다.
+스레드 경계와 요청 한도는 [Auth 런타임](ActionRPGServer/AuthServer/DEVELOPMENT.md#요청-한도와-스레드-구조),
+[Town·Room 런타임](ActionRPGServer/TownServer/DEVELOPMENT.md#13-실행-경계스레드확장-위치)에 정리했다.
 
 ## 빌드 준비와 출력
 
@@ -129,7 +124,7 @@ Town/Room ioThreads는 1~64, Room maxRooms는 1~100000이다. 실제 실행 파�
 ```
 
 Auth 환경 변수 전체는 Auth 가이드, Town 변수는 Town 가이드 10절에 정리했다.
-RoomControl 키는 무작위 64자리 소문자 hex이며 소스·로그·명령 인자에 기록하지 않는다.
+RoomControl 키는 무작위 64자리 hex이며 영문 대소문자를 허용한다. 소스·로그·명령 인자에 기록하지 않는다.
 Room 기본 옵션은 실행 파일 옆 ServerOptionFile/CoreOption.txt와 SessionBrokerOption.txt다.
 브로커 옵션은 UTF-16 LE BOM이며, 같은 호스트의 여러 Room은 고유 서버 ID와 다른 브로커
 포트를 가진 옵션 파일을 사용한다. 설정의 인증서 이름/저장소도 실제 배포에 맞춰 준비한다.
@@ -175,9 +170,10 @@ Auth 재시작 전에는 기존 Town/Room 접속을 모두 종료하고 확인�
 | 플레이어 스킬/성장 | [스킬 계약](ActionRPGServer/GameRoomServer/PLAYER_SKILLS.md) |
 | 던전 설치 | [던전 데이터](ActionRPGServer/GameRoomServer/Data/Dungeons/README.md) |
 | 몬스터 정의 | [몬스터 데이터](ActionRPGServer/GameRoomServer/Data/Monsters/README.md) |
-| DB 구조·Up/Down·실제 버전 확인 | [DB 담당 문서](docs/workflows/DATABASE_MIGRATIONS.md) |
+| 마을 타일·맵 예시 | [맵 샘플](ActionRPGServer/TownServer/MapSamples/README.md) |
+| DB 구조·Up/Down·실제 버전 확인 | [DB README](ActionRPGServer/Database/README.md), [DB 상세 계약](docs/workflows/DATABASE_MIGRATIONS.md) |
 | 제작/관리 도구 | [Tool 안내](Tool/README.md) |
-| 클라이언트 사용 | [클라이언트 README](../ActionRPGClient/ActionRPGClient/README.md) |
+| 클라이언트 사용 | [클라이언트 저장소 README](../ActionRPGClient/README.md), [런타임 README](../ActionRPGClient/ActionRPGClient/README.md) |
 
 MultiSocketRUDP 갱신은 External/MultiSocketRUDP의 커밋과 CommonCode를 함께 대조한 뒤
 Room을 다시 빌드하고 검증한 서브모듈 포인터를 관리한다. 라이브러리 소스를 콘텐츠 폴더로 복사하지 않는다.
