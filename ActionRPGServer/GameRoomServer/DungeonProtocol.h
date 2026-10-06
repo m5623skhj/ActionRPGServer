@@ -103,9 +103,15 @@ namespace ActionRPG::DungeonProtocol
         void BufferToPacket(NetBuffer& inBuffer) override;
         void PacketToBuffer(NetBuffer& outBuffer) override;
 
+        std::uint16_t version{};
         std::uint32_t sequence{};
         std::uint8_t action{};
         std::uint8_t facingLeft{};
+        std::uint32_t mapEpoch{};
+        std::uint32_t moveSequence{};
+        std::int8_t directionX{};
+        std::int8_t directionY{};
+        std::uint8_t running{};
     };
 
     class DungeonActionResult final : public IPacket
@@ -115,6 +121,7 @@ namespace ActionRPG::DungeonProtocol
         void BufferToPacket(NetBuffer& inBuffer) override;
         void PacketToBuffer(NetBuffer& outBuffer) override;
 
+        std::uint16_t version{};
         std::uint32_t sequence{};
         std::uint8_t accepted{};
         std::uint64_t serverTick{};

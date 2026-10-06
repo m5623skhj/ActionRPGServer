@@ -29,6 +29,18 @@ namespace GameRoomServer
     };
 
     // Server-only combat parameters; MonsterEditor schemaVersion 1 remains unchanged.
+    struct SlideDefinition
+    {
+        float durationSeconds{};
+        std::string motionId;
+    };
+
+    struct CharacterCombatDefinition
+    {
+        std::uint32_t attackPower{};
+        SlideDefinition slide;
+    };
+
     struct CombatDefinition
     {
         std::uint32_t playerMaxHp{};
@@ -39,6 +51,7 @@ namespace GameRoomServer
         float muzzleForward{}, muzzleHeight{}, airMuzzleForward{}, airMuzzleHeight{};
         float jumpPrepareSeconds{}, jumpSpeed{}, gravity{}, hitStunSeconds{}, downSeconds{}, riseSeconds{};
         float airFireLift{}, airRecoilDistance{};
+        std::unordered_map<std::uint32_t, CharacterCombatDefinition> characters;
         std::unordered_map<std::uint32_t, MonsterCombatProfile> monsters;
         ActionRPG::PlayerSkills::Catalog playerSkills;
         ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;

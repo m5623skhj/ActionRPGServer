@@ -105,6 +105,9 @@ namespace GameRoomServer
             writer.Byte(static_cast<std::uint8_t>(player.airShotCount));
             writer.Byte(player.jumpPreparing ? 1 : player.actor.height > 0 ? 2 : 0);
             writer.Float(player.jumpSeconds); writer.Byte(player.running);
+            writer.Byte(player.slide.active); writer.Integer(player.slide.sequence, 4);
+            writer.Float(player.slide.seconds); writer.Float(player.slide.durationSeconds);
+            writer.Float(player.slide.directionX); writer.Float(player.slide.directionY); writer.Float(player.slide.speed);
         }
         if (mapMonsters != monsterIdsByMap.end()) for (const auto id : mapMonsters->second)
         {

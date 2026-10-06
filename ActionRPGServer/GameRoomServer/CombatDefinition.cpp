@@ -47,10 +47,10 @@ namespace GameRoomServer
         Require(input.good(), "Cannot read Combat.json.");
         const Json source = Json::parse(input);
         Keys(source, { "version", "player", "reactions", "monsters" });
-        Require(source.at("version") == 1, "Unsupported combat version.");
+        Require(source.at("version") == 2, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
         const auto& player = source.at("player");
-        Keys(player, { "maxHp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump" });
+        Keys(player, { "maxHp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });
         result->playerMaxHp = Integer(player.at("maxHp"), 1, 1000000);
         result->walkSpeed = Number(player.at("walkSpeed"), 1, 2000);
         result->runSpeed = Number(player.at("runSpeed"), player.at("walkSpeed").get<double>(), 2000);
@@ -133,6 +133,22 @@ namespace GameRoomServer
             Require(result->monsters.contains(dataId), "Missing combat profile for monster " + std::to_string(dataId));
         result->playerSkills = ActionRPG::PlayerSkills::Catalog::Load(inPath.parent_path() / "PlayerSkills.json");
         result->skillTrees = ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inPath.parent_path() / "SkillTrees.json", result->playerSkills);
+        const auto& characters = player.at("characters");
+        Require(characters.is_array() && characters.size() == result->playerSkills.characterIds.size()
+            && !characters.empty() && characters.size() <= 256, "Every character needs one combat definition.");
+        for (const auto& character : characters)
+        {
+            Keys(character, { "characterId", "attackPower", "slide" });
+            const auto characterId = Integer(character.at("characterId"), 1, 1000000);
+            Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
+                "Combat definition references an unknown character.");
+            const auto& slide = character.at("slide");
+            Keys(slide, { "durationSeconds", "motionId" });
+            CharacterCombatDefinition definition{ Integer(character.at("attackPower"), 1, 1000000),
+                { Number(slide.at("durationSeconds"), 0.05, 2), slide.at("motionId").get<std::string>() } };
+            Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
+            Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");
+        }
         return result;
     }
 }

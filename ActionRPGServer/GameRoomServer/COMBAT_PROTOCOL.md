@@ -4,7 +4,7 @@
 
 ## 구현 범위와 현재 콘텐츠
 
-- 방 strand의 목표 30Hz 업데이트에서 플레이어 사격·점프, 탄환, 몬스터 AI, HP·피격·사망을 처리합니다.
+- 방 strand의 목표 30Hz 업데이트에서 플레이어 사격·점프·슬라이딩, 탄환, 몬스터 AI, HP·피격·사망을 처리합니다.
 - 클라이언트가 보낸 위치·피해량·피격 대상은 사용하지 않습니다. 인증된 세션의 플레이어 ID로 입력을 처리합니다.
 - MonsterEditor schemaVersion 1은 유지합니다. AI 정의의 스킬·동작 참조를 서버 전용 `Data/Combat.json`과 함께 검사합니다.
 - Dummy는 대기 정의를 유지합니다. 녹슨 갑옷병과 수호자는 감지·추적·공격 대기·공격·회복·귀환의 최소 패턴을 정의했습니다.
@@ -24,7 +24,10 @@
 ## 서버 전투 설정
 
 서버 시작 시 실행 파일 옆 `Data/Combat.json`을 읽습니다. 프로젝트의 Data 복사 대상에 포함됩니다.
-version 1, 최대 1MB이며 모든 등록 몬스터에 정확히 한 개의 프로필이 있어야 합니다.
+version 2, 최대 1MB이며 모든 등록 몬스터에 정확히 한 개의 프로필이 있어야 합니다.
+`player.characters`에는 PlayerSkills 캐릭터 목록의 모든 캐릭터를 중복 없이 등록합니다.
+각 항목은 `characterId`, `attackPower`(1~1000000), `slide.durationSeconds`(0.05~2초),
+`slide.motionId`를 포함합니다. 현재 캐릭터 1~3은 공격력 20, 지속시간 0.4초, 모션 `slide`입니다.
 없는 몬스터·스킬 참조, 중복 프로필/스킬, 누락된 필드, 비정상 수치, 이동 AI에 속도 0,
 UseSkill 행동에 타격 정의 누락을 거부합니다. 오류가 있으면 서버 시작을 중단합니다.
 AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는 값은 몬스터 정의 로딩 때 거부합니다.
@@ -37,6 +40,9 @@ AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는
 탄환 속도/사거리/반경·지상/공중 총구 위치·공중 반동, `jump`는 준비 시간·초기 수직 속도·중력을 정의합니다.
 `reactions`는 경직·쓰러짐·기상 시간을 정의합니다. 서버 좌표는 기존 방 데이터와 같은 월드 단위입니다.
 초기 월드 JSON에 `combatRules`를 추가하여 클라이언트가 서버 타이밍을 읽을 수 있도록 했습니다.
+`combatRules.version=2`이며 `slideDefinitions` 배열은 캐릭터별
+`characterId`, `attackPower`, `durationSeconds`, `motionId`를 전달합니다.
+기본 사격의 `shot.damage`와 플레이어 스킬의 피해량·랭크 계산은 캐릭터 `attackPower`로 대체하지 않습니다.
 
 기본 사격의 `muzzleForward`/`muzzleHeight`는 지상, `airMuzzleForward`/`airMuzzleHeight`는 공중 총구의
 전방 거리와 발 기준 높이입니다. 모두 0~1000 월드 단위이며 피격용 `bodyHeight`와 독립적으로 검사합니다.
@@ -83,7 +89,27 @@ Dummy(ID 1)는 현재 표시 높이와 같은 96을 유지합니다. 낮은 대�
 예약 접수 accepted=1은 만료 전에 실행이 가능해진 경우에만 실행한다는 의미입니다.
 예약과 유예 상태는 방 strand에서만 변경하고 기존 상태 패킷 구조는 유지합니다.
 클라이언트의 마을 로컬 동작에도 같은 입력 유예·예약을 적용하며, 달리기 더블 탭 간격은 0.4초,
-기존 skills.ini 방향키 스킬의 키 사이 간격은 0.55초입니다. 던전 PlayerSkills 카탈로그는 현재 비어 있습니다.
+기존 skills.ini 방향키 스킬의 키 사이 간격은 0.55초입니다. 던전 스킬 계약은 [PLAYER_SKILLS.md](PLAYER_SKILLS.md)를 따릅니다.
+
+### 슬라이딩
+
+지상에서 달리기 방향과 X 입력을 함께 보내면 action=3으로 즉시 시작합니다. 방향은 수평·수직·대각선을
+모두 허용하고 정규화합니다. 공중·점프 준비·피격·사망·스킬 시전·사격 준비/발사 중과 미처리 행동 예약이
+있을 때는 거절합니다. 이동이 허용되는 사격 회수 구간과 연속 입력 유예 중에는 시작할 수 있으며 기존 사격을 종료합니다.
+슬라이딩 중 사격·점프·스킬·다음 슬라이딩은 거절하며 예약하지 않습니다.
+
+시작 시 방향과 실제 달리기 속도(`runSpeed × 현재 가장 높은 movementMultiplier`)를 고정합니다.
+장애물이 없으면 이동 거리는 이 속도와 캐릭터별 지속시간의 곱입니다. 이동 입력이 이후 바뀌거나 버프가 만료되어도
+진행 중인 슬라이딩의 방향·속도를 바꾸지 않습니다. 벽·맵 경계·출구 워프 영역 앞에서 멈추며 슬라이딩 중 맵을 전환하지 않습니다.
+피격·사망·클리어·퇴장·룸 종료 때 즉시 취소합니다. 종료 뒤에는 최신 유지 이동 입력을 일반 이동에 적용합니다.
+
+접촉 피해는 시작 시 `attackPower × 현재 가장 높은 damageMultiplier × 1.0`으로 확정하고
+양의 uint32 범위로 제한한 뒤 소수 부분을 버립니다. 투사체 없이 이동 구간 전체의 접촉과 높이·벽 가림을 검사하여
+슬라이딩 한 번당 각 몬스터를 한 번만 타격합니다. 타격 시 피해 버프를 다시 곱하지 않습니다.
+벽·게이트는 기존 4단위 이동 단계마다 검사하되 몬스터 접촉 검사는 틱당 실제 이동한 전체 구간에 한 번만 수행합니다.
+정지할 때도 허용된 구간을 타격 검사한 뒤 종료하며, 시작 시 정지 위치의 접촉 검사는 별도로 한 번 수행합니다.
+클라이언트는 `slideSequence`로 시작을 구분하고 서버 진행 시간과 `motionId`를 사용하여 표시합니다.
+프레임·이미지 메타데이터는 클라이언트가 관리하며 서버 저장소에 생성하지 않습니다.
 
 몬스터 프로필의 `skills` 예:
 
@@ -116,28 +142,39 @@ Dummy(ID 1)는 현재 표시 높이와 같은 96을 유지합니다. 낮은 대�
 ## 패킷
 
 새 클라이언트는 초기 월드 수신 후 ID 11~13의 realtime 바이너리 프레임을 구독하여
-이동·동작을 목표 15Hz로 받을 수 있습니다. 기존 ID 1~10과 JSON 전투 복구 경로는 유지합니다.
+이동·동작을 목표 15Hz로 받을 수 있습니다. 패킷 ID와 JSON 전투 복구 경로는 유지합니다.
 시간·연결/맵 epoch·레코드 규격과 클라이언트 보간 규칙은
 [`SERVER_HANDOFF.md`](../../output/movement-smoothing/SERVER_HANDOFF.md)에 있습니다.
 서버가 상태를 전달하는 것과 클라이언트가 시간에 맞춰 보간하는 것 모두 필요합니다.
+위 handoff의 버전 1 규격에 대해서는 아래 버전 2 변경이 우선합니다. 서버·클라이언트를 함께 갱신해야 합니다.
 
-원본은 `Tool/PacketDefine.yml`입니다. 기존 ID 1~6을 유지하고 아래를 끝에 추가했습니다.
-생성 파일은 직접 수정하지 않습니다. 서버와 클라이언트 생성 파일을 각각 갱신했고,
-양쪽 결과가 공유 YAML과 일치하는 것을 정적으로 확인했습니다. 클라이언트 송수신 핸들러와 상태 표시도 연결했습니다.
+원본은 `Tool/PacketDefine.yml`입니다. ID 7·8의 버전 2 필드에 맞춰 서버 헤더와 직렬화를 동기화했습니다.
+이번 작업에서는 생성 도구·빌드·게임을 실행하지 않았습니다. 클라이언트도 같은 원본의 필드 순서로 갱신해야 합니다.
 
 | ID | 패킷 | 필드 |
 |---|---|---|
-| 7 | DungeonActionInput | sequence:uint32, action:uint8, facingLeft:uint8 |
-| 8 | DungeonActionResult | sequence:uint32, accepted:uint8, serverTick:uint64 |
+| 7 | DungeonActionInput | version:uint16, sequence:uint32, action:uint8, facingLeft:uint8, mapEpoch:uint32, moveSequence:uint32, directionX:int8, directionY:int8, running:uint8 |
+| 8 | DungeonActionResult | version:uint16, sequence:uint32, accepted:uint8, serverTick:uint64 |
 | 9 | DungeonCombatStateRequest | snapshotId:uint32, offset:uint32 |
 | 10 | DungeonCombatStateChunk | snapshotId:uint32, totalBytes:uint32, offset:uint32, status:uint8, retryAfterMs:uint32, payload:string |
 
 ### 행동 입력
 
-초기 월드 수신이 끝난 후 요청합니다. action 1=사격, 2=점프; facingLeft 0=오른쪽, 1=왼쪽입니다.
+초기 월드 수신이 끝난 후 요청합니다. `version=2`, action 1=사격, 2=점프, 3=슬라이딩;
+facingLeft 0=오른쪽, 1=왼쪽입니다. ID 7의 필드 바이트 수는 19, ID 8은 15입니다(패킷 ID·RUDP 프레이밍 제외).
 sequence는 이동 sequence와 독립적이며 연결 내에서 1부터 증가합니다. 중복·역순 요청은 다시 실행하지 않습니다.
 플레이어 ID·맵 ID·위치·피해량은 요청하지 않습니다. 잘못된 값과 초당 20개를 넘는 행동 요청은 무시합니다.
 accepted는 요청 접수 여부이며 타격 성공을 뜻하지 않습니다. HP/탄환/피격 결과는 스냅샷을 사용합니다.
+
+action=3은 같은 프레임의 `mapEpoch`, `moveSequence`, `directionX/Y`(-1~1), `running=1`을 포함합니다.
+현재 맵 epoch와 일치해야 하며 moveSequence는 0보다 크고 서버가 받은 이동 sequence 이상이어야 합니다.
+동일 sequence이면 방향과 달리기 상태도 기존 입력과 같아야 합니다. 새로운 sequence이면 이 이동 의도를
+슬라이딩 시작과 함께 원자적으로 반영하여 늦게 도착한 이전 이동 패킷이 덮어쓰지 못하게 합니다.
+방향 0/0 또는 현재 워프 영역 안에서의 시작은 거절합니다. 수평 성분이 있으면 그 방향으로 바라보고,
+수직 방향만 있으면 기존 facingLeft를 유지합니다. action=1/2에서는 추가 이동 스냅샷 필드를 사용하지 않습니다.
+슬라이딩 accepted=1은 즉시 시작, 0은 거절입니다. 유효 형식의 거절도 action sequence를 소비하며 예약하지 않습니다.
+버전·action 범위·facingLeft·sequence 형식 오류와 요청 제한 초과는 기존처럼 응답 없이 버립니다.
+스킬 입력의 결과도 같은 ID 8을 사용하므로 `version=2`가 포함됩니다.
 
 한 공격 구간은 최대 5발입니다. 공격 중 추가 사격 입력은 다음 발을 예약합니다. 준비→발사 간격→회수 시간을
 서버에서 처리하며 공중 사격은 한 번의 점프에서 최대 5발, 바라보는 쪽으로 45도 아래 방향입니다.
@@ -168,11 +205,12 @@ serverTick은 30Hz 시뮬레이션 번호이며 매 조각의 수신 시각을 �
 구독 결과의 정수 밀리초 안내값은 tickIntervalMs=33, snapshotIntervalMs=67입니다.
 큰 방에서는 조각 수와 대역폭 제한으로 전체 상태 갱신에 더 오래 걸립니다.
 
-JSON 최상위: `version=1`, `roomId`, `serverTick`, `mapId`, `state`, `cleared`, `players`, `monsters`, `projectiles`.
+JSON 최상위: `version=2`, `roomId`, `serverTick`, `mapId`, `state`, `cleared`, `players`, `monsters`, `projectiles`.
 state는 WaitingForPlayers/Running/Cleared/Stopped입니다. 다른 roomId 또는 이전 serverTick의 상태는 적용하지 않습니다.
 
 - players: playerId, x/y, hp/maxHp, height/verticalSpeed, facingLeft, reaction/reactionSeconds, shotPhase,
-  shotSeconds/shotCount/airShotCount, jumpPhase/jumpSeconds, airAttack, actionSequence, moveSequence.
+  shotSeconds/shotCount/airShotCount, jumpPhase/jumpSeconds, airAttack, actionSequence, moveSequence, running,
+  slideActive, slideSequence, slideSeconds, slideDurationSeconds, slideDirectionX, slideDirectionY, slideSpeed.
 - monsters: instanceId/dataId, x/y, hp/maxHp, height/verticalSpeed, facingLeft, reaction/reactionSeconds,
   aiNodeId, actionType, actionStarted/actionComplete, actionSeconds, animationId.
 - projectiles: id/ownerId, x/y, height, direction, heightDirection.
@@ -184,6 +222,26 @@ Dead 개체는 스냅샷에 남고 HP 0입니다. 사망 애니메이션은 개�
 스냅샷의 개체 나열 순서는 고정하지 않으므로 항상 ID로 대응합니다.
 mapId가 바뀌면 이전 방의 표시 목록을 교체합니다. 삭제된 탄환은 해당 방에서 제거합니다.
 클리어 뒤에도 상태 요청은 가능하며 cleared=true입니다.
+
+### Realtime 버전 2
+
+ID 11 요청, ID 12 구독 결과, ID 13 조각의 `version`은 모두 2입니다. 서버는 버전 2 요청만 승인합니다.
+바이너리는 기존 little-endian 순서와 float32 표현을 유지하며, 각 플레이어 기본 레코드의 마지막 `running` 뒤에
+다음 필드를 순서대로 추가합니다. 플레이어 레코드는 기존 76바이트에서 101바이트가 됩니다.
+
+| 필드 | 형식 | 바이트 수 |
+|---|---|---|
+| slideActive | uint8 | 1 |
+| slideSequence | uint32 | 4 |
+| slideSeconds | float32 | 4 |
+| slideDurationSeconds | float32 | 4 |
+| slideDirectionX | float32 | 4 |
+| slideDirectionY | float32 | 4 |
+| slideSpeed | float32 | 4 |
+
+슬라이딩 종료·취소 때 slideActive=false로 전환하고 마지막 번호·시간·방향·속도는 보존합니다.
+모든 기본 플레이어·몬스터·투사체 레코드 뒤에 오는 기존 SKL1 tail의 내부 순서는 유지합니다.
+버전 1 클라이언트는 변경된 기본 플레이어 레코드와 ID 7·8을 읽을 수 없으므로 함께 갱신해야 합니다.
 
 ## 통합 결과와 후속 범위
 

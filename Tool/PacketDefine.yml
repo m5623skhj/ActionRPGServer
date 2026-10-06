@@ -68,16 +68,30 @@ Packet:
   - Type: RequestPacket
     PacketName: DungeonActionInput
     Items:
+      - Type: std::uint16_t
+        Name: version
       - Type: std::uint32_t
         Name: sequence
       - Type: std::uint8_t
         Name: action
       - Type: std::uint8_t
         Name: facingLeft
+      - Type: std::uint32_t
+        Name: mapEpoch
+      - Type: std::uint32_t
+        Name: moveSequence
+      - Type: std::int8_t
+        Name: directionX
+      - Type: std::int8_t
+        Name: directionY
+      - Type: std::uint8_t
+        Name: running
 
   - Type: ReplyPacket
     PacketName: DungeonActionResult
     Items:
+      - Type: std::uint16_t
+        Name: version
       - Type: std::uint32_t
         Name: sequence
       - Type: std::uint8_t

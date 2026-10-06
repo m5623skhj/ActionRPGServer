@@ -17,7 +17,40 @@ namespace GameRoomServer
         constexpr std::size_t MAX_PROJECTILES = 256;
         constexpr unsigned MAX_TRANSITIONS_PER_TICK = 64;
         constexpr std::size_t MAX_SNAPSHOT_BYTES = 512 * 1024;
+        constexpr float SLIDE_DAMAGE_COEFFICIENT = 1.0f;
         float Distance(DungeonPoint a, DungeonPoint b) { return std::hypot(a.x - b.x, a.y - b.y); }
+
+        // Detect even a narrow gate crossed between movement samples; sliding never changes maps.
+        bool CrossesPolygon(const nlohmann::json& inPolygon, DungeonPoint inStart, DungeonPoint inEnd)
+        {
+            if (DungeonDefinition::Contains(inPolygon, inStart) || DungeonDefinition::Contains(inPolygon, inEnd)) return true;
+            const double dx = inEnd.x - inStart.x, dy = inEnd.y - inStart.y;
+            const double lengthSquared = dx * dx + dy * dy;
+            if (lengthSquared == 0) return false;
+            constexpr double GEOMETRY_EPSILON = 0.00000001;
+            for (std::size_t index = 0; index < inPolygon.size(); ++index)
+            {
+                const auto a = DungeonDefinition::Point(inPolygon[index]);
+                const auto b = DungeonDefinition::Point(inPolygon[(index + 1) % inPolygon.size()]);
+                const double ex = b.x - a.x, ey = b.y - a.y;
+                const double ox = a.x - inStart.x, oy = a.y - inStart.y;
+                const double denominator = dx * ey - dy * ex;
+                if (std::abs(denominator) <= GEOMETRY_EPSILON)
+                {
+                    if (std::abs(ox * dy - oy * dx) > GEOMETRY_EPSILON) continue;
+                    const double first = (ox * dx + oy * dy) / lengthSquared;
+                    const double last = first + (ex * dx + ey * dy) / lengthSquared;
+                    if (std::max(0.0, std::min(first, last)) <= std::min(1.0, std::max(first, last))) return true;
+                }
+                else
+                {
+                    const double t = (ox * ey - oy * ex) / denominator;
+                    const double u = (ox * dy - oy * dx) / denominator;
+                    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return true;
+                }
+            }
+            return false;
+        }
 
         /**
          * Return the first fraction where a segment overlaps both a ground circle and a height interval.
@@ -97,6 +130,7 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, inInput, handler = std::move(inHandler)]()
         {
             ActionRPG::DungeonProtocol::DungeonActionResult result;
+            result.version = COMBAT_PROTOCOL_VERSION;
             result.sequence = inInput.sequence;
             result.serverTick = self->serverTick;
             const auto found = self->players.find(inPlayerId);
@@ -107,7 +141,15 @@ namespace GameRoomServer
                 if (inInput.sequence > player.actionSequence)
                 {
                     player.actionSequence = inInput.sequence;
-                    if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
+                    if (inInput.version == COMBAT_PROTOCOL_VERSION && self->state == State::Running
+                        && !self->clearRequested && player.actor.hp > 0 && !player.slide.active
+                        && player.actor.reaction == Reaction::None && inInput.facingLeft <= 1
+                        && inInput.action == 3)
+                    {
+                        if (self->TryStartSlide(player, inInput)) result.accepted = 1;
+                    }
+                    else if (inInput.version == COMBAT_PROTOCOL_VERSION && self->state == State::Running
+                        && !self->clearRequested && player.actor.hp > 0 && !player.slide.active
                         && player.actor.reaction == Reaction::None && inInput.facingLeft <= 1
                         && (inInput.action == 1 || inInput.action == 2))
                     {
@@ -134,10 +176,130 @@ namespace GameRoomServer
         });
     }
 
+    // Capture the same-frame movement intent atomically; older standalone move packets cannot replace it.
+    bool GameRoom::TryStartSlide(PlayerState& inPlayer,
+        const ActionRPG::DungeonProtocol::DungeonActionInput& inInput)
+    {
+        if (inPlayer.slide.active || inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None
+            || inPlayer.actor.height != 0 || inPlayer.jumpPreparing || inPlayer.skill
+            || (inPlayer.shotPhase != ShotPhase::None
+                && !(inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0))
+            || !inPlayer.bufferedActions.empty()
+            || inInput.mapEpoch != inPlayer.mapEpoch || inInput.moveSequence == 0
+            || inInput.moveSequence < inPlayer.sequence || inInput.running != 1
+            || inInput.directionX < -1 || inInput.directionX > 1 || inInput.directionY < -1 || inInput.directionY > 1)
+            return false;
+        if (inInput.moveSequence == inPlayer.sequence && (inInput.directionX != inPlayer.directionX
+            || inInput.directionY != inPlayer.directionY || !inPlayer.running)) return false;
+        const float length = std::hypot(static_cast<float>(inInput.directionX), static_cast<float>(inInput.directionY));
+        const auto definition = combatDefinition->characters.find(inPlayer.characterId);
+        if (length == 0 || definition == combatDefinition->characters.end()) return false;
+        const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+        for (const auto& zone : map.at("transitionZones"))
+            if (DungeonDefinition::Contains(zone.at("polygon"), inPlayer.position)) return false;
+
+        SlideState slide;
+        slide.active = true;
+        slide.sequence = inInput.sequence;
+        slide.durationSeconds = definition->second.slide.durationSeconds;
+        slide.directionX = inInput.directionX / length;
+        slide.directionY = inInput.directionY / length;
+        slide.speed = inPlayer.runSpeed * BuffMultiplier(inPlayer, "movementMultiplier");
+        slide.damage = static_cast<std::uint32_t>(std::clamp(
+            static_cast<double>(definition->second.attackPower) * BuffMultiplier(inPlayer, "damageMultiplier")
+                * SLIDE_DAMAGE_COEFFICIENT, 1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+        inPlayer.sequence = inInput.moveSequence;
+        inPlayer.directionX = inInput.directionX;
+        inPlayer.directionY = inInput.directionY;
+        inPlayer.running = true;
+        inPlayer.lastInput = std::chrono::steady_clock::now();
+        if (inInput.directionX != 0) inPlayer.facingLeft = inInput.directionX < 0;
+        inPlayer.slide = std::move(slide);
+        ResetShotState(inPlayer);
+        inPlayer.bufferedActions.clear();
+        HitSlideContacts(inPlayer, inPlayer.position, inPlayer.position);
+        CheckClear();
+        return true;
+    }
+
+    void GameRoom::StopSlide(PlayerState& inPlayer)
+    {
+        inPlayer.slide.active = false;
+        inPlayer.slide.hitIds.clear();
+    }
+
+    /** Advance at the captured speed for at most the remaining duration. Four-unit foot-collision steps
+     * stop at walls/gates; one contact sweep per tick covers the entire accepted displacement.
+     */
+    void GameRoom::UpdateSlide(PlayerState& inPlayer, float inDeltaSeconds)
+    {
+        if (!inPlayer.slide.active) return;
+        if (clearRequested || state != State::Running || inPlayer.actor.hp == 0
+            || inPlayer.actor.reaction != Reaction::None || inPlayer.actor.height != 0)
+        { StopSlide(inPlayer); return; }
+        auto& slide = inPlayer.slide;
+        const float before = slide.seconds;
+        const float remaining = std::max(0.0f, slide.durationSeconds - before);
+        const float delta = std::min(inDeltaSeconds, remaining);
+        const float distance = slide.speed * delta;
+        const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
+        const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+        const auto tickStart = inPlayer.position;
+        bool blocked{};
+        for (int step = 0; step < steps; ++step)
+        {
+            const auto start = inPlayer.position;
+            const DungeonPoint next{ start.x + slide.directionX * distance / steps,
+                start.y + slide.directionY * distance / steps };
+            const bool gate = std::any_of(map.at("transitionZones").begin(), map.at("transitionZones").end(),
+                [start, next](const auto& zone) { return CrossesPolygon(zone.at("polygon"), start, next); });
+            if (!DungeonDefinition::Movable(map, next) || gate) { blocked = true; break; }
+            inPlayer.position = next;
+            slide.seconds = std::min(slide.durationSeconds, before + delta * (step + 1) / steps);
+        }
+        // Check the accepted segment before StopSlide clears the per-slide hit IDs, including blocked ticks.
+        HitSlideContacts(inPlayer, tickStart, inPlayer.position);
+        if (blocked) { StopSlide(inPlayer); return; }
+        if (inDeltaSeconds >= remaining) { slide.seconds = slide.durationSeconds; StopSlide(inPlayer); }
+    }
+
+    // Each slide hits a living monster once. Damage is already buffed at start; never multiply it here.
+    void GameRoom::HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd)
+    {
+        const auto found = monsterIdsByMap.find(inPlayer.mapId);
+        if (found == monsterIdsByMap.end()) return;
+        const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+        for (const auto id : found->second)
+        {
+            auto& monster = monsters.at(id);
+            if (monster.actor.hp == 0 || inPlayer.slide.hitIds.contains(id)) continue;
+            const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
+            const auto fraction = ProjectileHitFraction(inStart, 0, inEnd, 0, monster.position,
+                combatDefinition->hitRadius + profile.hitRadius,
+                monster.actor.height - combatDefinition->bodyHeight, monster.actor.height + profile.bodyHeight);
+            if (!fraction) continue;
+            const DungeonPoint contact{ inStart.x + (inEnd.x - inStart.x) * *fraction,
+                inStart.y + (inEnd.y - inStart.y) * *fraction };
+            const float length = Distance(contact, monster.position);
+            const int steps = std::max(1, static_cast<int>(std::ceil(length / 4)));
+            bool visible = true;
+            for (int step = 0; step <= steps && visible; ++step)
+            {
+                const float t = static_cast<float>(step) / steps;
+                visible = DungeonDefinition::Movable(map, { contact.x + (monster.position.x - contact.x) * t,
+                    contact.y + (monster.position.y - contact.y) * t });
+            }
+            if (!visible) continue;
+            inPlayer.slide.hitIds.insert(id);
+            ApplyDamage(monster.actor, inPlayer.slide.damage, false);
+            monster.actionStarted = monster.actionComplete = false;
+        }
+    }
+
     // Execute immediately when legal. Combo grace never holds a movement/animation phase open.
     bool GameRoom::TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft)
     {
-        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill) return false;
+        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill || inPlayer.slide.active) return false;
         if (inAction == 2 && inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0)
             inPlayer.shotPhase = ShotPhase::None;
         if (inAction == 1)
@@ -182,7 +344,7 @@ namespace GameRoomServer
     // The room strand owns this bounded FIFO; each key expires independently after 250 ms.
     void GameRoom::UpdateBufferedActions(PlayerState& inPlayer, float inDeltaSeconds)
     {
-        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None)
+        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.slide.active)
         {
             inPlayer.bufferedActions.clear();
             inPlayer.shotInputRemainingSeconds = 0;
@@ -613,6 +775,7 @@ namespace GameRoomServer
         if (std::all_of(bosses.begin(), bosses.end(), [this](auto id) { return monsters.at(id).actor.hp == 0; }))
         {
             clearRequested = true;
+            for (auto& [id, player] : players) StopSlide(player);
             if (clearHandler) clearHandler(roomId);
         }
     }
@@ -646,7 +809,7 @@ namespace GameRoomServer
             UpdateShots(id, player, inDeltaSeconds);
             UpdateSkills(id, player, inDeltaSeconds);
             UpdateBufferedActions(player, inDeltaSeconds);
-            if (!player.skill && !IsShotFacingLocked(player) && player.actor.hp > 0
+            if (!player.skill && !player.slide.active && !IsShotFacingLocked(player) && player.actor.hp > 0
                 && player.actor.reaction == Reaction::None && player.directionX != 0
                 && now - player.lastInput <= std::chrono::seconds(1))
                 player.facingLeft = player.directionX < 0;
@@ -660,6 +823,8 @@ namespace GameRoomServer
                 EnterNode(monster, monster.definition->GetAi().at("initialNodeId").get<std::string>());
             UpdateMonster(monster, inDeltaSeconds);
         }
+        for (auto& [id, player] : players)
+            if (player.slide.active && (player.actor.hp == 0 || player.actor.reaction != Reaction::None)) StopSlide(player);
         CheckClear();
     }
 
@@ -673,7 +838,7 @@ namespace GameRoomServer
             if (found == self->players.end() || !self->enteredPlayers.contains(inPlayerId)) { handler(nullptr); return; }
             found->second.worldReady = true;
             const auto& mapId = found->second.mapId;
-            nlohmann::json snapshot{ { "version", 1 }, { "serverTick", self->serverTick }, { "mapId", mapId },
+            nlohmann::json snapshot{ { "version", COMBAT_PROTOCOL_VERSION }, { "serverTick", self->serverTick }, { "mapId", mapId },
                 { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
                 { "serverTimeMs", static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count()) },
@@ -711,6 +876,14 @@ namespace GameRoomServer
                 record["skillLevels"] = player.progression.skillLevels;
                 record["skillCooldowns"] = player.skillCooldowns;
                 record["movementMultiplier"] = BuffMultiplier(player, "movementMultiplier");
+                record["running"] = player.running;
+                record["slideActive"] = player.slide.active;
+                record["slideSequence"] = player.slide.sequence;
+                record["slideSeconds"] = player.slide.seconds;
+                record["slideDurationSeconds"] = player.slide.durationSeconds;
+                record["slideDirectionX"] = player.slide.directionX;
+                record["slideDirectionY"] = player.slide.directionY;
+                record["slideSpeed"] = player.slide.speed;
                 record["buffs"] = nlohmann::json::array();
                 for (const auto& buff : player.buffs) record["buffs"].push_back({ { "skillId", buff.id }, { "remainingSeconds", buff.remainingSeconds } });
             }

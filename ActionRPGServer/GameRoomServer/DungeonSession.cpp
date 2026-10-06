@@ -208,7 +208,7 @@ namespace GameRoomServer
         realtimeWindow = lastRealtimeRequest = {};
     }
 
-    // Opt-in preserves old clients. The weak lease expires at unsubscribe/disconnect/session reuse.
+    // The negotiated combat version must match the frame layout; the lease also fences session reuse.
     void DungeonSession::OnRealtimeRequest(const ActionRPG::DungeonProtocol::DungeonRealtimeRequest& inPacket)
     {
         std::shared_ptr<GameRoom> room;
@@ -225,12 +225,12 @@ namespace GameRoomServer
             if (now - lastRealtimeRequest < std::chrono::seconds(1)) return;
             lastRealtimeRequest = now;
             ActionRPG::DungeonProtocol::DungeonRealtimeResult result;
-            result.version = 1; result.challenge = challenge; result.roomId = roomId;
+            result.version = GameRoom::COMBAT_PROTOCOL_VERSION; result.challenge = challenge; result.roomId = roomId;
             result.tickIntervalMs = static_cast<std::uint16_t>((1000 + GameRoom::TICK_RATE / 2) / GameRoom::TICK_RATE);
             result.snapshotIntervalMs = static_cast<std::uint16_t>((1000 + GameRoom::SNAPSHOT_RATE / 2) / GameRoom::SNAPSHOT_RATE);
             const auto boundGameRoom = gameRoom.lock();
             if (boundGameRoom) result.dungeonId = boundGameRoom->GetDungeonId();
-            if (inPacket.version == 1 && inPacket.enabled <= 1 && boundGameRoom)
+            if (inPacket.version == GameRoom::COMBAT_PROTOCOL_VERSION && inPacket.enabled <= 1 && boundGameRoom)
             {
                 result.accepted = 1;
                 if (inPacket.enabled == 0) realtimeLease.reset();
@@ -275,7 +275,7 @@ namespace GameRoomServer
         for (std::size_t offset = 0; offset < inFrame->payload.size(); offset += CHUNK_BYTES)
         {
             ActionRPG::DungeonProtocol::DungeonRealtimeChunk packet;
-            packet.version = 1; packet.challenge = challenge; packet.roomId = roomId;
+            packet.version = GameRoom::COMBAT_PROTOCOL_VERSION; packet.challenge = challenge; packet.roomId = roomId;
             packet.dungeonId = boundGameRoom->GetDungeonId();
             packet.mapEpoch = inMapEpoch; packet.snapshotSequence = inFrame->sequence;
             packet.serverTick = inFrame->tick; packet.serverTimeMs = inFrame->timeMs;
@@ -289,7 +289,8 @@ namespace GameRoomServer
 
     void DungeonSession::OnActionInput(const ActionRPG::DungeonProtocol::DungeonActionInput& inPacket)
     {
-        if (inPacket.sequence == 0 || inPacket.action < 1 || inPacket.action > 2 || inPacket.facingLeft > 1) return;
+        if (inPacket.version != GameRoom::COMBAT_PROTOCOL_VERSION || inPacket.sequence == 0
+            || inPacket.action < 1 || inPacket.action > 3 || inPacket.facingLeft > 1) return;
         std::shared_ptr<GameRoom> room;
         std::uint32_t generation{};
         ActionRPG::RoomControlProtocol::RoomId boundRoom{};

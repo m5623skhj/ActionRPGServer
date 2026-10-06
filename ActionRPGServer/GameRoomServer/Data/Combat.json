@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "player": {
     "maxHp": 100, "walkSpeed": 280, "runSpeed": 480, "bodyHeight": 96, "hitRadius": 20,
     "shot": {
@@ -9,7 +9,12 @@
       "airMuzzleForward": 45.765625, "airMuzzleHeight": 86.0078125,
       "airFireLift": 60, "airRecoilDistance": 8
     },
-    "jump": { "prepareSeconds": 0.1, "speed": 567.62, "gravity": 1200 }
+    "jump": { "prepareSeconds": 0.1, "speed": 567.62, "gravity": 1200 },
+    "characters": [
+      { "characterId": 1, "attackPower": 20, "slide": { "durationSeconds": 0.4, "motionId": "slide" } },
+      { "characterId": 2, "attackPower": 20, "slide": { "durationSeconds": 0.4, "motionId": "slide" } },
+      { "characterId": 3, "attackPower": 20, "slide": { "durationSeconds": 0.4, "motionId": "slide" } }
+    ]
   },
   "reactions": { "hitStunSeconds": 0.25, "downSeconds": 0.5, "riseSeconds": 0.35 },
   "monsters": [

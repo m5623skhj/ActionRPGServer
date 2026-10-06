@@ -23,6 +23,7 @@ namespace GameRoomServer
     class GameRoom final : public std::enable_shared_from_this<GameRoom>
     {
     public:
+        static constexpr std::uint16_t COMBAT_PROTOCOL_VERSION = 2;
         static constexpr std::uint32_t TICK_RATE = 30;
         static constexpr std::uint32_t SNAPSHOT_RATE = 15;
         static constexpr float TICK_SECONDS = 1.0f / TICK_RATE;
@@ -114,6 +115,13 @@ namespace GameRoomServer
             std::string id, stat;
             float multiplier{}, remainingSeconds{};
         };
+        struct SlideState
+        {
+            bool active{};
+            std::uint32_t sequence{}, damage{};
+            float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{};
+            std::unordered_set<std::uint64_t> hitIds;
+        };
         struct BufferedAction
         {
             std::uint8_t action{};
@@ -148,6 +156,7 @@ namespace GameRoomServer
             std::optional<ActiveSkill> skill;
             std::unordered_map<std::string, float> skillCooldowns;
             std::vector<ActiveBuff> buffs;
+            SlideState slide;
             ActionRPG::PlayerSkills::CharacterProgression progression;
         };
 
@@ -193,6 +202,10 @@ namespace GameRoomServer
         static void ResetShotState(PlayerState& inPlayer);
         bool TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft);
         void UpdateBufferedActions(PlayerState& inPlayer, float inDeltaSeconds);
+        bool TryStartSlide(PlayerState& inPlayer, const ActionRPG::DungeonProtocol::DungeonActionInput& inInput);
+        void UpdateSlide(PlayerState& inPlayer, float inDeltaSeconds);
+        void HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd);
+        static void StopSlide(PlayerState& inPlayer);
         void UpdateProjectiles(float inDeltaSeconds);
         void UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
         [[nodiscard]] static float BuffMultiplier(const PlayerState& inPlayer, const char* inStat);

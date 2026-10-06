@@ -118,16 +118,28 @@ namespace ActionRPG::DungeonProtocol
 
     void DungeonActionInput::BufferToPacket(NetBuffer& inBuffer)
     {
+        inBuffer >> version;
         inBuffer >> sequence;
         inBuffer >> action;
         inBuffer >> facingLeft;
+        inBuffer >> mapEpoch;
+        inBuffer >> moveSequence;
+        inBuffer >> directionX;
+        inBuffer >> directionY;
+        inBuffer >> running;
     }
 
     void DungeonActionInput::PacketToBuffer(NetBuffer& outBuffer)
     {
+        outBuffer << version;
         outBuffer << sequence;
         outBuffer << action;
         outBuffer << facingLeft;
+        outBuffer << mapEpoch;
+        outBuffer << moveSequence;
+        outBuffer << directionX;
+        outBuffer << directionY;
+        outBuffer << running;
     }
 
     ::PacketId DungeonActionResult::GetPacketId() const
@@ -137,6 +149,7 @@ namespace ActionRPG::DungeonProtocol
 
     void DungeonActionResult::BufferToPacket(NetBuffer& inBuffer)
     {
+        inBuffer >> version;
         inBuffer >> sequence;
         inBuffer >> accepted;
         inBuffer >> serverTick;
@@ -144,6 +157,7 @@ namespace ActionRPG::DungeonProtocol
 
     void DungeonActionResult::PacketToBuffer(NetBuffer& outBuffer)
     {
+        outBuffer << version;
         outBuffer << sequence;
         outBuffer << accepted;
         outBuffer << serverTick;

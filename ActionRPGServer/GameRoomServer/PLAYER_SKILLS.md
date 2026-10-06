@@ -3,8 +3,9 @@
 승인된 플레이어 스킬 편집기는 클라이언트 저장소의 `SkillEditor`입니다. 직접 공격, 단일 투사체 공격, 자기 대상 버프를 지원합니다.
 모델·파일·좌표·네트워크 상세 계약은 `SkillEditor/FORMAT.md`, 사용자 흐름은 `SkillEditor/README.md`에 있습니다.
 
-서버는 시작 시 `Data/PlayerSkills.json`을 CombatDefinition과 함께 읽습니다. 파일이 없으면 빈 카탈로그로 동작하며,
-파일이 있으면 형식·스키마·알 수 없는 필드·참조·수치 범위를 공용 로더로 검사합니다. 기본 원본 파일은 빈 카탈로그입니다.
+서버는 시작 시 `Data/PlayerSkills.json`을 CombatDefinition과 함께 읽습니다.
+형식·스키마·알 수 없는 필드·참조·수치 범위를 공용 로더로 검사합니다.
+Combat version 2는 이 파일의 캐릭터 목록과 캐릭터별 전투 정의를 함께 요구하므로 누락되거나 빈 목록이면 시작을 거부합니다.
 새 스킬 ID나 이미지를 자동으로 생성하거나 기존 기본 사격·몬스터 Combat 프로필을 대체하지 않습니다.
 
 `Shared/PlayerSkillCatalog.h`와 클라이언트 `Game/PlayerSkillCatalog.h`는 같은 바이트의 계약 로더입니다.
@@ -13,6 +14,8 @@
 실행 규칙:
 
 - DungeonSkillInput은 인증된 세션의 플레이어로 실행합니다. 입력/기본 액션이 sequence와 20회/초 제한을 공유합니다.
+- 결과는 DungeonActionResult(ID 8)의 version=2 형식이며 슬라이딩 중에는 시전을 거절합니다.
+  기본 플레이어 레코드가 101바이트인 realtime 버전 2와 기존 SKL1 tail의 경계는 [COMBAT_PROTOCOL.md](COMBAT_PROTOCOL.md)를 따릅니다.
 - TownServer가 확정한 characterId를 ConfirmJoin으로 전달합니다. 클라이언트는 스킬 소유 캐릭터를 요청 패킷에 넣지 않습니다.
 - 캐릭터 소유권·지상/공중 허용·사망·피격 반응·다른 행동·쿨다운을 룸 strand에서 검사합니다.
 - 직접 공격은 X/높이 사각형과 지면 Y 반경을 검사하고 시전당 같은 몬스터를 한 번만 타격합니다.
@@ -24,7 +27,7 @@
 - 마지막 시전 ID/번호/시간을 보존하고 active를 별도로 전달하여 모션 종료 뒤의 일회성 이펙트도 표현합니다.
 
 스킬은 기존 초기 월드에 포함됩니다. 클라이언트는 서버/로컬 카탈로그가 같을 때만 진입합니다.
-기존 실시간 actor/projectile 순서를 보존하고 SKL1 tail로 스킬 상태를 전달하며 JSON 복구 경로에도 같은 필드를 넣습니다.
+실시간 기본 레코드 뒤의 SKL1 tail로 스킬 상태를 전달하며 JSON 복구 경로에도 같은 필드를 넣습니다.
 기존 목표 상태 전달 주기는 변경하지 않았습니다. 실제 시뮬레이션 틱은 최신 GameRoom의 주기를 사용하며 프레임 판정은 전달받은 deltaSeconds에 독립적입니다.
 
 새 ConfirmJoin을 사용하므로 TownServer/룸 서버 및 스킬 tail을 읽는 클라이언트를 같은 계약으로 빌드해야 합니다.

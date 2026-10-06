@@ -22,6 +22,7 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, input = std::move(inInput), handler = std::move(inHandler)]()
         {
             ActionRPG::DungeonProtocol::DungeonActionResult result;
+            result.version = COMBAT_PROTOCOL_VERSION;
             result.sequence = input.sequence; result.serverTick = self->serverTick;
             const auto found = self->players.find(inPlayerId);
             if (found != self->players.end() && self->enteredPlayers.contains(inPlayerId))
@@ -32,7 +33,7 @@ namespace GameRoomServer
                     player.actionSequence = input.sequence; player.worldReady = true;
                     const auto definition = self->combatDefinition->playerSkills.skills.find(input.skillId);
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
-                        && player.actor.reaction == Reaction::None && !player.skill && !player.jumpPreparing
+                        && player.actor.reaction == Reaction::None && !player.skill && !player.jumpPreparing && !player.slide.active
                         && (player.shotPhase == ShotPhase::None
                             || (player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)) && input.facingLeft <= 1
                         && definition != self->combatDefinition->playerSkills.skills.end())

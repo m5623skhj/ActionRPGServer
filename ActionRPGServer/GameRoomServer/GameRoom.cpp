@@ -36,7 +36,7 @@ namespace GameRoomServer
         dungeonWorld["playerSkills"] = combatDefinition->playerSkills.source;
         dungeonWorld["skillTrees"] = combatDefinition->skillTrees.source;
         dungeonWorld["combatRules"] = {
-            { "version", 1 }, { "maxHp", combatDefinition->playerMaxHp },
+            { "version", COMBAT_PROTOCOL_VERSION }, { "maxHp", combatDefinition->playerMaxHp },
             { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
             { "walkSpeed", combatDefinition->walkSpeed }, { "runSpeed", combatDefinition->runSpeed },
             { "shotPrepareSeconds", combatDefinition->shotPrepareSeconds },
@@ -49,6 +49,16 @@ namespace GameRoomServer
             { "airRecoilDistance", combatDefinition->airRecoilDistance }, { "muzzleHeight", combatDefinition->muzzleHeight },
             { "projectileSpeed", combatDefinition->projectileSpeed }, { "maxShots", 5 }
         };
+        auto& slideDefinitions = dungeonWorld["combatRules"]["slideDefinitions"] = nlohmann::json::array();
+        std::vector<std::uint32_t> characterIds;
+        for (const auto& [id, character] : combatDefinition->characters) characterIds.push_back(id);
+        std::sort(characterIds.begin(), characterIds.end());
+        for (const auto id : characterIds)
+        {
+            const auto& character = combatDefinition->characters.at(id);
+            slideDefinitions.push_back({ { "characterId", id }, { "attackPower", character.attackPower },
+                { "durationSeconds", character.slide.durationSeconds }, { "motionId", character.slide.motionId } });
+        }
         // Create monsters once per dungeon instance; map transfers preserve their IDs and HP.
         std::uint64_t nextMonsterId = 1;
         for (auto& [mapId, map] : dungeonWorld["maps"].items())
@@ -118,7 +128,7 @@ namespace GameRoomServer
             if ((inInput.directionX != 0 || inInput.directionY != 0)
                 && player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)
                 player.shotPhase = ShotPhase::None;
-            if (!player.skill && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
+            if (!player.skill && !player.slide.active && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
                 && inInput.directionX != 0) player.facingLeft = inInput.directionX < 0;
             player.running = inInput.running != 0;
             player.lastInput = std::chrono::steady_clock::now();
@@ -147,6 +157,7 @@ namespace GameRoomServer
         for (auto& [id, player] : players)
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
+            if (player.slide.active) { UpdateSlide(player, inDeltaSeconds); continue; }
             if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
                 || player.skill || (player.shotPhase != ShotPhase::None
                     && !(player.shotPhase == ShotPhase::Recover && player.pendingShots == 0))) continue;
@@ -185,6 +196,7 @@ namespace GameRoomServer
                             { return value.at("id") == action.at("targetEntryPointId"); });
                         player.mapId = targetMapId;
                         ++player.mapEpoch;
+                        StopSlide(player);
                         player.bufferedActions.clear();
                         ResetShotState(player);
                         player.position = DungeonDefinition::Point(entry->at("position"));
@@ -243,6 +255,7 @@ namespace GameRoomServer
             {
                 self->ResetShotState(player);
                 player.bufferedActions.clear();
+                self->StopSlide(player);
             }
             self->PublishRealtime();
             self->realtimeSubscribers.clear();
@@ -272,6 +285,7 @@ namespace GameRoomServer
             }
             const bool accepted = self->state == State::WaitingForPlayers
                 && inCharacterId != 0
+                && self->combatDefinition->characters.contains(inCharacterId)
                 && self->expectedPlayers.contains(inPlayerId)
                 && self->enteredPlayers.insert(inPlayerId).second;
             if (accepted)
@@ -303,6 +317,7 @@ namespace GameRoomServer
             {
                 self->ResetShotState(player->second);
                 player->second.bufferedActions.clear();
+                self->StopSlide(player->second);
                 player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear();
             }
             self->realtimeSubscribers.erase(inPlayerId);
@@ -327,6 +342,7 @@ namespace GameRoomServer
             {
                 self->ResetShotState(player->second);
                 player->second.bufferedActions.clear();
+                self->StopSlide(player->second);
             }
             self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = self->enteredPlayers.empty()
@@ -364,6 +380,7 @@ namespace GameRoomServer
             {
                 self->ResetShotState(player);
                 player.bufferedActions.clear();
+                self->StopSlide(player);
             }
             self->PublishRealtime();
             asio::error_code ignoredError;
