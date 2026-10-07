@@ -31,7 +31,9 @@ DB 개요와 버전 SQL 구성은 [계정 DB README](../ActionRPGServer/Database
 
 현재 구현은 MySQL 8.0.46 / InnoDB, 64비트 Windows PowerShell 5.1 / System.Data.Odbc의
 수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000003이며 실제 DB
-적용 버전은 이 문서 작업에서 미확인이다.
+적용 결과는 2026-10-07 사용자 로컬 로그의 V000003 / 종료 코드 0이다. 에이전트 직접 DB 접속이나
+새 PC 검증 결과는 아니다. 처음 구성하는 경우 [새 PC 설정·트러블슈팅](../docs/workflows/LOCAL_DEVELOPMENT_SETUP.md)의
+계정 생성·권한·보호된 연결 문자열 입력 예제부터 따른다.
 
 1. 대상 MySQL·스키마 이름, 64비트 MySQL ODBC 드라이버, TLS·전용 실행 주체와 권한을 준비한다.
    스키마가 없으면 Up의 `-CreateDatabase`로 생성할 수 있다. 이때 대상 DB의 CREATE 권한이 필요하다.

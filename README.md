@@ -1,11 +1,14 @@
 # ActionRPGServer
 
 현재 서버는 AuthServer, TownServer, GameRoomServer의 세 프로세스로 구성된다. 이 문서는
-2026-10-06 소스를 기준으로 설명하며, 문서 작성 중 빌드·실행·실제 DB/Google 요청은 수행하지 않았다.
-소스 구현과 실제 환경에서의 동작 검증을 구분한다.
+2026-10-07 소스를 기준으로 설명한다. 사용자가 로컬 V000003 마이그레이션 성공과 Google 로그인 후
+정상 입장을 확인했다. 에이전트는 문서 작성 중 빌드·실행·실제 DB/Google 요청을 수행하지 않았다.
+새 PC의 동작과 던전 전투·성능은 별도 검증 대상이다.
 
 이 파일은 서버 저장소의 대표 진입 문서다. 처음 구성할 때는 아래 서버 구조와
 [설정·실행 순서](#설정과-실행-순서)를 읽고, 작업할 영역의 상세 문서로 이동한다.
+다른 컴퓨터의 최초 설치와 이번 오류 해결 기록은
+[새 Windows PC 설정·트러블슈팅](docs/workflows/LOCAL_DEVELOPMENT_SETUP.md)을 따른다.
 로그인 API와 검증은 [Auth 개발 계약](ActionRPGServer/AuthServer/DEVELOPMENT.md),
 마을·던전 입장과 패킷 확장은 [Town 개발 가이드](ActionRPGServer/TownServer/DEVELOPMENT.md),
 룸 전투는 [전투 계약](ActionRPGServer/GameRoomServer/COMBAT_PROTOCOL.md)을 따른다.
@@ -249,5 +252,5 @@ Auth 재시작 전에는 기존 Town/Room 접속을 모두 종료하고 확인�
 
 MultiSocketRUDP 갱신은 External/MultiSocketRUDP의 커밋과 CommonCode를 함께 대조한 뒤
 Room을 다시 빌드하고 검증한 서브모듈 포인터를 관리한다. 라이브러리 소스를 콘텐츠 폴더로 복사하지 않는다.
-이번 작업은 문서·소스 정적 대조만 수행했다. 실제 Google 프로젝트 설정, 인증서 신뢰, DB 적용 상태,
-로그인→타운→룸 왕복, 여러 유저 전투 및 부하 성능은 이 문서 작업에서 검증하지 않았다.
+에이전트는 문서·소스 정적 대조만 수행했다. 사용자 확인 범위는 2026-10-07 로컬 V000003 적용과
+Google 로그인 후 정상 입장이며, 새 PC 설치·던전 왕복·여러 유저 전투·부하 성능은 별도 확인이 필요하다.
