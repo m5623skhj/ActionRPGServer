@@ -4,9 +4,9 @@ namespace ActionRPG::Database
 {
     namespace
     {
-        [[noreturn]] void InvalidResult()
+        [[noreturn]] void InvalidResult(std::string inMessage)
         {
-            throw DatabaseException({ DatabaseErrorCode::InvalidResult, "Invalid schema inspection result." });
+            throw DatabaseException({ DatabaseErrorCode::InvalidResult, std::move(inMessage) });
         }
     }
 
@@ -14,12 +14,29 @@ namespace ActionRPG::Database
         Response& outResponse) const
     {
         constexpr std::array<std::size_t, 10> COLUMN_COUNTS{5, 9, 9, 11, 6, 4, 7, 6, 6, 6};
-        if (inResultIndex >= COLUMN_COUNTS.size() || inRow.GetColumnCount() != COLUMN_COUNTS[inResultIndex])
-            InvalidResult();
+        if (inResultIndex >= COLUMN_COUNTS.size())
+            InvalidResult("Unexpected schema result set; result_set=" + std::to_string(inResultIndex));
+        if (inRow.GetColumnCount() != COLUMN_COUNTS[inResultIndex])
+            InvalidResult("Schema column count mismatch; result_set=" + std::to_string(inResultIndex)
+                + "; actual=" + std::to_string(inRow.GetColumnCount())
+                + "; expected=" + std::to_string(COLUMN_COUNTS[inResultIndex]));
         SchemaHistoryRow row;
         row.reserve(inRow.GetColumnCount());
-        for (std::size_t column = 1; column <= inRow.GetColumnCount(); ++column)
-            row.push_back(inRow.Read<std::wstring>(column));
+        std::size_t column = 1;
+        try
+        {
+            for (; column <= inRow.GetColumnCount(); ++column)
+                row.push_back(inRow.Read<std::wstring>(column));
+        }
+        catch (const DatabaseException& inException)
+        {
+            auto error = inException.error;
+            // Result sets are zero-based; rows and columns are one-based. No values are logged.
+            error.message += "; schema_result_set=" + std::to_string(inResultIndex)
+                + "; schema_row=" + std::to_string(outResponse.resultSets[inResultIndex].size() + 1)
+                + "; schema_column=" + std::to_string(column);
+            throw DatabaseException(std::move(error));
+        }
         outResponse.resultSets[inResultIndex].push_back(std::move(row));
     }
 
@@ -32,9 +49,17 @@ namespace ActionRPG::Database
             || inResponse.resultSets[5].size() != 3 || inResponse.resultSets[6].size() != 2
             || inResponse.resultSets[7].size() != 1 || inResponse.resultSets[8].size() != 1
             || inResponse.resultSets[9].size() != 1)
-            InvalidResult();
+        {
+            std::string message = "Schema result shape mismatch; result_sets=" + std::to_string(inResultSetCount)
+                + "; total_rows=" + std::to_string(inRowCount) + "; rows_per_set=";
+            for (const auto& rows : inResponse.resultSets)
+                message += std::to_string(rows.size()) + ",";
+            InvalidResult(std::move(message));
+        }
         std::size_t total = 0;
         for (const auto& rows : inResponse.resultSets) total += rows.size();
-        if (total != inRowCount) InvalidResult();
+        if (total != inRowCount)
+            InvalidResult("Schema row count mismatch; actual=" + std::to_string(inRowCount)
+                + "; expected=" + std::to_string(total));
     }
 }

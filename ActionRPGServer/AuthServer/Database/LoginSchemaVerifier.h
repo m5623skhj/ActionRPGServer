@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../Shared/Database/OdbcDatabase.h"
+#include <optional>
+#include <string_view>
 
 namespace ActionRPG::Database
 {
@@ -29,6 +31,9 @@ namespace ActionRPG::Database
     {
         SchemaVerificationStatus status = SchemaVerificationStatus::NotReady;
         std::shared_ptr<const VerifiedLoginSchema> schema;
+        // Fixed diagnostic labels and structured codes only; never log DB values or driver messages.
+        std::string_view stage = "startup verification wait";
+        std::optional<DatabaseError> databaseError;
         [[nodiscard]] bool IsReady() const noexcept
         {
             return status == SchemaVerificationStatus::Ready && schema != nullptr;

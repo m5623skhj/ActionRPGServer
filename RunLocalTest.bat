@@ -16,6 +16,11 @@ $roomDirectory = Join-Path $root 'artifacts\bin\x64\Debug'
 $clientDirectory = [IO.Path]::GetFullPath((Join-Path $root '..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug'))
 $script:startedServers = @()
 $script:failureMessage = ''
+$script:launchStage = 'Checking executable/runtime prerequisites'
+$script:googleDesktopClientId = $env:ACTIONRPG_GOOGLE_CLIENT_ID
+$script:googleDesktopClientSecret = $env:ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET
+# Only Start-Client receives this value; server processes must not inherit it.
+[Environment]::SetEnvironmentVariable('ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET', $null, 'Process')
 $script:required = @('ACTIONRPG_AUTH_HOST', 'ACTIONRPG_AUTH_TLS_CERT', 'ACTIONRPG_AUTH_TLS_KEY', 'ACTIONRPG_AUTH_CA_FILE', 'ACTIONRPG_GOOGLE_CLIENT_ID', 'ACTIONRPG_AUTH_TOWN_REGISTRY', 'ACTIONRPG_TOWN_ID', 'ACTIONRPG_TOWN_AUTH_KEY', 'ACTIONRPG_TOWN_TLS_CERT', 'ACTIONRPG_TOWN_TLS_KEY', 'ACTIONRPG_DB_CONNECTION_STRING', 'ACTIONRPG_DB_SCHEMA', 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY')
 
 function Fail([string] $message) {
@@ -41,6 +46,55 @@ function Read-Secret([string] $prompt) {
     try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer); $secure.Dispose() }
 }
+function Assert-GoogleDesktopSecret($value) {
+    if ($value -isnot [string] -or $value -cnotmatch '\A[\x21-\x7E]{1,1024}\z') {
+        Fail 'Google Desktop client secret must be 1..1024 printable ASCII characters without whitespace. Enter it locally; do not share it.'
+    }
+}
+function Initialize-GoogleDesktopCredentials($secrets, [string] $secretPath) {
+    $script:launchStage = 'Preparing protected Google Desktop client credentials'
+    if ($env:ACTIONRPG_GOOGLE_CLIENT_ID -cnotmatch '\A[A-Za-z0-9._-]{1,256}\.apps\.googleusercontent\.com\z' -or $env:ACTIONRPG_GOOGLE_CLIENT_ID.Length -gt 256) {
+        Fail 'A valid Google Desktop client ID is required before adding protected credentials.'
+    }
+    $hasSecret = $null -ne $secrets.PSObject.Properties['googleDesktopClientSecret']
+    $hasClientId = $null -ne $secrets.PSObject.Properties['googleDesktopClientId']
+    if ($hasSecret -ne $hasClientId) { Fail 'Incomplete saved Google Desktop credentials. Review the protected local profile.' }
+    if ($hasSecret) {
+        Assert-GoogleDesktopSecret $secrets.googleDesktopClientSecret
+        if ($secrets.googleDesktopClientId -isnot [string] -or $secrets.googleDesktopClientId -cne $env:ACTIONRPG_GOOGLE_CLIENT_ID) {
+            Fail 'Saved Google Desktop credentials belong to a different client ID. Review the protected local profile.'
+        }
+    } else {
+        Write-Host 'Enter the client secret from the SAME Google Desktop OAuth client as the saved client ID.'
+        Write-Host 'It is used only for Google token exchange. Do not paste it into chat or source files.'
+        $value = Read-Secret 'Google Desktop client secret (hidden input; blank cancels)'
+        try {
+            Assert-GoogleDesktopSecret $value
+            $secrets | Add-Member -NotePropertyName googleDesktopClientId -NotePropertyValue ([string]$env:ACTIONRPG_GOOGLE_CLIENT_ID)
+            $secrets | Add-Member -NotePropertyName googleDesktopClientSecret -NotePropertyValue $value
+            $plainBytes = $null
+            $protectedBytes = $null
+            $temporaryPath = Join-Path (Split-Path -Parent $secretPath) ([Guid]::NewGuid().ToString('N') + '.dpapi.tmp')
+            try {
+                $plainBytes = [Text.Encoding]::UTF8.GetBytes(($secrets | ConvertTo-Json -Compress -Depth 6))
+                $protectedBytes = [Security.Cryptography.ProtectedData]::Protect($plainBytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+                [IO.File]::WriteAllBytes($temporaryPath, $protectedBytes)
+                Assert-PrivatePath $temporaryPath
+                # Replace only after encryption completes; preserve all existing credential fields.
+                # PowerShell 5.1 converts ordinary $null to an empty string argument.
+                [IO.File]::Replace($temporaryPath, $secretPath, [System.Management.Automation.Language.NullString]::Value)
+                Assert-PrivatePath $secretPath
+            } finally {
+                if ($null -ne $plainBytes) { [Array]::Clear($plainBytes, 0, $plainBytes.Length) }
+                if ($null -ne $protectedBytes) { [Array]::Clear($protectedBytes, 0, $protectedBytes.Length) }
+                if ([IO.File]::Exists($temporaryPath)) { [IO.File]::Delete($temporaryPath) }
+            }
+        } finally { $value = $null }
+        Write-Host 'Google Desktop credentials saved with DPAPI CurrentUser; existing DB and town credentials preserved.'
+    }
+    $script:googleDesktopClientId = [string]$secrets.googleDesktopClientId
+    $script:googleDesktopClientSecret = [string]$secrets.googleDesktopClientSecret
+}
 function Get-MySqlDrivers {
     if (!(Get-Command Get-OdbcDriver -ErrorAction SilentlyContinue)) { Fail '64-bit ODBC driver discovery is unavailable. See the DB preparation guide.' }
     try { $drivers = @(Get-OdbcDriver -Platform '64-bit' | Where-Object { $_.Name -match 'MySQL.*Unicode' }) }
@@ -50,16 +104,22 @@ function Get-MySqlDrivers {
 }
 function Assert-OdbcReady($connection) {
     if (![Environment]::Is64BitProcess) { Fail '64-bit Windows PowerShell is required.' }
-    $driver = @(Get-MySqlDrivers | Where-Object { $_.Name -ceq $connection.Driver })
+    # ODBC retains brace quoting when a saved connection string is parsed again.
+    $driverName = [string]$connection.Driver
+    if ($driverName -cmatch '\A\{(?:[^}]|}})*\}\z') {
+        $driverName = $driverName.Substring(1, $driverName.Length - 2).Replace('}}', '}')
+    }
+    $driver = @(Get-MySqlDrivers | Where-Object { $_.Name -ceq $driverName })
     if ($driver.Count -ne 1) { Fail 'The configured 64-bit MySQL Unicode ODBC driver is not registered.' }
     $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
     $key = $null
     try {
-        $key = $registry.OpenSubKey('SOFTWARE\ODBC\ODBCINST.INI\' + $connection.Driver)
+        $key = $registry.OpenSubKey('SOFTWARE\ODBC\ODBCINST.INI\' + $driverName)
         if (!$key -or ![IO.File]::Exists([string]$key.GetValue('Driver'))) { Fail 'The configured 64-bit MySQL ODBC driver DLL is unavailable.' }
     } finally { if ($key) { $key.Dispose() }; $registry.Dispose() }
 }
 function Read-DatabaseSettings {
+    $script:launchStage = 'Reading database settings'
     $schema = $env:ACTIONRPG_DB_SCHEMA
     if (!$schema) { $schema = Read-Host 'Existing account database schema name (no database is created)' }
     if ([string]::IsNullOrWhiteSpace($schema) -or $schema.Length -gt 64) { Fail 'A valid existing database schema is required.' }
@@ -76,26 +136,33 @@ function Read-DatabaseSettings {
         if ([string]::IsNullOrWhiteSpace($dbHost) -or ![int]::TryParse((Read-Host 'Existing MySQL port'), [ref]$dbPort) -or $dbPort -lt 1 -or $dbPort -gt 65535) { Fail 'A valid existing MySQL host and port are required.' }
         $dbUser = Read-Host 'Runtime database user (not the migration account)'
         if ([string]::IsNullOrWhiteSpace($dbUser)) { Fail 'A runtime database user is required.' }
+        $script:launchStage = 'Creating ODBC connection string builder'
         $connection = [Data.Odbc.OdbcConnectionStringBuilder]::new()
-        $connection.Driver = $drivers[$choice - 1].Name
-        $connection['SERVER'] = $dbHost
-        $connection['PORT'] = $dbPort.ToString()
-        $connection['DATABASE'] = $schema
-        $connection['UID'] = $dbUser
-        $connection['PWD'] = Read-Secret 'Database password'
+        $script:launchStage = 'Assigning ODBC driver'
+        $connection.set_Driver([string]$drivers[$choice - 1].Name)
+        $script:launchStage = 'Assigning database host, port, schema and user'
+        $connection['SERVER'] = [string]$dbHost
+        $connection['PORT'] = [string]$dbPort
+        $connection['DATABASE'] = [string]$schema
+        $connection['UID'] = [string]$dbUser
+        $script:launchStage = 'Reading database password'
+        $connection['PWD'] = [string](Read-Secret 'Database password')
+        $script:launchStage = 'Reading additional ODBC options'
         $options = Read-Secret 'Actual ODBC TLS/CA and other options as key=value pairs; blank uses driver defaults'
         if ($options) {
             try { $extra = [Data.Odbc.OdbcConnectionStringBuilder]::new($options) }
             catch { Fail 'Invalid additional ODBC options format.' }
             foreach ($key in $extra.Keys) {
+                if (!$extra.ShouldSerialize($key)) { continue }
                 if ($key -in @('DRIVER','DSN','SERVER','PORT','DATABASE','UID','USER','PWD','PASSWORD')) { Fail 'Additional ODBC options must not override the database identity or credentials.' }
-                $connection[$key] = $extra[$key]
+                $connection[$key] = [string]$extra[$key]
             }
         }
         $options = $null
     }
     if (!$connection.ContainsKey('DATABASE') -or [string]$connection['DATABASE'] -cne $schema) { Fail 'The DB connection database must match ACTIONRPG_DB_SCHEMA.' }
     if ($connection.ConnectionString.Length -gt 32766) { Fail 'The DB connection string exceeds the supported environment limit.' }
+    $script:launchStage = 'Checking installed ODBC driver'
     Assert-OdbcReady $connection
     return @{ Schema = $schema; Connection = $connection.ConnectionString }
 }
@@ -182,12 +249,25 @@ function Export-TlsKey($certificate, [string] $path, [string] $openssl) {
         $process.Dispose()
     }
 }
+function Get-ExistingBrokerCertificates {
+    $certificates = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like '*DevServerCert*' })
+    $now = Get-Date
+    # Room selects by subject, so every possible match must be usable.
+    foreach ($certificate in $certificates) {
+        if ($certificate.Subject -cne 'CN=DevServerCert' -or !$certificate.HasPrivateKey -or $certificate.NotBefore -gt $now -or $certificate.NotAfter -le $now) {
+            Fail 'An existing DevServerCert is invalid or ambiguous. Review it manually; no certificate was replaced.'
+        }
+    }
+    return $certificates
+}
 function Create-LocalSettings([string] $directory, [string] $settingsPath, [string] $secretPath) {
+    $script:launchStage = 'Reading Google Desktop client ID'
     Write-Host 'First local setup: use a real Google Desktop client ID and the existing MySQL database.'
     $googleId = $env:ACTIONRPG_GOOGLE_CLIENT_ID
     if (!$googleId) { $googleId = Read-Host 'Google Desktop client ID from Google Cloud Console (blank cancels)' }
     if ($googleId.Length -gt 256 -or $googleId -cnotmatch '^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com\z') { Fail 'Create a real Google Desktop OAuth client ID before setup; no placeholder is accepted.' }
     $database = Read-DatabaseSettings
+    $script:launchStage = 'Checking SQL files and OpenSSL prerequisites'
     $schema = $database.Schema
     $sqlDirectory = $env:ACTIONRPG_DB_MIGRATIONS_DIRECTORY
     if (!$sqlDirectory) { $sqlDirectory = Join-Path $root 'ActionRPGServer\Database\Migrations\MySQL' }
@@ -198,8 +278,8 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
     if (!$openssl) { Fail 'OpenSSL 3 is required for first-time TLS key export; no tool is installed automatically.' }
     Assert-OpenSslReady $openssl
     if (!(Get-Command New-SelfSignedCertificate -ErrorAction SilentlyContinue)) { Fail 'Windows PKI certificate creation is unavailable.' }
-    $existingBroker = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like '*DevServerCert*' })
-    if ($existingBroker.Count -gt 0) { Fail 'An existing DevServerCert needs manual reuse review before first setup; it will not be replaced.' }
+    $existingBroker = @(Get-ExistingBrokerCertificates)
+    $script:launchStage = 'Creating private local settings directory'
     if (Test-Path -LiteralPath $directory) {
         Assert-PrivatePath $directory
         if (@(Get-ChildItem -LiteralPath $directory -Force).Count) { Fail 'Incomplete local settings already exist. Review them manually; setup does not overwrite keys or settings.' }
@@ -210,15 +290,23 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
     $directoryAcl.SetAccessRuleProtection($true, $false)
     $directoryAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
     [void][IO.Directory]::CreateDirectory($directory, $directoryAcl)
-    Set-Acl -LiteralPath $directory -AclObject $directoryAcl
+    # CreateDirectory applies the ACL at creation; only verify it afterward.
+    Assert-PrivatePath $directory
     $keyAcl = [Security.AccessControl.FileSecurity]::new()
     $keyAcl.SetOwner($sid)
     $keyAcl.SetAccessRuleProtection($true, $false)
     $keyAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow'))
     $common = @{ Type = 'Custom'; CertStoreLocation = 'Cert:\CurrentUser\My'; KeyAlgorithm = 'RSA'; KeyLength = 3072; HashAlgorithm = 'SHA256'; SecurityDescriptor = $keyAcl; NotBefore = (Get-Date).AddMinutes(-5) }
+    $script:launchStage = 'Creating local CA certificate'
     $ca = New-SelfSignedCertificate @common -Subject ('CN=ActionRPG Local CA ' + [Guid]::NewGuid().ToString('N')) -FriendlyName 'ActionRPG Local CA' -KeyExportPolicy NonExportable -KeyUsage CertSign,CRLSign -TextExtension '2.5.29.19={critical}{text}ca=1' -NotAfter (Get-Date).AddYears(2)
     $certificates = @{}
     foreach ($name in @('Auth','Town','Broker')) {
+        $script:launchStage = 'Preparing ' + $name + ' TLS certificate and key'
+        if ($name -eq 'Broker' -and $existingBroker.Count -gt 0) {
+            $certificates[$name] = $existingBroker[0]
+            Write-Host 'Reusing existing valid DevServerCert certificates; none were replaced.'
+            continue
+        }
         $subject = 'CN=localhost'
         if ($name -eq 'Broker') { $subject = 'CN=DevServerCert' }
         $certificate = New-SelfSignedCertificate @common -Subject $subject -FriendlyName ('ActionRPG Local ' + $name) -Signer $ca -KeyExportPolicy ExportableEncrypted -KeyUsage DigitalSignature,KeyEncipherment -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.1','2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1') -NotAfter (Get-Date).AddYears(1)
@@ -228,6 +316,7 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
             Export-TlsKey $certificate (Join-Path $directory ($name.ToLowerInvariant() + '.key.pem')) $openssl
         }
     }
+    $script:launchStage = 'Writing CA bundles and installing local CA trust'
     $caPath = Join-Path $directory 'local-ca.pem'
     Write-Pem $caPath $ca.RawData
     # Auth uses this bundle for both local Auth HTTPS and Google's public JWKS HTTPS.
@@ -251,6 +340,7 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
         $rootStore.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
         $rootStore.Add([Security.Cryptography.X509Certificates.X509Certificate2]::new($ca.RawData))
     } finally { $rootStore.Close() }
+    $script:launchStage = 'Saving protected credentials and public settings'
     $townKey = New-RandomKey
     $secretBytes = [Text.Encoding]::UTF8.GetBytes((@{ dbConnection = $database.Connection; townKey = $townKey } | ConvertTo-Json -Compress))
     try { [IO.File]::WriteAllBytes($secretPath, [Security.Cryptography.ProtectedData]::Protect($secretBytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)) }
@@ -290,10 +380,14 @@ function Initialize-LocalSettings {
     $secretPath = Join-Path $directory 'credentials.dpapi'
     if (!(Test-Path -LiteralPath $settingsPath)) {
         $missing = @($script:required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
-        if (!$missing.Count) { return }
+        if (!$missing.Count) {
+            if ($null -ne $script:googleDesktopClientSecret) { Assert-GoogleDesktopSecret $script:googleDesktopClientSecret }
+            return
+        }
         Create-LocalSettings $directory $settingsPath $secretPath
     }
     Assert-PrivatePath $directory
+    $script:launchStage = 'Loading and validating saved local settings'
     foreach ($path in @($settingsPath,$secretPath)) {
         Require-File $path 'local settings file'
         Assert-PrivatePath $path
@@ -318,7 +412,6 @@ function Initialize-LocalSettings {
     $env:ACTIONRPG_DB_CONNECTION_STRING = $secrets.dbConnection
     $env:ACTIONRPG_TOWN_AUTH_KEY = $secrets.townKey
     $env:ACTIONRPG_AUTH_TOWN_REGISTRY = @{ $env:ACTIONRPG_TOWN_ID = $secrets.townKey } | ConvertTo-Json -Compress
-    $secrets = $null
     foreach ($name in @('root','auth','town','broker')) {
         if ($settings.certificates.$name -notmatch '^[0-9A-Fa-f]{40}\z') { Fail 'Invalid saved local certificate identity.' }
         $certificatePath = 'Cert:\CurrentUser\My\' + $settings.certificates.$name
@@ -326,8 +419,15 @@ function Initialize-LocalSettings {
         $certificate = Get-Item -LiteralPath $certificatePath
         if (!$certificate.HasPrivateKey -or $certificate.NotBefore -gt (Get-Date) -or $certificate.NotAfter -le (Get-Date)) { Fail 'A saved local certificate is not currently valid or lacks its private key.' }
     }
+    $brokerCertificates = @(Get-ExistingBrokerCertificates)
+    if (!@($brokerCertificates | Where-Object { $_.Thumbprint -ceq $settings.certificates.broker }).Count) { Fail 'The saved broker certificate does not match DevServerCert.' }
     if (!(Test-Path -LiteralPath ('Cert:\CurrentUser\Root\' + $settings.certificates.root))) { Fail 'The local CA is not trusted in CurrentUser/Root.' }
     foreach ($name in @('ACTIONRPG_AUTH_TLS_KEY','ACTIONRPG_TOWN_TLS_KEY')) { Assert-PrivatePath ([Environment]::GetEnvironmentVariable($name)) }
+    if ($settings.client.googleClientId -isnot [string] -or $settings.client.googleClientId -cne $env:ACTIONRPG_GOOGLE_CLIENT_ID) {
+        Fail 'Saved client Google ID does not match this local server profile.'
+    }
+    try { Initialize-GoogleDesktopCredentials $secrets $secretPath }
+    finally { $secrets = $null }
     $script:clientSettings = $settings.client
 }
 function Supply-ClientSettings {
@@ -359,8 +459,16 @@ function Start-Client {
     foreach ($name in @($process.StartInfo.EnvironmentVariables.Keys)) {
         if ($name.StartsWith('ACTIONRPG_', [StringComparison]::OrdinalIgnoreCase)) { $process.StartInfo.EnvironmentVariables.Remove($name) }
     }
-    try { [void]$process.Start() }
-    finally { $process.Dispose() }
+    try {
+        if ($script:googleDesktopClientSecret) {
+            $process.StartInfo.EnvironmentVariables['ACTIONRPG_GOOGLE_CLIENT_ID'] = [string]$script:googleDesktopClientId
+            $process.StartInfo.EnvironmentVariables['ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET'] = [string]$script:googleDesktopClientSecret
+        }
+        [void]$process.Start()
+    } finally {
+        $process.StartInfo.EnvironmentVariables.Remove('ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET')
+        $process.Dispose()
+    }
 }
 function Assert-ServersAlive {
     foreach ($server in $script:startedServers) {
@@ -404,6 +512,8 @@ try {
     $options = @{ FilePath = $launch.Executable; WorkingDirectory = $launch.Directory; NoNewWindow = $true; PassThru = $true }
     if ($launch.Arguments.Count -gt 0) { $options.ArgumentList = $launch.Arguments }
     $native = Start-Process @options
+    # Cache the handle while alive so Windows PowerShell can read the exit code afterward.
+    [void]$native.Handle
     $writer = [IO.StreamWriter]::new($pipe)
     $writer.WriteLine($native.Id)
     $writer.Flush()
@@ -452,8 +562,9 @@ function Wait-Server([string] $name, [int[]] $ports, [int] $seconds, [string] $a
         $missing = @($ports | Where-Object { $_ -notin $listening })
         if ($missing.Count -eq 0) {
             if (!$authUrl) { return }
-            # Discard challenge bodies; never log nonce/token values or skip TLS verification.
-            $status = & $script:curl --silent --ipv4 --output NUL --write-out '%{http_code}' --noproxy '*' --cacert $env:ACTIONRPG_AUTH_CA_FILE --connect-timeout 1 --max-time 2 --request POST --header 'Content-Type: application/json' --data '{}' $authUrl
+            # Local development certificates have no revocation distribution points.
+            # Keep CA/hostname verification and reject known revocations; discard challenge bodies.
+            $status = & $script:curl --disable --silent --ipv4 --output NUL --write-out '%{http_code}' --noproxy '*' --cacert $env:ACTIONRPG_AUTH_CA_FILE --ssl-revoke-best-effort --connect-timeout 1 --max-time 2 --request POST --header 'Content-Type: application/json' --data '{}' $authUrl
             $curlResult = $LASTEXITCODE
             Assert-ServersAlive
             if ($curlResult -eq 0 -and $status -eq '200') { return }
@@ -469,6 +580,9 @@ function Wait-Server([string] $name, [int[]] $ports, [int] $seconds, [string] $a
 try {
     foreach ($name in @('AuthServer', 'TownServer')) { Require-File (Join-Path $serverDirectory ($name + '.exe')) ($name + ' Debug x64 executable') }
     Require-File (Join-Path $roomDirectory 'GameRoomServer.exe') 'GameRoomServer Debug x64 executable'
+    foreach ($dependency in @('libssl-3-x64.dll','libcrypto-3-x64.dll')) {
+        Require-File (Join-Path $roomDirectory $dependency) ('GameRoomServer runtime ' + $dependency + '; rebuild GameRoomServer Debug x64')
+    }
     Require-File (Join-Path $clientDirectory 'ActionRPGClient.exe') 'ActionRPGClient Debug x64 executable'
     $script:curl = (Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue).Source
     if (!$script:curl) { Fail 'curl.exe is required for the verified Auth HTTPS readiness check.' }
@@ -547,18 +661,23 @@ try {
 
     # Fresh shared secret stays in memory and is inherited by Town and Room.
     $env:ACTIONRPG_ROOM_CONTROL_KEY = New-RandomKey
+    $script:launchStage = 'Supplying public client settings'
     Supply-ClientSettings
 
     Write-Host '[1/5] Starting AuthServer...'
+    $script:launchStage = 'Starting AuthServer and checking readiness'
     Start-Server 'AuthServer' $serverDirectory @() @(8443)
     Wait-Server 'AuthServer' @(8443) 25 $authUrl
     Write-Host '[2/5] Starting TownServer...'
+    $script:launchStage = 'Starting TownServer and checking readiness'
     Start-Server 'TownServer' $serverDirectory @('7777', '4', '7780') @(7777, 7780)
     Wait-Server 'TownServer' @(7777, 7780) 10
     Write-Host '[3/5] Starting GameRoomServer...'
+    $script:launchStage = 'Starting GameRoomServer and checking readiness'
     Start-Server 'GameRoomServer' $roomDirectory @('127.0.0.1', '7780', '1', '1000', '4') @($brokerPort)
     Wait-Server 'GameRoomServer' @($brokerPort) 10
     foreach ($number in @(1, 2)) {
+        $script:launchStage = 'Starting client ' + $number
         Assert-ServersAlive
         Write-Host ('[' + ($number + 3) + '/5] Starting client ' + $number + '...')
         Start-Client
@@ -570,7 +689,16 @@ try {
 } catch {
     # Only fixed launcher diagnostics are reported; parser/driver exceptions may contain secrets.
     if ($script:failureMessage) { Write-Host ('[ERROR] ' + $script:failureMessage) }
-    else { Write-Host '[ERROR] Launcher failed. Check settings, executable/runtime files and server console windows.' }
+    else {
+        Write-Host ('[ERROR] Launcher failed at stage: ' + $script:launchStage)
+        # Exception messages, source lines and argument values can contain credentials.
+        Write-Host ('[ERROR] PowerShell line: ' + $_.InvocationInfo.ScriptLineNumber + '; exception type: ' + $_.Exception.GetType().FullName)
+        $cause = $_.Exception.GetBaseException()
+        Write-Host ('[ERROR] Underlying exception type: ' + $cause.GetType().FullName + '; HRESULT: ' + ('0x{0:X8}' -f $cause.HResult))
+        Write-Host '[ERROR] Check settings, executable/runtime files and server console windows.'
+    }
     Write-Host 'Any servers already started are left running. Close their windows manually before retrying.'
     exit 1
+} finally {
+    $script:googleDesktopClientSecret = $null
 }

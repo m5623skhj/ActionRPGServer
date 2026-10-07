@@ -12,6 +12,7 @@ namespace ActionRPG::Database
         std::wstring connectionString;
         std::size_t connectionCount = 2;
         std::size_t maxPendingRequests = 128;
+        // SQL_ATTR_LOGIN_TIMEOUT bounds connection establishment, not all subsequent network I/O.
         std::uint32_t connectionTimeoutSeconds = 5;
         std::uint32_t queryTimeoutSeconds = 10;
         std::uint32_t queueTimeoutSeconds = 30;

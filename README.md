@@ -98,8 +98,9 @@ Auth의 DB 검증용 SQL 배포 디렉터리는 환경 변수로 별도 지정�
 
 ## 설정과 실행 순서
 
-1. 실제 MySQL 8.0.47 대상·스키마, ODBC 드라이버·권한·접속 보안을 준비한다.
+1. 실제 MySQL 8.0.46 대상·스키마, ODBC 드라이버·권한·접속 보안을 준비한다.
 2. 관련 서비스를 종료한 상태에서 수동 Up으로 V000000 이력 기반과 V000001→000003을 준비한다.
+   대상 스키마가 없으면 Up의 `-CreateDatabase` 옵션으로 DB 생성부터 수행할 수 있다.
    [DB 적용 계약](docs/workflows/DATABASE_MIGRATIONS.md)을 따른다. Auth가 SQL을 자동 적용하지 않는다.
 3. 동일한 Up/Down/Infrastructure SQL을 Auth 검증 경로에 배포하고 인증서·환경 변수를 제공한다.
 4. Auth를 시작하여 실제 DB 구조/이력 검증에 성공한 head=3을 확인한다. 단순 포트 개방은 준비 증거가 아니다.
@@ -141,6 +142,9 @@ Debug x64 솔루션 빌드 기준 Auth/Town은 `ActionRPGServer/x64/Debug`, Room
 기존 MySQL 호스트·포트·계정 스키마·runtime 사용자·비밀번호·ODBC TLS/CA 옵션을 로컬에서
 입력받는다. Google ID는 먼저 [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서
 Desktop 유형으로 준비한다. 빈 값이나 임시 ID로 Google 로그인을 우회하지 않는다.
+같은 Desktop OAuth 클라이언트의 client secret도 보안 입력으로 받는다. 기존 로컬 프로필에는
+다음 실행에서 한 번 추가하며 DB·타운 자격 증명과 인증서를 재생성하지 않는다. 웹 클라이언트의
+secret이나 다른 client ID의 값을 사용하지 않는다.
 비밀번호와 추가 접속 옵션은 보안 입력으로 받는다. 64비트 MySQL Unicode ODBC 드라이버의
 실제 등록명을 선택하고 드라이버 DLL 존재를 검사한다. 없으면 공식 설치 안내로 중단하며 설치하지 않는다.
 DB 생성·Up/Down 적용·repair는 수행하지 않는다. [DB 최초 설정 계약](docs/workflows/DATABASE_MIGRATIONS.md#로컬-최초-설정의-db-준비-계약)을 따른다.
@@ -150,13 +154,20 @@ DB 생성·Up/Down 적용·repair는 수행하지 않는다. [DB 최초 설정 �
 사용한다. 버전과 default/legacy provider 사용 가능 여부를 인증서·설정 폴더 생성 전에 검사한다.
 인증서와 개인 키는 현재 사용자 MY 저장소, 개발 CA 신뢰는 **CurrentUser/Root**에만
 설치한다. CA 키는 내보내지 않으며 Auth/Town PEM 키와 설정 폴더에는 현재 사용자만 접근할 수
-있도록 ACL을 적용한다. 기존 DevServerCert가 있으면 임의 교체하지 않고 재사용 검토를 안내한다.
+있도록 ACL을 적용한다. 기존 DevServerCert가 있으면 삭제·교체 없이 재사용한다. 룸 서버는 이름으로
+인증서를 선택하므로 일치하는 인증서 모두가 정확한 CN=DevServerCert이고 유효기간 내에 개인 키를
+갖고 있어야 한다. 최초 설정과 재실행에서 이 조건을 확인하며 불일치하면 수동 검토를 안내한다.
 Auth용 CA bundle에는 로컬 CA와 Windows에서 현재 신뢰하는 공개 루트 CA를 함께 넣는다.
 Town CA는 같은 폴더의 로컬 CA PEM을 사용한다. 신뢰 검사나 Google 검증을 생략하지 않는다.
+로컬 Auth 준비 확인의 curl 요청은 폐기 목록이 없는 개발 인증서를 위해
+`--ssl-revoke-best-effort`를 사용한다. CA·서명·호스트명 검증과 알려진 폐기 상태의 거절은 유지하며,
+폐기 목록의 배포 지점이 없거나 오프라인인 경우만 허용한다. Google 및 서버 내부 HTTPS 설정에는
+이 옵션을 적용하지 않는다.
 
 설정은 저장소 밖 **%LOCALAPPDATA%/ActionRPG/LocalTest**에 저장한다.
 `settings.json`은 schemaVersion=1의 공개 environment/client/인증서 식별자이고,
-`credentials.dpapi`의 DB 연결 정보·타운 키는 DPAPI CurrentUser로 보호한다.
+`credentials.dpapi`의 DB 연결 정보·타운 키·Google Desktop client ID/secret 쌍은 DPAPI CurrentUser로 보호한다.
+Google 항목을 추가할 때 기존 필드를 보존하고 암호화 완료 후 원자적으로 파일을 교체한다.
 이 파일과 TLS 개인 키는 Git에 포함하지 않으며 다른 Windows 계정에서 복호화해 쓰지 않는다.
 다음 실행은 저장된 설정으로 프로세스 환경을 구성한다. 설정 저장 성공은 DB 준비 성공을
 의미하지 않는다. 손상·복호화 실패·인증서 만료·중간 설정 실패는 자동 덮어쓰기나 재발급 없이
@@ -164,6 +175,8 @@ Town CA는 같은 폴더의 로컬 CA PEM을 사용한다. 신뢰 검사나 Goog
 
 기존 환경으로 직접 실행할 경우 Auth 가이드 및 Town 가이드 10절의 전체 환경 변수를
 **실행기를 시작하는 프로세스 환경**에 제공한다. 인증서·개인 키·CA 파일 및 SQL 배포 디렉터리는 절대 경로를 사용한다.
+직접 환경으로 실행하면서 Google Desktop secret이 필요한 경우 같은 client ID와 함께
+`ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET`을 프로세스 환경에 제공한다. 값을 명령 인자나 소스에 기록하지 않는다.
 `ACTIONRPG_AUTH_HOST`는 인증서 호스트명과 일치하며 로컬 loopback IPv4로 해석되는 DNS 이름
 또는 IPv4 주소여야 한다. 타운 ID/비밀 키는 Auth 등록과 일치해야 한다. DB 연결 문자열 형식,
 스키마 이름과 V000000~000003의 Up/Down SQL 파일 존재를 검사하지만 DB를 생성하거나
@@ -187,6 +200,10 @@ Town/Room의 포트 확인은 TLS 인증 왕복·룸 등록·전투 성공을 �
 신뢰, Google ID, Town CA·타운 항목이 서버 설정과 일치해야 한다.
 상세 조건은 [클라이언트 인증 설정](../ActionRPGClient/ActionRPGClient/TOWN_NETWORK.md#연결-설정과-신뢰)을
 따른다. 클라이언트 프로세스에는 DB 연결 정보·타운 키·RoomControl 키를 전달하지 않으며 로그인을 자동화하지 않는다.
+Google Desktop client ID/secret 쌍만 `ACTIONRPG_GOOGLE_CLIENT_ID`와
+`ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET`으로 클라이언트 자식 프로세스에 전달한다. 서버에는
+Desktop secret을 전달하지 않으며 공개 JSON·명령 인자·로그에도 기록하지 않는다. Desktop secret은
+배포 앱에서 기밀을 보장할 수 있는 서버 비밀 키가 아니므로 PKCE·state·nonce 검증을 유지한다.
 두 클라이언트는 서로 다른 Google 계정으로 수동 로그인한다. 같은 계정의 새 로그인은
 첫 번째 세션을 무효화한다.
 

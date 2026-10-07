@@ -163,18 +163,16 @@ namespace ActionRPG::Database
             Check(SQLSetConnectAttrW(connection.value, SQL_ATTR_LOGIN_TIMEOUT,
                 AttributeValue(options.connectionTimeoutSeconds), 0), SQL_HANDLE_DBC, connection.value,
                 "Unable to configure ODBC login timeout.");
-            Check(SQLSetConnectAttrW(connection.value, SQL_ATTR_CONNECTION_TIMEOUT,
-                AttributeValue(options.connectionTimeoutSeconds), 0), SQL_HANDLE_DBC, connection.value,
-                "ODBC driver must support connection timeout.");
             Check(SQLDriverConnectW(connection.value, nullptr,
                 reinterpret_cast<SQLWCHAR*>(options.connectionString.data()), SQL_NTS,
                 nullptr, 0, nullptr, SQL_DRIVER_NOPROMPT), SQL_HANDLE_DBC, connection.value,
                 "Unable to connect through ODBC.");
             SQLUINTEGER timeout{};
-            Check(SQLGetConnectAttrW(connection.value, SQL_ATTR_CONNECTION_TIMEOUT, &timeout,
-                sizeof(timeout), nullptr), SQL_HANDLE_DBC, connection.value, "Unable to verify connection timeout.");
+            // MySQL supports login timeout; SQL_ATTR_CONNECTION_TIMEOUT is ignored and always reads as zero.
+            Check(SQLGetConnectAttrW(connection.value, SQL_ATTR_LOGIN_TIMEOUT, &timeout,
+                sizeof(timeout), nullptr), SQL_HANDLE_DBC, connection.value, "Unable to verify ODBC login timeout.");
             if (timeout != options.connectionTimeoutSeconds)
-                Fail(DatabaseErrorCode::DriverError, "ODBC driver substituted the connection timeout.");
+                Fail(DatabaseErrorCode::DriverError, "ODBC driver substituted the login timeout.");
             SQLUSMALLINT transactionCapability{};
             Check(SQLGetInfoW(connection.value, SQL_TXN_CAPABLE, &transactionCapability,
                 sizeof(transactionCapability), nullptr), SQL_HANDLE_DBC, connection.value,
@@ -377,7 +375,9 @@ namespace ActionRPG::Database
             || dataType == SQL_FLOAT || dataType == SQL_DOUBLE;
         if ((inString && !text) || (!inString && (!numeric
             || (inIntegral && !IsIntegerType(dataType) && !(decimal && scale == 0)))))
-            Fail(DatabaseErrorCode::InvalidResult, "Procedure result column type does not match response.");
+            throw DatabaseException({ DatabaseErrorCode::InvalidResult,
+                "Procedure result column type does not match response; ODBC_type=" + std::to_string(dataType)
+                    + "; expected=" + (inString ? "text" : inIntegral ? "integral" : "numeric") });
         lastColumn = inColumn;
     }
 

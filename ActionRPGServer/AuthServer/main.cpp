@@ -78,7 +78,21 @@ int main()
         if (verificationFuture.wait_for(std::chrono::seconds(15)) == std::future_status::ready)
             verification = verificationFuture.get();
         const bool schemaReady = verification.IsReady() && verification.schema->Matches(database);
-        if (!schemaReady) std::cerr << "Auth login/admission disabled: account database verification failed.\n";
+        if (!schemaReady)
+        {
+            std::cerr << "Auth login/admission disabled: account database verification failed. stage="
+                << verification.stage;
+            if (verification.databaseError)
+            {
+                const auto& error = *verification.databaseError;
+                std::cerr << "; database_error=" << static_cast<int>(error.code)
+                    << "; SQLSTATE=" << (error.sqlState.empty() ? "unavailable" : error.sqlState)
+                    << "; native_code=" << error.nativeCode
+                    // SchemaHistoryProcedure and ODBC supply fixed context plus numeric metadata only.
+                    << "; context=" << error.message;
+            }
+            std::cerr << '\n';
+        }
 
         AuthServer::SessionRegistry sessions;
         AuthServer::GoogleIdTokenVerifier google(clientId, ca);

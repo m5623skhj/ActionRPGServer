@@ -148,6 +148,9 @@ namespace ActionRPG::Database
             std::uint64_t lastExecution = 0;
             std::uint64_t head = 0;
             bool bootstrapped = false;
+            std::optional<std::wstring> bootstrapFailureFinished;
+            std::optional<std::wstring> accountsFailureFinished;
+            bool hasApplicationHistory = false;
             for (const auto& row : inResponse.resultSets[1])
             {
                 const auto execution = Number(Required(row, 0));
@@ -155,24 +158,61 @@ namespace ActionRPG::Database
                 if (execution <= lastExecution || version >= inDeployment.size()) InvalidSchema();
                 lastExecution = execution;
                 const auto& migration = inDeployment[version];
-                if (Required(row, 2) != migration.name || Required(row, 4) != migration.upChecksum
-                    || row[5] != migration.downChecksum || Required(row, 6) != L"SUCCEEDED") InvalidSchema();
+                if (Required(row, 4) != migration.upChecksum || row[5] != migration.downChecksum) InvalidSchema();
                 const auto& started = Required(row, 7);
                 const auto& finished = Required(row, 8);
                 ValidateTime(started);
                 ValidateTime(finished);
                 if (finished < started) InvalidSchema();
                 const auto& direction = Required(row, 3);
+                const auto& state = Required(row, 6);
+                // Initial V0/V1 failures require an immediate, checksum-bound
+                // confirmation. Later failures and all unfinished attempts block.
+                if (bootstrapFailureFinished)
+                {
+                    if (version != 0 || Required(row, 2) != L"migration_history_recovery" || direction != L"UP"
+                        || state != L"SUCCEEDED" || started < *bootstrapFailureFinished) InvalidSchema();
+                    bootstrapFailureFinished.reset();
+                    bootstrapped = true;
+                    continue;
+                }
+                if (accountsFailureFinished)
+                {
+                    if (version != 1 || Required(row, 2) != L"create_login_accounts_recovery" || direction != L"UP"
+                        || state != L"SUCCEEDED" || started < *accountsFailureFinished) InvalidSchema();
+                    accountsFailureFinished.reset();
+                    hasApplicationHistory = true;
+                    head = 1;
+                    continue;
+                }
+                if (Required(row, 2) != migration.name) InvalidSchema();
                 if (!bootstrapped)
                 {
                     if (version != 0 || direction != L"UP") InvalidSchema();
+                    if (state == L"FAILED")
+                    {
+                        bootstrapFailureFinished = finished;
+                        continue;
+                    }
+                    if (state != L"SUCCEEDED") InvalidSchema();
                     bootstrapped = true;
                 }
-                else if (direction == L"UP" && version == head + 1) head = version;
-                else if (direction == L"DOWN" && version == head && head > 0) --head;
-                else InvalidSchema();
+                else
+                {
+                    if (!hasApplicationHistory && head == 0 && version == 1 && direction == L"UP" && state == L"FAILED")
+                    {
+                        accountsFailureFinished = finished;
+                        continue;
+                    }
+                    if (state != L"SUCCEEDED") InvalidSchema();
+                    hasApplicationHistory = true;
+                    if (direction == L"UP" && version == head + 1) head = version;
+                    else if (direction == L"DOWN" && version == head && head > 0) --head;
+                    else InvalidSchema();
+                }
             }
-            if (!bootstrapped || head != VerifiedLoginSchema::REQUIRED_SCHEMA_VERSION) InvalidSchema();
+            if (!bootstrapped || bootstrapFailureFinished || accountsFailureFinished
+                || head != VerifiedLoginSchema::REQUIRED_SCHEMA_VERSION) InvalidSchema();
         }
 
         std::wstring Lower(std::wstring inText)
@@ -188,8 +228,8 @@ namespace ActionRPG::Database
             const auto& version = Required(row, 3);
             const auto comment = Lower(Required(row, 4));
             if (Required(row, 0) != L"1" || Required(row, 1) != L"sha256-utf8-lf-v1"
-                || Required(row, 2) != inDatabase || (version != L"8.0.47" && !version.starts_with(L"8.0.47-")
-                    && !version.starts_with(L"8.0.47+"))
+                || Required(row, 2) != inDatabase || (version != L"8.0.46" && !version.starts_with(L"8.0.46-")
+                    && !version.starts_with(L"8.0.46+"))
                 || comment.find(L"mysql") == std::wstring::npos || comment.find(L"mariadb") != std::wstring::npos
                 || Lower(version).find(L"mariadb") != std::wstring::npos) InvalidSchema();
         }
@@ -212,8 +252,16 @@ namespace ActionRPG::Database
             return Lower(std::move(identifier));
         }
 
+        bool IsCheckCharset(std::wstring_view inToken)
+        {
+            return inToken == L"_ascii" || inToken == L"_utf8mb4" || inToken == L"_utf8mb3"
+                || inToken == L"_utf8" || inToken == L"_latin1" || inToken == L"_binary";
+        }
+
         // Ignore SQL layout/comments; retain literal contents and operators.
-        std::vector<std::wstring> SqlTokens(const std::wstring& inSql, bool inNormalizeIdentifiers = true)
+        // CHECK metadata alone can escape delimiter quotes after a known charset.
+        std::vector<std::wstring> SqlTokens(const std::wstring& inSql, bool inNormalizeIdentifiers = true,
+            bool inCheckMetadata = false)
         {
             std::vector<std::wstring> tokens;
             for (std::size_t index = 0; index < inSql.size();)
@@ -236,7 +284,25 @@ namespace ActionRPG::Database
                     continue;
                 }
                 const auto start = index++;
-                if (value == L'\'' || value == L'"' || value == L'`')
+                if (inCheckMetadata && value == L'\\')
+                {
+                    if (tokens.empty() || !IsCheckCharset(tokens.back())
+                        || index == inSql.size() || inSql[index++] != L'\'') InvalidSchema();
+                    const auto literalStart = index;
+                    while (index < inSql.size())
+                    {
+                        const auto literalValue = inSql[index];
+                        if (!(literalValue >= L'A' && literalValue <= L'Z')
+                            && !(literalValue >= L'a' && literalValue <= L'z')
+                            && !(literalValue >= L'0' && literalValue <= L'9') && literalValue != L'_') break;
+                        ++index;
+                    }
+                    if (index == literalStart || index + 1 >= inSql.size()
+                        || inSql[index] != L'\\' || inSql[index + 1] != L'\'') InvalidSchema();
+                    tokens.push_back(L"'" + inSql.substr(literalStart, index - literalStart) + L"'");
+                    index += 2;
+                }
+                else if (value == L'\'' || value == L'"' || value == L'`')
                 {
                     bool closed = false;
                     while (index < inSql.size())
@@ -288,7 +354,8 @@ namespace ActionRPG::Database
         class CheckExpression final
         {
         public:
-            explicit CheckExpression(const std::wstring& inSql) : tokens(SqlTokens(inSql)) {}
+            explicit CheckExpression(const std::wstring& inSql, bool inMetadata = false)
+                : tokens(SqlTokens(inSql, true, inMetadata)) {}
             std::wstring Parse()
             {
                 auto result = Or();
@@ -348,8 +415,7 @@ namespace ActionRPG::Database
                 else
                 {
                     result = tokens[position++];
-                    if (result == L"_ascii" || result == L"_utf8mb4" || result == L"_utf8mb3" || result == L"_utf8"
-                        || result == L"_latin1" || result == L"_binary")
+                    if (IsCheckCharset(result))
                     {
                         if (position == tokens.size() || tokens[position].size() < 2 || tokens[position].front() != L'\'') InvalidSchema();
                         const auto literal = tokens[position++];
@@ -359,6 +425,8 @@ namespace ActionRPG::Database
                     }
                     else if (Take(L"("))
                     {
+                        // CHECK metadata prints the byte-length synonym LENGTH.
+                        if (result == L"octet_length") result = L"length";
                         result += L"(" + Or();
                         while (Take(L",")) result += L"," + Or();
                         Expect(L")");
@@ -431,9 +499,10 @@ namespace ActionRPG::Database
                 Check(L"schema_migrations", L"ck_migrations_bootstrap",
                     L"(version = 0 AND direction = 'UP' AND down_checksum IS NULL) OR (version > 0 AND down_checksum IS NOT NULL)")};
             auto actual = inResponse.resultSets[3];
-            for (auto* rows : {&actual, &expected})
-                for (auto& row : *rows)
-                    if (row[6]) row[6] = CheckExpression(*row[6]).Parse();
+            for (auto& row : actual)
+                if (row[6]) row[6] = CheckExpression(*row[6], true).Parse();
+            for (auto& row : expected)
+                if (row[6]) row[6] = CheckExpression(*row[6]).Parse();
             SameRows(actual, expected);
             SameRows(inResponse.resultSets[4], {
                 {L"accounts", L"PRIMARY", L"0", L"1", L"account_id", {}},
@@ -505,10 +574,13 @@ namespace ActionRPG::Database
         }
 
         void ValidateStructure(const SchemaHistoryResponse& inResponse, const Deployment& inDeployment,
-            const std::wstring& inDatabase)
+            const std::wstring& inDatabase, std::string_view& outStage)
         {
+            outStage = "table columns";
             ValidateColumns(inResponse);
+            outStage = "constraints and indexes";
             ValidateConstraints(inResponse, inDatabase);
+            outStage = "stored procedure definitions and parameters";
             ValidateRoutines(inResponse, inDeployment);
         }
     }
@@ -518,20 +590,23 @@ namespace ActionRPG::Database
     {
         Deployment deployment;
         std::wstring expectedDatabase;
+        std::string_view stage = "database configuration";
         try
         {
             if (!inDatabase || !inDatabase->IsConfigured()) throw std::runtime_error("Database not configured.");
             expectedDatabase = Environment(L"ACTIONRPG_DB_SCHEMA");
             if (expectedDatabase.size() > 64) InvalidSchema();
+            stage = "deployed migration files";
             deployment = LoadDeployment();
         }
         catch (...)
         {
             auto guard = asio::make_work_guard(inCompletionExecutor);
             asio::post(inCompletionExecutor, [database = std::move(inDatabase), handler = std::move(inHandler),
-                guard = std::move(guard)]() mutable
+                guard = std::move(guard), stage]() mutable
             {
                 SchemaVerificationResult result;
+                result.stage = stage;
                 result.status = database && database->IsConfigured()
                     ? SchemaVerificationStatus::NotReady : SchemaVerificationStatus::DatabaseNotConfigured;
                 if (handler) handler(std::move(result));
@@ -545,14 +620,19 @@ namespace ActionRPG::Database
                 handler = std::move(inHandler)](ProcedureResult<SchemaHistoryResponse> inResult) mutable
         {
             SchemaVerificationResult result;
+            result.stage = "schema history query and result mapping";
+            result.databaseError = std::move(inResult.error);
             try
             {
-                if (!inResult.IsSuccess()) InvalidSchema();
+                if (result.databaseError || !inResult.response) InvalidSchema();
+                result.stage = "database target and version";
                 ValidateTarget(*inResult.response, expectedDatabase);
+                result.stage = "migration audit history";
                 ValidateHistory(*inResult.response, deployment);
-                ValidateStructure(*inResult.response, deployment, expectedDatabase);
+                ValidateStructure(*inResult.response, deployment, expectedDatabase, result.stage);
                 result.schema = std::shared_ptr<const VerifiedLoginSchema>(new VerifiedLoginSchema(database));
                 result.status = SchemaVerificationStatus::Ready;
+                result.stage = "ready";
             }
             catch (...) { result.status = SchemaVerificationStatus::NotReady; }
             if (handler) handler(std::move(result));

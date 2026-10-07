@@ -220,6 +220,17 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="PreserveGameRoomRuntimeDependencies"
+          BeforeTargets="_CleanGetCurrentAndPriorFileWrites"
+          Condition="'$(VcpkgApplocalDeps)' == 'true' And Exists('$(IntDir)vcpkg.applocal.log')">
+    <!-- Keep app-local DLLs in the current output set, including builds that relink. -->
+    <ReadLinesFromFile File="$(IntDir)vcpkg.applocal.log">
+      <Output TaskParameter="Lines" ItemName="GameRoomRuntimeDependencies" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <FileWrites Include="@(GameRoomRuntimeDependencies)" />
+    </ItemGroup>
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
