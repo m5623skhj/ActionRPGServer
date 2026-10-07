@@ -23,7 +23,7 @@ namespace GameRoomServer
     class GameRoom final : public std::enable_shared_from_this<GameRoom>
     {
     public:
-        static constexpr std::uint16_t COMBAT_PROTOCOL_VERSION = 2;
+        static constexpr std::uint16_t COMBAT_PROTOCOL_VERSION = 3;
         static constexpr std::uint32_t TICK_RATE = 30;
         static constexpr std::uint32_t SNAPSHOT_RATE = 15;
         static constexpr float TICK_SECONDS = 1.0f / TICK_RATE;
@@ -86,7 +86,7 @@ namespace GameRoomServer
         void HandleEnterTimeout();
         void StartDungeon();
         void ScheduleTick();
-        void UpdatePlayers(float inDeltaSeconds);
+        void UpdatePlayers();
         void UpdateCombat(float inDeltaSeconds);
         void PublishRealtime();
         [[nodiscard]] std::shared_ptr<const RealtimeFrame> BuildRealtimeFrame(const std::string& inMapId,
@@ -100,6 +100,11 @@ namespace GameRoomServer
             float height{}, verticalSpeed{}, reactionSeconds{};
             Reaction reaction{ Reaction::None };
             std::uint32_t reactionSequence{};
+            float hitRecovery{}, reactionDurationSeconds{}, hitstopRemainingSeconds{};
+            std::uint32_t hitstopSequence{};
+            std::uint64_t hitstopStartTimeMs{};
+            float hitstopDurationSeconds{};
+            float actionDeltaSeconds{}; // Prepared once per room tick; never serialized.
         };
 
         struct ActiveSkill
@@ -119,7 +124,7 @@ namespace GameRoomServer
         {
             bool active{};
             std::uint32_t sequence{}, damage{};
-            float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{};
+            float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{}, hitstopSeconds{};
             std::unordered_set<std::uint64_t> hitIds;
         };
         struct BufferedAction
@@ -189,11 +194,16 @@ namespace GameRoomServer
             std::string skillId;
             float directionY{}, speed{}, radius{}, ageSeconds{};
             std::uint32_t damage{};
+            float hitstopSeconds{};
         };
 
+        void PrepareActorTimes(float inDeltaSeconds);
+        [[nodiscard]] static float ActionDelta(const ActorState& inActor);
+        void CancelHitstop(ActorState& inActor);
         void UpdateActor(ActorState& inActor, float inDeltaSeconds);
-        void ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne);
-        void UpdateMonster(MonsterState& inMonster, float inDeltaSeconds);
+        void ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
+            ActorState* inAttacker, float inHitstopSeconds);
+        void UpdateMonster(MonsterState& inMonster, float inDeltaSeconds, float inWorldDeltaSeconds);
         bool EvaluateCondition(const MonsterState& inMonster, const nlohmann::json& inCondition) const;
         void EnterNode(MonsterState& inMonster, const std::string& inNodeId);
         bool AdvanceNode(MonsterState& inMonster, const std::string& inTrigger);
@@ -207,7 +217,8 @@ namespace GameRoomServer
         void HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd);
         static void StopSlide(PlayerState& inPlayer);
         void UpdateProjectiles(float inDeltaSeconds);
-        void UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
+        void UpdateSkillTimers(PlayerState& inPlayer, float inDeltaSeconds);
+        void UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds, bool inStarting = false);
         [[nodiscard]] static float BuffMultiplier(const PlayerState& inPlayer, const char* inStat);
         void CheckClear();
         [[nodiscard]] bool IsMapCleared(const std::string& inMapId) const;
@@ -239,6 +250,7 @@ namespace GameRoomServer
         std::unordered_set<std::uint64_t> bosses;
         std::uint64_t nextProjectileId{ 1 };
         bool clearRequested{};
+        bool hitstopChanged{};
         State state = State::WaitingForPlayers;
         std::uint64_t serverTick{};
         struct RealtimeSubscriber

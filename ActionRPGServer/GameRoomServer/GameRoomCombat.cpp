@@ -181,6 +181,7 @@ namespace GameRoomServer
         const ActionRPG::DungeonProtocol::DungeonActionInput& inInput)
     {
         if (inPlayer.slide.active || inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None
+            || inPlayer.actor.hitstopRemainingSeconds > 0
             || inPlayer.actor.height != 0 || inPlayer.jumpPreparing || inPlayer.skill
             || (inPlayer.shotPhase != ShotPhase::None
                 && !(inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0))
@@ -202,6 +203,7 @@ namespace GameRoomServer
         slide.active = true;
         slide.sequence = inInput.sequence;
         slide.durationSeconds = definition->second.slide.durationSeconds;
+        slide.hitstopSeconds = definition->second.slide.hitstopSeconds;
         slide.directionX = inInput.directionX / length;
         slide.directionY = inInput.directionY / length;
         slide.speed = inPlayer.runSpeed * BuffMultiplier(inPlayer, "movementMultiplier");
@@ -240,6 +242,7 @@ namespace GameRoomServer
         auto& slide = inPlayer.slide;
         const float before = slide.seconds;
         const float remaining = std::max(0.0f, slide.durationSeconds - before);
+        if (remaining == 0) { StopSlide(inPlayer); return; }
         const float delta = std::min(inDeltaSeconds, remaining);
         const float distance = slide.speed * delta;
         const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
@@ -260,7 +263,11 @@ namespace GameRoomServer
         // Check the accepted segment before StopSlide clears the per-slide hit IDs, including blocked ticks.
         HitSlideContacts(inPlayer, tickStart, inPlayer.position);
         if (blocked) { StopSlide(inPlayer); return; }
-        if (inDeltaSeconds >= remaining) { slide.seconds = slide.durationSeconds; StopSlide(inPlayer); }
+        if (inDeltaSeconds >= remaining)
+        {
+            slide.seconds = slide.durationSeconds;
+            if (inPlayer.actor.hitstopRemainingSeconds == 0) StopSlide(inPlayer);
+        }
     }
 
     // Each slide hits a living monster once. Damage is already buffed at start; never multiply it here.
@@ -291,7 +298,7 @@ namespace GameRoomServer
             }
             if (!visible) continue;
             inPlayer.slide.hitIds.insert(id);
-            ApplyDamage(monster.actor, inPlayer.slide.damage, false);
+            ApplyDamage(monster.actor, inPlayer.slide.damage, false, &inPlayer.actor, inPlayer.slide.hitstopSeconds);
             monster.actionStarted = monster.actionComplete = false;
         }
     }
@@ -299,7 +306,8 @@ namespace GameRoomServer
     // Execute immediately when legal. Combo grace never holds a movement/animation phase open.
     bool GameRoom::TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft)
     {
-        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill || inPlayer.slide.active) return false;
+        if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill || inPlayer.slide.active
+            || inPlayer.actor.hitstopRemainingSeconds > 0) return false;
         if (inAction == 2 && inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0)
             inPlayer.shotPhase = ShotPhase::None;
         if (inAction == 1)
@@ -350,6 +358,7 @@ namespace GameRoomServer
             inPlayer.shotInputRemainingSeconds = 0;
             return;
         }
+        if (inPlayer.actor.hitstopRemainingSeconds > 0 || inDeltaSeconds == 0) return;
         for (auto& action : inPlayer.bufferedActions) action.remainingSeconds -= inDeltaSeconds;
         while (!inPlayer.bufferedActions.empty())
         {
@@ -386,15 +395,51 @@ namespace GameRoomServer
         return inPosition;
     }
 
-    void GameRoom::ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne)
+    // Prepare every actor before movement/combat so freeze consumption never depends on hit/update order.
+    void GameRoom::PrepareActorTimes(float inDeltaSeconds)
     {
-        if (inActor.hp == 0) return;
+        const auto prepare = [this, inDeltaSeconds](ActorState& actor)
+        {
+            const float stopped = std::min(actor.hitstopRemainingSeconds, inDeltaSeconds);
+            actor.hitstopRemainingSeconds = std::max(0.0f, actor.hitstopRemainingSeconds - inDeltaSeconds);
+            actor.actionDeltaSeconds = inDeltaSeconds - stopped;
+            if (stopped > 0 && actor.hitstopRemainingSeconds == 0) hitstopChanged = true;
+        };
+        for (auto& [id, player] : players)
+            if (enteredPlayers.contains(id) && player.worldReady) prepare(player.actor);
+        for (auto& [id, monster] : monsters) prepare(monster.actor);
+    }
+
+    float GameRoom::ActionDelta(const ActorState& inActor)
+    {
+        return inActor.hp == 0 || inActor.hitstopRemainingSeconds > 0 ? 0 : inActor.actionDeltaSeconds;
+    }
+
+    // Cancellation is a newer event, so an old short freeze cannot be replayed after damage/map changes.
+    void GameRoom::CancelHitstop(ActorState& inActor)
+    {
+        if (inActor.hitstopDurationSeconds == 0) return;
+        inActor.hitstopRemainingSeconds = inActor.hitstopDurationSeconds = 0;
+        ++inActor.hitstopSequence;
+        inActor.hitstopStartTimeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+        inActor.actionDeltaSeconds = TICK_SECONDS;
+        hitstopChanged = true;
+    }
+
+    // All callers pass the actual attacking actor, or resolve a player projectile's owner on the strand.
+    void GameRoom::ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
+        ActorState* inAttacker, float inHitstopSeconds)
+    {
+        if (inActor.hp == 0 || inDamage == 0) return;
+        CancelHitstop(inActor);
         ++inActor.reactionSequence;
         inActor.hp -= std::min(inActor.hp, inDamage);
         if (inActor.hp == 0)
         {
             inActor.reaction = Reaction::Dead;
             inActor.height = inActor.verticalSpeed = 0;
+            inActor.reactionSeconds = inActor.reactionDurationSeconds = 0;
         }
         else if (inAirborne || inActor.height > 0)
         {
@@ -402,17 +447,30 @@ namespace GameRoomServer
             if (inActor.height > 0) inActor.verticalSpeed = std::min(inActor.verticalSpeed, 0.0f);
             else { inActor.height = 0.001f; inActor.verticalSpeed = AIRBORNE_HIT_SPEED; }
             inActor.reaction = Reaction::Falling;
+            inActor.reactionSeconds = inActor.reactionDurationSeconds = 0;
         }
         else if (inActor.reaction == Reaction::None || inActor.reaction == Reaction::Hit)
         {
             inActor.reaction = Reaction::Hit;
-            inActor.reactionSeconds = combatDefinition->hitStunSeconds;
+            inActor.reactionDurationSeconds = static_cast<float>(static_cast<double>(combatDefinition->hitStunSeconds)
+                / (1.0 + static_cast<double>(inActor.hitRecovery) / 100.0));
+            inActor.reactionSeconds = inActor.reactionDurationSeconds;
+        }
+        if (inAttacker && inAttacker != &inActor && inAttacker->hp > 0
+            && inAttacker->reaction == Reaction::None && inHitstopSeconds > 0)
+        {
+            inAttacker->hitstopRemainingSeconds = std::max(inAttacker->hitstopRemainingSeconds, inHitstopSeconds);
+            inAttacker->hitstopDurationSeconds = inAttacker->hitstopRemainingSeconds;
+            ++inAttacker->hitstopSequence;
+            inAttacker->hitstopStartTimeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+            hitstopChanged = true;
         }
     }
 
     void GameRoom::UpdateActor(ActorState& inActor, float inDeltaSeconds)
     {
-        if (inActor.hp == 0) return;
+        if (inActor.hp == 0 || inDeltaSeconds == 0) return;
         if (inActor.height > 0)
         {
             inActor.verticalSpeed -= combatDefinition->gravity * inDeltaSeconds;
@@ -424,6 +482,7 @@ namespace GameRoomServer
                 {
                     inActor.reaction = Reaction::Down;
                     inActor.reactionSeconds = combatDefinition->downSeconds;
+                    inActor.reactionDurationSeconds = combatDefinition->downSeconds;
                 }
             }
         }
@@ -436,8 +495,9 @@ namespace GameRoomServer
                 {
                     inActor.reaction = Reaction::Rising;
                     inActor.reactionSeconds = combatDefinition->riseSeconds;
+                    inActor.reactionDurationSeconds = combatDefinition->riseSeconds;
                 }
-                else inActor.reaction = Reaction::None;
+                else { inActor.reaction = Reaction::None; inActor.reactionDurationSeconds = 0; }
             }
         }
     }
@@ -507,10 +567,11 @@ namespace GameRoomServer
      * @param inMonster Mutable instance; the underlying definition stays immutable.
      * @param inDeltaSeconds Fixed simulation time consumed at most once by actions.
      */
-    void GameRoom::UpdateMonster(MonsterState& inMonster, float inDeltaSeconds)
+    void GameRoom::UpdateMonster(MonsterState& inMonster, float inDeltaSeconds, float inWorldDeltaSeconds)
     {
         const auto& profile = combatDefinition->monsters.at(inMonster.definition->dataId);
-        for (auto& [id, cooldown] : inMonster.cooldowns) cooldown = std::max(0.0f, cooldown - inDeltaSeconds);
+        for (auto& [id, cooldown] : inMonster.cooldowns) cooldown = std::max(0.0f, cooldown - inWorldDeltaSeconds);
+        if (inMonster.actor.hp == 0 || inMonster.actor.reaction != Reaction::None || inDeltaSeconds == 0) return;
         inMonster.targetId = 0;
         float nearest = profile.detectionRange;
         for (const auto& [id, player] : players)
@@ -596,8 +657,11 @@ namespace GameRoomServer
                                     && victim.actor.height <= effect.reachHeight
                                     && (victim.position.x - inMonster.position.x) * (inMonster.facingLeft ? -1 : 1) >= 0)
                                 {
-                                    ApplyDamage(victim.actor, effect.damage, skill.at("hitType") == "Airborne");
+                                    ApplyDamage(victim.actor, effect.damage, skill.at("hitType") == "Airborne",
+                                        &inMonster.actor, effect.hitstopSeconds);
                                     ResetShotState(victim);
+                                    StopSlide(victim);
+                                    victim.skill.reset();
                                     victim.bufferedActions.clear();
                                     victim.directionX = victim.directionY = 0;
                                     victim.jumpPreparing = false;
@@ -608,6 +672,7 @@ namespace GameRoomServer
                     }
                 }
             }
+            if (inMonster.actor.hitstopRemainingSeconds > 0) break;
             elapsed = 0; // A chain never consumes the same simulation time more than once.
             if (!AdvanceNode(inMonster, "AfterAction")) break;
             ++transitions;
@@ -669,6 +734,7 @@ namespace GameRoomServer
                     inPlayer.airAttack ? -axisScale : 0.0f, combatDefinition->projectileRange });
                 auto& spawned = projectiles.back();
                 spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
+                spawned.hitstopSeconds = combatDefinition->shotHitstopSeconds;
                 spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
                     combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
 
@@ -692,7 +758,7 @@ namespace GameRoomServer
                     if (nearestId != 0)
                     {
                         auto& victim = monsters.at(nearestId);
-                        ApplyDamage(victim.actor, spawned.damage, false);
+                        ApplyDamage(victim.actor, spawned.damage, false, &inPlayer.actor, spawned.hitstopSeconds);
                         victim.actionStarted = victim.actionComplete = false;
                         spawned.remainingDistance = 0;
                     }
@@ -759,7 +825,10 @@ namespace GameRoomServer
                 if (nearestId != 0)
                 {
                     auto& victim = monsters.at(nearestId);
-                    ApplyDamage(victim.actor, projectile.damage, false);
+                    const auto owner = players.find(projectile.ownerId);
+                    ActorState* attacker = owner != players.end() && enteredPlayers.contains(owner->first)
+                        && owner->second.mapId == projectile.mapId ? &owner->second.actor : nullptr;
+                    ApplyDamage(victim.actor, projectile.damage, false, attacker, projectile.hitstopSeconds);
                     victim.actionStarted = victim.actionComplete = false;
                     projectile.remainingDistance = 0;
                 }
@@ -775,7 +844,8 @@ namespace GameRoomServer
         if (std::all_of(bosses.begin(), bosses.end(), [this](auto id) { return monsters.at(id).actor.hp == 0; }))
         {
             clearRequested = true;
-            for (auto& [id, player] : players) StopSlide(player);
+            for (auto& [id, player] : players) { StopSlide(player); CancelHitstop(player.actor); }
+            for (auto& [id, monster] : monsters) CancelHitstop(monster.actor);
             if (clearHandler) clearHandler(roomId);
         }
     }
@@ -787,12 +857,13 @@ namespace GameRoomServer
         for (auto& [id, player] : players)
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
+            const float actionDelta = ActionDelta(player.actor);
             if (player.jumpPreparing)
             {
                 if (player.actor.hp == 0 || player.actor.reaction != Reaction::None) player.jumpPreparing = false;
                 else
                 {
-                    player.jumpSeconds += inDeltaSeconds;
+                    player.jumpSeconds += actionDelta;
                     if (player.jumpSeconds >= combatDefinition->jumpPrepareSeconds)
                     {
                         player.jumpPreparing = false;
@@ -802,15 +873,16 @@ namespace GameRoomServer
                 }
             }
             const float height = player.actor.height;
-            player.shotInputRemainingSeconds = std::max(0.0f, player.shotInputRemainingSeconds - inDeltaSeconds);
+            player.shotInputRemainingSeconds = std::max(0.0f, player.shotInputRemainingSeconds - actionDelta);
             if (player.shotPhase == ShotPhase::None && player.shotInputRemainingSeconds == 0) ResetShotState(player);
-            UpdateActor(player.actor, inDeltaSeconds);
+            UpdateActor(player.actor, actionDelta);
             if (height > 0 && player.actor.height == 0) player.airShotCount = 0;
-            UpdateShots(id, player, inDeltaSeconds);
-            UpdateSkills(id, player, inDeltaSeconds);
-            UpdateBufferedActions(player, inDeltaSeconds);
+            if (actionDelta > 0) UpdateShots(id, player, actionDelta);
+            UpdateSkillTimers(player, inDeltaSeconds);
+            UpdateSkills(id, player, ActionDelta(player.actor));
+            UpdateBufferedActions(player, ActionDelta(player.actor));
             if (!player.skill && !player.slide.active && !IsShotFacingLocked(player) && player.actor.hp > 0
-                && player.actor.reaction == Reaction::None && player.directionX != 0
+                && player.actor.reaction == Reaction::None && ActionDelta(player.actor) > 0 && player.directionX != 0
                 && now - player.lastInput <= std::chrono::seconds(1))
                 player.facingLeft = player.directionX < 0;
         }
@@ -818,10 +890,10 @@ namespace GameRoomServer
         for (auto& [id, monster] : monsters)
         {
             const Reaction before = monster.actor.reaction;
-            UpdateActor(monster.actor, inDeltaSeconds);
+            UpdateActor(monster.actor, ActionDelta(monster.actor));
             if (before != Reaction::None && monster.actor.reaction == Reaction::None)
                 EnterNode(monster, monster.definition->GetAi().at("initialNodeId").get<std::string>());
-            UpdateMonster(monster, inDeltaSeconds);
+            UpdateMonster(monster, ActionDelta(monster.actor), inDeltaSeconds);
         }
         for (auto& [id, player] : players)
             if (player.slide.active && (player.actor.hp == 0 || player.actor.reaction != Reaction::None)) StopSlide(player);
@@ -849,6 +921,15 @@ namespace GameRoomServer
                 { "cleared", self->state == State::Cleared || self->clearRequested },
                 { "players", nlohmann::json::array() }, { "monsters", nlohmann::json::array() },
                 { "projectiles", nlohmann::json::array() } };
+            const auto addActorTiming = [](nlohmann::json& record, const ActorState& actor)
+            {
+                record["hitRecovery"] = actor.hitRecovery;
+                record["reactionDurationSeconds"] = actor.reactionDurationSeconds;
+                record["hitstopRemainingSeconds"] = actor.hitstopRemainingSeconds;
+                record["hitstopSequence"] = actor.hitstopSequence;
+                record["hitstopStartTimeMs"] = actor.hitstopStartTimeMs;
+                record["hitstopDurationSeconds"] = actor.hitstopDurationSeconds;
+            };
             for (const auto& [id, player] : self->players)
             {
                 if (player.mapId != mapId || !self->enteredPlayers.contains(id) || !player.worldReady) continue;
@@ -866,6 +947,7 @@ namespace GameRoomServer
                     { "jumpSeconds", player.jumpSeconds },
                     { "moveSequence", player.sequence } });
                 auto& record = snapshot["players"].back();
+                addActorTiming(record, player.actor);
                 record["characterId"] = player.characterId; record["skillSequence"] = player.skillSequence;
                 record["skillId"] = player.lastSkillId;
                 record["skillActive"] = player.skill.has_value();
@@ -903,6 +985,7 @@ namespace GameRoomServer
                     { "reactionSequence", monster.actor.reactionSequence }, { "actionSequence", monster.actionSequence },
                     { "actionType", type }, { "actionStarted", monster.actionStarted }, { "actionComplete", monster.actionComplete },
                     { "actionSeconds", monster.actionSeconds }, { "animationId", animationId } });
+                addActorTiming(snapshot["monsters"].back(), monster.actor);
             }
             for (const auto& projectile : self->projectiles)
                 if (projectile.mapId == mapId) snapshot["projectiles"].push_back({ { "id", projectile.id }, { "ownerId", projectile.ownerId },

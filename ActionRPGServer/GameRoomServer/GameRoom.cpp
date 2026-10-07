@@ -42,6 +42,7 @@ namespace GameRoomServer
             { "shotPrepareSeconds", combatDefinition->shotPrepareSeconds },
             { "shotIntervalSeconds", combatDefinition->shotIntervalSeconds },
             { "shotRecoverSeconds", combatDefinition->shotRecoverSeconds },
+            { "shotHitstopSeconds", combatDefinition->shotHitstopSeconds },
             { "jumpSpeed", combatDefinition->jumpSpeed }, { "gravity", combatDefinition->gravity },
             { "jumpPrepareSeconds", combatDefinition->jumpPrepareSeconds },
             { "hitStunSeconds", combatDefinition->hitStunSeconds }, { "downSeconds", combatDefinition->downSeconds },
@@ -57,7 +58,8 @@ namespace GameRoomServer
         {
             const auto& character = combatDefinition->characters.at(id);
             slideDefinitions.push_back({ { "characterId", id }, { "attackPower", character.attackPower },
-                { "durationSeconds", character.slide.durationSeconds }, { "motionId", character.slide.motionId } });
+                { "durationSeconds", character.slide.durationSeconds }, { "motionId", character.slide.motionId },
+                { "hitRecovery", character.hitRecovery }, { "hitstopSeconds", character.slide.hitstopSeconds } });
         }
         // Create monsters once per dungeon instance; map transfers preserve their IDs and HP.
         std::uint64_t nextMonsterId = 1;
@@ -74,6 +76,7 @@ namespace GameRoomServer
                 instance.position = instance.spawnPosition = DungeonDefinition::Point(monster.at("position"));
                 instance.facingLeft = monster.at("facingLeft").get<bool>();
                 instance.actor.hp = monsterDefinition->maxHp;
+                instance.actor.hitRecovery = combatDefinition->monsters.at(monsterDefinition->dataId).hitRecovery;
                 monsters.emplace(instanceId, std::move(instance));
                 monsterIdsByMap[mapId].push_back(instanceId);
                 monster["instanceId"] = instanceId;
@@ -125,10 +128,11 @@ namespace GameRoomServer
             player.directionX = inInput.directionX;
             player.directionY = inInput.directionY;
             // Movement may leave recovery after the last shot, never preparation/fire.
-            if ((inInput.directionX != 0 || inInput.directionY != 0)
+            if (player.actor.hitstopRemainingSeconds == 0 && (inInput.directionX != 0 || inInput.directionY != 0)
                 && player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)
                 player.shotPhase = ShotPhase::None;
-            if (!player.skill && !player.slide.active && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
+            if (!player.skill && !player.slide.active && player.actor.hitstopRemainingSeconds == 0
+                && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
                 && inInput.directionX != 0) player.facingLeft = inInput.directionX < 0;
             player.running = inInput.running != 0;
             player.lastInput = std::chrono::steady_clock::now();
@@ -151,13 +155,15 @@ namespace GameRoomServer
     }
 
     // Room state is owned by its strand; small movement steps cannot tunnel through walls/gates.
-    void GameRoom::UpdatePlayers(const float inDeltaSeconds)
+    void GameRoom::UpdatePlayers()
     {
         if (clearRequested) return;
         for (auto& [id, player] : players)
         {
             if (!enteredPlayers.contains(id) || !player.worldReady) continue;
-            if (player.slide.active) { UpdateSlide(player, inDeltaSeconds); continue; }
+            const float actionDelta = ActionDelta(player.actor);
+            if (actionDelta == 0) continue;
+            if (player.slide.active) { UpdateSlide(player, actionDelta); continue; }
             if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
                 || player.skill || (player.shotPhase != ShotPhase::None
                     && !(player.shotPhase == ShotPhase::Recover && player.pendingShots == 0))) continue;
@@ -166,7 +172,7 @@ namespace GameRoomServer
             if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
             const float length = std::hypot(dx, dy);
             const float distance = (player.running ? player.runSpeed : player.walkSpeed)
-                * BuffMultiplier(player, "movementMultiplier") * inDeltaSeconds;
+                * BuffMultiplier(player, "movementMultiplier") * actionDelta;
             const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
             if (length > 0)
             {
@@ -197,6 +203,7 @@ namespace GameRoomServer
                         player.mapId = targetMapId;
                         ++player.mapEpoch;
                         StopSlide(player);
+                        CancelHitstop(player.actor);
                         player.bufferedActions.clear();
                         ResetShotState(player);
                         player.position = DungeonDefinition::Point(entry->at("position"));
@@ -256,7 +263,9 @@ namespace GameRoomServer
                 self->ResetShotState(player);
                 player.bufferedActions.clear();
                 self->StopSlide(player);
+                self->CancelHitstop(player.actor);
             }
+            for (auto& [id, monster] : self->monsters) self->CancelHitstop(monster.actor);
             self->PublishRealtime();
             self->realtimeSubscribers.clear();
             asio::error_code ignoredError;
@@ -291,6 +300,7 @@ namespace GameRoomServer
             if (accepted)
             {
                 self->players.at(inPlayerId).characterId = inCharacterId;
+                self->players.at(inPlayerId).actor.hitRecovery = self->combatDefinition->characters.at(inCharacterId).hitRecovery;
                 self->players.at(inPlayerId).progression = std::move(progression);
             }
             if (accepted && self->enteredPlayers.size() == self->expectedPlayers.size())
@@ -318,6 +328,7 @@ namespace GameRoomServer
                 self->ResetShotState(player->second);
                 player->second.bufferedActions.clear();
                 self->StopSlide(player->second);
+                self->CancelHitstop(player->second.actor);
                 player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear();
             }
             self->realtimeSubscribers.erase(inPlayerId);
@@ -343,6 +354,7 @@ namespace GameRoomServer
                 self->ResetShotState(player->second);
                 player->second.bufferedActions.clear();
                 self->StopSlide(player->second);
+                self->CancelHitstop(player->second.actor);
             }
             self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = self->enteredPlayers.empty()
@@ -381,7 +393,9 @@ namespace GameRoomServer
                 self->ResetShotState(player);
                 player.bufferedActions.clear();
                 self->StopSlide(player);
+                self->CancelHitstop(player.actor);
             }
+            for (auto& [id, monster] : self->monsters) self->CancelHitstop(monster.actor);
             self->PublishRealtime();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
@@ -451,9 +465,11 @@ namespace GameRoomServer
             if (!inError && self->state == State::Running)
             {
                 ++self->serverTick;
-                self->UpdatePlayers(TICK_SECONDS);
+                self->PrepareActorTimes(TICK_SECONDS);
+                self->UpdatePlayers();
                 self->UpdateCombat(TICK_SECONDS);
-                if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested) self->PublishRealtime();
+                if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested
+                    || self->hitstopChanged) self->PublishRealtime();
                 if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();
             }
         });

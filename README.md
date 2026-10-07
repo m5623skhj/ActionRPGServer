@@ -131,9 +131,64 @@ Room 기본 옵션은 실행 파일 옆 ServerOptionFile/CoreOption.txt와 Sessi
 Auth 내부 API는 공개 API와 같은 HTTPS listener에 있으므로 내부 경로의 네트워크 접근 제한은
 배포 환경에서 마련한다. 서버별 키 검증만으로 네트워크 분리가 구현된 것은 아니다.
 
-RunLocalTest.bat은 Auth 분리 전의 Town·Room·클라이언트 두 개 실행 도우미다.
-RoomControl 키는 만들지만 Auth를 시작하거나 Google·DB·Auth/Town TLS 설정을 준비하지 않는다.
-현재 인증 흐름의 전체 환경을 자동 준비하는 실행기로 사용하지 않는다.
+RunLocalTest.bat은 사전 검사 뒤 Auth → Town → Room → 클라이언트 두 개를 순서대로 시작한다.
+Debug x64 솔루션 빌드 기준 Auth/Town은 `ActionRPGServer/x64/Debug`, Room은
+`artifacts/bin/x64/Debug`, 클라이언트는 인접 저장소의
+`ActionRPGClient/ActionRPGClient/artifacts/bin/x64/Debug`를 사용한다.
+64비트 Windows PowerShell 5.1과 `curl.exe`가 필요하며, 서버별 콘솔에 실제 오류 출력을 남긴다.
+
+첫 실행에 저장된 설정과 전체 환경 설정이 없으면 실제 **Google Desktop OAuth client ID**,
+기존 MySQL 호스트·포트·계정 스키마·runtime 사용자·비밀번호·ODBC TLS/CA 옵션을 로컬에서
+입력받는다. Google ID는 먼저 [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서
+Desktop 유형으로 준비한다. 빈 값이나 임시 ID로 Google 로그인을 우회하지 않는다.
+비밀번호와 추가 접속 옵션은 보안 입력으로 받는다. 64비트 MySQL Unicode ODBC 드라이버의
+실제 등록명을 선택하고 드라이버 DLL 존재를 검사한다. 없으면 공식 설치 안내로 중단하며 설치하지 않는다.
+DB 생성·Up/Down 적용·repair는 수행하지 않는다. [DB 최초 설정 계약](docs/workflows/DATABASE_MIGRATIONS.md#로컬-최초-설정의-db-준비-계약)을 따른다.
+
+입력과 파일 검사를 통과한 뒤 로컬 CA 및 Auth/Town·룸 브로커 인증서와 타운 등록 키를 준비한다.
+최초 개인 키 내보내기에 OpenSSL 3 이상이 필요하며 Git의 기존 설치 경로 또는 OpenSSL-Win64 경로를
+사용한다. 버전과 default/legacy provider 사용 가능 여부를 인증서·설정 폴더 생성 전에 검사한다.
+인증서와 개인 키는 현재 사용자 MY 저장소, 개발 CA 신뢰는 **CurrentUser/Root**에만
+설치한다. CA 키는 내보내지 않으며 Auth/Town PEM 키와 설정 폴더에는 현재 사용자만 접근할 수
+있도록 ACL을 적용한다. 기존 DevServerCert가 있으면 임의 교체하지 않고 재사용 검토를 안내한다.
+Auth용 CA bundle에는 로컬 CA와 Windows에서 현재 신뢰하는 공개 루트 CA를 함께 넣는다.
+Town CA는 같은 폴더의 로컬 CA PEM을 사용한다. 신뢰 검사나 Google 검증을 생략하지 않는다.
+
+설정은 저장소 밖 **%LOCALAPPDATA%/ActionRPG/LocalTest**에 저장한다.
+`settings.json`은 schemaVersion=1의 공개 environment/client/인증서 식별자이고,
+`credentials.dpapi`의 DB 연결 정보·타운 키는 DPAPI CurrentUser로 보호한다.
+이 파일과 TLS 개인 키는 Git에 포함하지 않으며 다른 Windows 계정에서 복호화해 쓰지 않는다.
+다음 실행은 저장된 설정으로 프로세스 환경을 구성한다. 설정 저장 성공은 DB 준비 성공을
+의미하지 않는다. 손상·복호화 실패·인증서 만료·중간 설정 실패는 자동 덮어쓰기나 재발급 없이
+중단하므로 사용자 전용 설정과 인증서를 로컬에서 검토한다.
+
+기존 환경으로 직접 실행할 경우 Auth 가이드 및 Town 가이드 10절의 전체 환경 변수를
+**실행기를 시작하는 프로세스 환경**에 제공한다. 인증서·개인 키·CA 파일 및 SQL 배포 디렉터리는 절대 경로를 사용한다.
+`ACTIONRPG_AUTH_HOST`는 인증서 호스트명과 일치하며 로컬 loopback IPv4로 해석되는 DNS 이름
+또는 IPv4 주소여야 한다. 타운 ID/비밀 키는 Auth 등록과 일치해야 한다. DB 연결 문자열 형식,
+스키마 이름과 V000000~000003의 Up/Down SQL 파일 존재를 검사하지만 DB를 생성하거나
+마이그레이션을 적용하지 않는다. 실제 Google 프로젝트, MySQL 적용·권한·접속 보안은 사용자가
+준비한다. 첫 설정의 SQL 경로는 저장소의 기존 MySQL 폴더를 재사용하며 RoomControl 키만 매 실행 메모리에서 생성한다.
+
+Auth 준비는 인증서 검증을 유지한 `POST /v1/challenges {}`의 200 응답으로 확인한다.
+응답 body는 폐기하며 비밀값·토큰·nonce를 출력하거나 파일에 저장하지 않는다. Auth의 최대
+15초 DB 검증을 포함해 준비를 25초까지 기다리고, Town의 두 포트와 Room 브로커는 각각
+10초까지 기다린다. 서버 조기 종료, DB 미준비 503 또는 포트 충돌에는 후속 실행을 중단한다.
+Town/Room의 포트 확인은 TLS 인증 왕복·룸 등록·전투 성공을 보장하지 않는다.
+이미 실행 중인 서버는 재사용하거나 종료하지 않는다. 실패 시 먼저 시작된 서버는 남아 있으므로
+재실행 전 해당 창을 직접 닫는다.
+
+클라이언트는 인자 없이 실행한다. 저장된 로컬 설정을 사용하는 실행기는 공개 `client` 항목의
+`authUrl`, `googleClientId`, `townCaFile`, `servers[{serverId,name,hostname,port}]`,
+`playerName`, `characterId`를 실제 EXE 옆 `Assets/Data/AuthClient.json`에 매 실행 공급한다.
+빈 playerName은 기존 클라이언트의 프로세스별 이름을 사용하며 characterId 초기값은 1이다.
+클라이언트 소스 Assets·CA 사본은 만들지 않으며 공개 설정만 기존 런타임 파일에 기록한다.
+직접 환경을 제공하는 실행은 기존 클라이언트 설정을 사용한다. `authUrl`과 Windows의 Auth 인증서
+신뢰, Google ID, Town CA·타운 항목이 서버 설정과 일치해야 한다.
+상세 조건은 [클라이언트 인증 설정](../ActionRPGClient/ActionRPGClient/TOWN_NETWORK.md#연결-설정과-신뢰)을
+따른다. 클라이언트 프로세스에는 DB 연결 정보·타운 키·RoomControl 키를 전달하지 않으며 로그인을 자동화하지 않는다.
+두 클라이언트는 서로 다른 Google 계정으로 수동 로그인한다. 같은 계정의 새 로그인은
+첫 번째 세션을 무효화한다.
 
 ## 콘텐츠와 플레이 범위
 

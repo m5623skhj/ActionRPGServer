@@ -48,6 +48,7 @@ namespace GameRoomServer
     // Called only on the room strand; subscribers receive immutable shared data.
     void GameRoom::PublishRealtime()
     {
+        hitstopChanged = false;
         if (realtimeSubscribers.empty()) return;
         ++realtimeSequence;
         const auto timeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -93,6 +94,9 @@ namespace GameRoomServer
             writer.Integer(actor.hp, 4); writer.Integer(maxHp, 4);
             writer.Byte(facingLeft); writer.Byte(static_cast<std::uint8_t>(actor.reaction));
             writer.Integer(actor.reactionSequence, 4);
+            writer.Float(actor.hitRecovery); writer.Float(actor.reactionDurationSeconds);
+            writer.Float(actor.hitstopRemainingSeconds); writer.Integer(actor.hitstopSequence, 4);
+            writer.Integer(actor.hitstopStartTimeMs, 8); writer.Float(actor.hitstopDurationSeconds);
         };
         for (const auto& [id, player] : players)
         {

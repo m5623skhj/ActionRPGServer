@@ -33,7 +33,8 @@ namespace GameRoomServer
                     player.actionSequence = input.sequence; player.worldReady = true;
                     const auto definition = self->combatDefinition->playerSkills.skills.find(input.skillId);
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
-                        && player.actor.reaction == Reaction::None && !player.skill && !player.jumpPreparing && !player.slide.active
+                        && player.actor.reaction == Reaction::None && player.actor.hitstopRemainingSeconds == 0
+                        && !player.skill && !player.jumpPreparing && !player.slide.active
                         && (player.shotPhase == ShotPhase::None
                             || (player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)) && input.facingLeft <= 1
                         && definition != self->combatDefinition->playerSkills.skills.end())
@@ -57,7 +58,7 @@ namespace GameRoomServer
                             ++player.skillSequence;
                             self->ResetShotState(player);
                             player.bufferedActions.clear();
-                            self->UpdateSkills(inPlayerId, player, 0.0f);
+                            self->UpdateSkills(inPlayerId, player, 0.0f, true);
                             result.accepted = 1;
                         }
                     }
@@ -67,20 +68,26 @@ namespace GameRoomServer
         });
     }
 
-    /**
-     * Process every active frame overlapping this tick, including frames shorter than the simulation tick.
-     * Each cast hits a monster once; actor pose follows the caster and mirrors only the facing X axis.
-     */
-    void GameRoom::UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds)
+    // Cooldowns/buff lifetimes use room time even when the caster's action clock is stopped.
+    void GameRoom::UpdateSkillTimers(PlayerState& inPlayer, float inDeltaSeconds)
     {
-        if (!inPlayer.lastSkillId.empty()) inPlayer.lastSkillSeconds = std::min(600.0f, inPlayer.lastSkillSeconds + inDeltaSeconds);
         for (auto& [id, seconds] : inPlayer.skillCooldowns) seconds = std::max(0.0f, seconds - inDeltaSeconds);
         for (auto& buff : inPlayer.buffs) buff.remainingSeconds = std::max(0.0f, buff.remainingSeconds - inDeltaSeconds);
         std::erase_if(inPlayer.buffs, [](const auto& buff) { return buff.remainingSeconds <= 0; });
+    }
+
+    /**
+     * Process every active frame overlapping the actor's action time, including short frames.
+     * Each cast hits a monster once. Zero-time startup is allowed only when explicitly requested.
+     */
+    void GameRoom::UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds, bool inStarting)
+    {
+        if (!inPlayer.lastSkillId.empty()) inPlayer.lastSkillSeconds = std::min(600.0f, inPlayer.lastSkillSeconds + inDeltaSeconds);
         if (inPlayer.actor.hp == 0) { inPlayer.buffs.clear(); inPlayer.skill.reset(); inPlayer.lastSkillId.clear(); return; }
         if (!inPlayer.skill) return;
         if (inPlayer.actor.reaction != Reaction::None || (inPlayer.skill->airborne && inPlayer.actor.height == 0))
         { inPlayer.skill.reset(); inPlayer.lastSkillId.clear(); return; }
+        if (inPlayer.actor.hitstopRemainingSeconds > 0 || (inDeltaSeconds == 0 && !inStarting)) return;
         auto& cast = *inPlayer.skill;
         const auto& skill = combatDefinition->playerSkills.skills.at(cast.id);
         const auto& variant = skill.at(cast.airborne ? "air" : "ground");
@@ -114,6 +121,7 @@ namespace GameRoomServer
                 projectile.directionY = std::sin(yaw) * std::cos(pitch); projectile.heightDirection = std::sin(pitch);
                 projectile.speed = execution.at("speed").get<float>(); projectile.radius = execution.at("radius").get<float>();
                 projectile.remainingDistance = execution.at("range").get<float>(); projectile.skillId = cast.id;
+                projectile.hitstopSeconds = execution.at("hitstopSeconds").get<float>();
                 projectile.damage = static_cast<std::uint32_t>(std::clamp(
                     static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
                     * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
@@ -167,10 +175,12 @@ namespace GameRoomServer
                         static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
                         * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
                         static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
-                    ApplyDamage(monster.actor, damage, false); monster.actionStarted = monster.actionComplete = false;
+                    ApplyDamage(monster.actor, damage, false, &inPlayer.actor, execution.at("hitstopSeconds").get<float>());
+                    monster.actionStarted = monster.actionComplete = false;
                 }
             }
         }
-        if (cast.seconds >= variant.at("durationSeconds").get<float>()) inPlayer.skill.reset();
+        if (cast.seconds >= variant.at("durationSeconds").get<float>() && inPlayer.actor.hitstopRemainingSeconds == 0)
+            inPlayer.skill.reset();
     }
 }

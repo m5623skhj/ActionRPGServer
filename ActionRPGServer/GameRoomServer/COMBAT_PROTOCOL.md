@@ -24,7 +24,7 @@
 ## 서버 전투 설정
 
 서버 시작 시 실행 파일 옆 `Data/Combat.json`을 읽습니다. 프로젝트의 Data 복사 대상에 포함됩니다.
-version 2, 최대 1MB이며 모든 등록 몬스터에 정확히 한 개의 프로필이 있어야 합니다.
+version 3, 최대 1MB이며 모든 등록 몬스터에 정확히 한 개의 프로필이 있어야 합니다.
 `player.characters`에는 PlayerSkills 캐릭터 목록의 모든 캐릭터를 중복 없이 등록합니다.
 각 항목은 `characterId`, `attackPower`(1~1000000), `slide.durationSeconds`(0.05~2초),
 `slide.motionId`를 포함합니다. 현재 캐릭터 1~3은 공격력 20, 지속시간 0.4초, 모션 `slide`입니다.
@@ -40,8 +40,9 @@ AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는
 탄환 속도/사거리/반경·지상/공중 총구 위치·공중 반동, `jump`는 준비 시간·초기 수직 속도·중력을 정의합니다.
 `reactions`는 경직·쓰러짐·기상 시간을 정의합니다. 서버 좌표는 기존 방 데이터와 같은 월드 단위입니다.
 초기 월드 JSON에 `combatRules`를 추가하여 클라이언트가 서버 타이밍을 읽을 수 있도록 했습니다.
-`combatRules.version=2`이며 `slideDefinitions` 배열은 캐릭터별
-`characterId`, `attackPower`, `durationSeconds`, `motionId`를 전달합니다.
+`combatRules.version=3`이며 `slideDefinitions` 배열은 캐릭터별
+`characterId`, `attackPower`, `durationSeconds`, `motionId`, `hitRecovery`, `hitstopSeconds`를 전달합니다.
+`shotHitstopSeconds`도 초기 월드에 포함합니다. 일반 경직의 기본 `hitStunSeconds`는 0.25초입니다.
 기본 사격의 `shot.damage`와 플레이어 스킬의 피해량·랭크 계산은 캐릭터 `attackPower`로 대체하지 않습니다.
 
 기본 사격의 `muzzleForward`/`muzzleHeight`는 지상, `airMuzzleForward`/`airMuzzleHeight`는 공중 총구의
@@ -111,6 +112,46 @@ Dummy(ID 1)는 현재 표시 높이와 같은 96을 유지합니다. 낮은 대�
 클라이언트는 `slideSequence`로 시작을 구분하고 서버 진행 시간과 `motionId`를 사용하여 표시합니다.
 프레임·이미지 메타데이터는 클라이언트가 관리하며 서버 저장소에 생성하지 않습니다.
 
+### 히트 리커버리와 공격자 역경직
+
+`player.characters[].hitRecovery`, `monsters[].hitRecovery`는 모든 캐릭터에 적용하며 누락 기본값은 0입니다.
+유한한 비음수 float 범위만 허용합니다. 일반 Hit 전체 시간은
+`hitStunSeconds / (1 + hitRecovery / 100)`으로 계산합니다. 일반 Hit 중 재피격은 계산된 전체 시간으로
+다시 설정합니다. Falling 물리·Down·Rising 시간 및 다운/기상 중 일반 재피격의 기존 의미는 유지합니다.
+
+공격 데이터의 `hitstopSeconds`는 공격자만 멈추는 시간입니다. 기본 사격은 `player.shot.hitstopSeconds=0`,
+캐릭터별 슬라이딩은 `player.characters[].slide.hitstopSeconds=0.05`, 몬스터 근접 공격은
+`monsters[].skills[].hitstopSeconds=0.05`입니다. 스킬의 `execution.hitstopSeconds`는 [PLAYER_SKILLS.md](PLAYER_SKILLS.md)를 따릅니다.
+유한한 비음수 float로 검증하고 임의의 시간 상한은 두지 않습니다. 명시적 0은 정지를 비활성화합니다.
+새 시간·능력치의 양수를 float로 변환했을 때 0이 되는 underflow도 거부합니다.
+
+실제 피해가 적용된 살아 있는 대상의 명중에서만 공격자의 정지를 설정합니다. 이미 사망했거나 피격 반응 중인
+공격자는 정지시키지 않습니다. 다중 명중은 `max(남은 시간, 새 시간)`이며 합산하지 않습니다.
+직접 공격은 실제 공격자 actor를 전달하고, 플레이어 투사체는 발사 당시 시간을 보관한 뒤
+같은 맵에 참여 중인 발사자를 player ID로 찾습니다. 몬스터 instance ID와 혼용하지 않습니다.
+
+룸 틱 시작 때 모든 개체의 동작 시간을 한 번 계산합니다. 정지가 끝나는 틱에는 남은 동작 시간만 사용합니다.
+이동·점프 물리·사격·스킬·슬라이딩·AI 행동과 연속 공격 유예/행동 예약 시간은 이 동작 시간을 사용합니다.
+기존 룸 시간 기준의 쿨타임·버프 지속시간과 이미 발사한 투사체는 계속 진행합니다.
+현재 동작은 재시작하지 않으며 일반 사격/점프 예약은 기존 제한 안에서 접수합니다. 정지 중 스킬/슬라이딩은 예약하지 않습니다.
+슬라이딩 마지막 이동 틱에 명중하면 `slideSeconds == slideDurationSeconds`에서도 역경직이 풀릴 때까지
+`slideActive`를 유지합니다. 클라이언트는 이 정지 구간에서 시간만으로 슬라이딩 모션을 조기 종료하지 않습니다.
+피격·사망·맵 전환·퇴장·클리어·룸 종료는 정지보다 우선하며 해당 역경직을 취소합니다.
+
+플레이어와 몬스터 JSON에는 `hitRecovery`, `reactionDurationSeconds`, `hitstopRemainingSeconds`,
+`hitstopSequence`, `hitstopStartTimeMs`, `hitstopDurationSeconds`를 전달합니다.
+`reactionDurationSeconds`는 Hit의 실제 전체 시간, Down/Rising의 기존 전체 시간이고 None/Falling/Dead에서는 0입니다.
+클라이언트는 공통 기본 시간 대신 이 전체 시간으로 반응 모션 비율을 계산합니다.
+
+역경직 발생 번호는 양의 정지가 설정될 때 증가하며, 시작 시간은 `serverTimeMs`와 같은 steady_clock 밀리초입니다.
+새 시작의 `hitstopDurationSeconds`는 max 처리된 잔여 시간입니다. 자연 종료 뒤에도 마지막 번호·시작·지속시간을 보존합니다.
+취소는 발생 번호를 증가시키고 시작 시간을 갱신하며 잔여/지속시간을 0으로 기록합니다.
+클라이언트는 최신 취소 번호를 우선하고 도착 시각부터 과거 정지 시간을 다시 시작하지 않습니다.
+0.05초는 목표 15Hz 상태 주기보다 짧으므로 발생/종료/취소가 있는 틱에는 상태를 추가 전달하되
+같은 틱의 다중 명중은 틱 끝에서 한 번으로 합칩니다. 같은 serverTick도 더 최신 snapshotSequence로 적용해야 합니다.
+역경직 이력은 최신 이벤트를 보존하며 별도 전체 명중 로그는 아닙니다. 상태 손실 시 다음 전체 상태와 JSON 복구를 사용합니다.
+실제 시간 분해능은 30Hz 틱이며 이번 작업은 빌드·실행·시각적 체감 검증을 수행하지 않았습니다.
+
 몬스터 프로필의 `skills` 예:
 
 ```json
@@ -146,9 +187,9 @@ Dummy(ID 1)는 현재 표시 높이와 같은 96을 유지합니다. 낮은 대�
 시간·연결/맵 epoch·레코드 규격과 클라이언트 보간 규칙은
 [`SERVER_HANDOFF.md`](../../output/movement-smoothing/SERVER_HANDOFF.md)에 있습니다.
 서버가 상태를 전달하는 것과 클라이언트가 시간에 맞춰 보간하는 것 모두 필요합니다.
-위 handoff의 버전 1 규격에 대해서는 아래 버전 2 변경이 우선합니다. 서버·클라이언트를 함께 갱신해야 합니다.
+위 handoff의 버전 1 규격에 대해서는 아래 버전 3 변경이 우선합니다. 서버·클라이언트를 함께 갱신해야 합니다.
 
-원본은 `Tool/PacketDefine.yml`입니다. ID 7·8의 버전 2 필드에 맞춰 서버 헤더와 직렬화를 동기화했습니다.
+원본은 `Tool/PacketDefine.yml`입니다. ID 7·8의 필드 순서는 슬라이딩 버전 2와 같으며 version 값은 3입니다.
 이번 작업에서는 생성 도구·빌드·게임을 실행하지 않았습니다. 클라이언트도 같은 원본의 필드 순서로 갱신해야 합니다.
 
 | ID | 패킷 | 필드 |
@@ -160,7 +201,7 @@ Dummy(ID 1)는 현재 표시 높이와 같은 96을 유지합니다. 낮은 대�
 
 ### 행동 입력
 
-초기 월드 수신이 끝난 후 요청합니다. `version=2`, action 1=사격, 2=점프, 3=슬라이딩;
+초기 월드 수신이 끝난 후 요청합니다. `version=3`, action 1=사격, 2=점프, 3=슬라이딩;
 facingLeft 0=오른쪽, 1=왼쪽입니다. ID 7의 필드 바이트 수는 19, ID 8은 15입니다(패킷 ID·RUDP 프레이밍 제외).
 sequence는 이동 sequence와 독립적이며 연결 내에서 1부터 증가합니다. 중복·역순 요청은 다시 실행하지 않습니다.
 플레이어 ID·맵 ID·위치·피해량은 요청하지 않습니다. 잘못된 값과 초당 20개를 넘는 행동 요청은 무시합니다.
@@ -174,7 +215,7 @@ action=3은 같은 프레임의 `mapEpoch`, `moveSequence`, `directionX/Y`(-1~1)
 수직 방향만 있으면 기존 facingLeft를 유지합니다. action=1/2에서는 추가 이동 스냅샷 필드를 사용하지 않습니다.
 슬라이딩 accepted=1은 즉시 시작, 0은 거절입니다. 유효 형식의 거절도 action sequence를 소비하며 예약하지 않습니다.
 버전·action 범위·facingLeft·sequence 형식 오류와 요청 제한 초과는 기존처럼 응답 없이 버립니다.
-스킬 입력의 결과도 같은 ID 8을 사용하므로 `version=2`가 포함됩니다.
+스킬 입력의 결과도 같은 ID 8을 사용하므로 `version=3`가 포함됩니다.
 
 한 공격 구간은 최대 5발입니다. 공격 중 추가 사격 입력은 다음 발을 예약합니다. 준비→발사 간격→회수 시간을
 서버에서 처리하며 공중 사격은 한 번의 점프에서 최대 5발, 바라보는 쪽으로 45도 아래 방향입니다.
@@ -205,7 +246,7 @@ serverTick은 30Hz 시뮬레이션 번호이며 매 조각의 수신 시각을 �
 구독 결과의 정수 밀리초 안내값은 tickIntervalMs=33, snapshotIntervalMs=67입니다.
 큰 방에서는 조각 수와 대역폭 제한으로 전체 상태 갱신에 더 오래 걸립니다.
 
-JSON 최상위: `version=2`, `roomId`, `serverTick`, `mapId`, `state`, `cleared`, `players`, `monsters`, `projectiles`.
+JSON 최상위: `version=3`, `roomId`, `serverTick`, `mapId`, `state`, `cleared`, `players`, `monsters`, `projectiles`.
 state는 WaitingForPlayers/Running/Cleared/Stopped입니다. 다른 roomId 또는 이전 serverTick의 상태는 적용하지 않습니다.
 
 - players: playerId, x/y, hp/maxHp, height/verticalSpeed, facingLeft, reaction/reactionSeconds, shotPhase,
@@ -223,11 +264,23 @@ Dead 개체는 스냅샷에 남고 HP 0입니다. 사망 애니메이션은 개�
 mapId가 바뀌면 이전 방의 표시 목록을 교체합니다. 삭제된 탄환은 해당 방에서 제거합니다.
 클리어 뒤에도 상태 요청은 가능하며 cleared=true입니다.
 
-### Realtime 버전 2
+### Realtime 버전 3
 
-ID 11 요청, ID 12 구독 결과, ID 13 조각의 `version`은 모두 2입니다. 서버는 버전 2 요청만 승인합니다.
+ID 11 요청, ID 12 구독 결과, ID 13 조각의 `version`은 모두 3입니다. 서버는 버전 3 요청만 승인합니다.
+플레이어·몬스터의 공통 actor 레코드에서 `reactionSequence` 바로 뒤에 다음 필드를 추가합니다.
+공통 actor는 46바이트에서 74바이트가 되며, 플레이어 기본 레코드는 슬라이딩 v2의 101바이트에서 129바이트가 됩니다.
+
+| 필드 | 형식 | 바이트 수 |
+|---|---|---|
+| hitRecovery | float32 | 4 |
+| reactionDurationSeconds | float32 | 4 |
+| hitstopRemainingSeconds | float32 | 4 |
+| hitstopSequence | uint32 | 4 |
+| hitstopStartTimeMs | uint64 | 8 |
+| hitstopDurationSeconds | float32 | 4 |
+
 바이너리는 기존 little-endian 순서와 float32 표현을 유지하며, 각 플레이어 기본 레코드의 마지막 `running` 뒤에
-다음 필드를 순서대로 추가합니다. 플레이어 레코드는 기존 76바이트에서 101바이트가 됩니다.
+다음 슬라이딩 v2 필드를 그대로 유지합니다.
 
 | 필드 | 형식 | 바이트 수 |
 |---|---|---|
@@ -241,7 +294,7 @@ ID 11 요청, ID 12 구독 결과, ID 13 조각의 `version`은 모두 2입니�
 
 슬라이딩 종료·취소 때 slideActive=false로 전환하고 마지막 번호·시간·방향·속도는 보존합니다.
 모든 기본 플레이어·몬스터·투사체 레코드 뒤에 오는 기존 SKL1 tail의 내부 순서는 유지합니다.
-버전 1 클라이언트는 변경된 기본 플레이어 레코드와 ID 7·8을 읽을 수 없으므로 함께 갱신해야 합니다.
+버전 1/2 클라이언트는 변경된 기본 actor 레코드를 읽을 수 없으므로 서버와 함께 갱신해야 합니다.
 
 ## 통합 결과와 후속 범위
 

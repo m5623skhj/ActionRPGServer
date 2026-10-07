@@ -1,80 +1,576 @@
 @echo off
 setlocal
-
-set "TOWN_SERVER_EXE=%~dp0ActionRPGServer\x64\Debug\TownServer.exe"
-set "TOWN_SERVER_DIR=%~dp0ActionRPGServer\x64\Debug"
-set "ROOM_SERVER_EXE=%~dp0artifacts\bin\x64\Debug\GameRoomServer.exe"
-set "ROOM_SERVER_DIR=%~dp0artifacts\bin\x64\Debug"
-set "CLIENT_EXE=%~dp0..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug\ActionRPGClient.exe"
-set "CLIENT_DIR=%~dp0..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug"
-set "TOWN_PORT=7777"
-set "TOWN_CONTROL_PORT=7780"
-set "IO_THREADS=4"
-
-if not exist "%TOWN_SERVER_EXE%" (
-    echo [ERROR] TownServer Debug executable was not found.
-    echo         %TOWN_SERVER_EXE%
-    echo Build TownServer Debug x64 first.
-    pause
-    exit /b 1
-)
-
-if not exist "%ROOM_SERVER_EXE%" (
-    echo [ERROR] GameRoomServer Debug executable was not found.
-    echo         %ROOM_SERVER_EXE%
-    echo Build GameRoomServer Debug x64 first.
-    pause
-    exit /b 1
-)
-
-if not exist "%CLIENT_EXE%" (
-    echo [ERROR] ActionRPGClient Debug executable was not found.
-    echo         %CLIENT_EXE%
-    echo Build ActionRPGClient Debug x64 first.
-    pause
-    exit /b 1
-)
-
-powershell.exe -NoProfile -Command ^
-    "if (Get-NetTCPConnection -LocalPort %TOWN_PORT%,%TOWN_CONTROL_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 1 }"
-if errorlevel 1 (
-    echo [ERROR] TCP port %TOWN_PORT% or %TOWN_CONTROL_PORT% is already in use.
-    pause
-    exit /b 1
-)
-
-rem Use a fresh shared secret for this launch; never write it to disk or echo it.
-set "ACTIONRPG_ROOM_CONTROL_KEY="
-for /f "delims=" %%K in ('powershell.exe -NoProfile -Command "$bytes = New-Object byte[] 32; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); try { $rng.GetBytes($bytes); [BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant() } finally { $rng.Dispose() }"') do set "ACTIONRPG_ROOM_CONTROL_KEY=%%K"
-if not defined ACTIONRPG_ROOM_CONTROL_KEY (
-    echo [ERROR] Unable to generate the room control authentication key.
-    exit /b 1
-)
-
-echo [1/4] Starting TownServer on 127.0.0.1:%TOWN_PORT%...
-start "TownServer" /D "%TOWN_SERVER_DIR%" cmd.exe /k ""%TOWN_SERVER_EXE%" %TOWN_PORT% %IO_THREADS% %TOWN_CONTROL_PORT%"
-
-powershell.exe -NoProfile -Command ^
-    "$deadline = (Get-Date).AddSeconds(10); while ((Get-Date) -lt $deadline) { try { $client = [Net.Sockets.TcpClient]::new(); $client.Connect('127.0.0.1', %TOWN_PORT%); $client.Dispose(); exit 0 } catch { if ($client) { $client.Dispose() }; Start-Sleep -Milliseconds 200 } }; exit 1"
-if errorlevel 1 (
-    echo [ERROR] TownServer did not start listening within 10 seconds.
-    echo Check the TownServer window for the startup error.
-    pause
-    exit /b 1
-)
-
-echo [2/4] Starting GameRoomServer...
-start "GameRoomServer" /D "%ROOM_SERVER_DIR%" cmd.exe /k ""%ROOM_SERVER_EXE%" 127.0.0.1 %TOWN_CONTROL_PORT% 1 1000 %IO_THREADS%"
-
-echo [3/4] Starting client 1...
-start "ActionRPGClient-1" /D "%CLIENT_DIR%" "%CLIENT_EXE%"
-
-echo [4/4] Starting client 2...
-start "ActionRPGClient-2" /D "%CLIENT_DIR%" "%CLIENT_EXE%"
-
-echo.
-echo TownServer, GameRoomServer and two clients were started.
-echo Close each window when the local test is complete.
+set "ACTIONRPG_LOCAL_LAUNCHER=%~f0"
+set "LOCAL_POWERSHELL=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if defined PROCESSOR_ARCHITEW6432 set "LOCAL_POWERSHELL=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+"%LOCAL_POWERSHELL%" -NoProfile -Command "$source = [IO.File]::ReadAllText($env:ACTIONRPG_LOCAL_LAUNCHER); & ([scriptblock]::Create($source.Substring($source.LastIndexOf('# POWERSHELL START'))))"
+set "LAUNCH_RESULT=%ERRORLEVEL%"
 pause
+exit /b %LAUNCH_RESULT%
 
-endlocal
+# POWERSHELL START
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $env:ACTIONRPG_LOCAL_LAUNCHER
+$serverDirectory = Join-Path $root 'ActionRPGServer\x64\Debug'
+$roomDirectory = Join-Path $root 'artifacts\bin\x64\Debug'
+$clientDirectory = [IO.Path]::GetFullPath((Join-Path $root '..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug'))
+$script:startedServers = @()
+$script:failureMessage = ''
+$script:required = @('ACTIONRPG_AUTH_HOST', 'ACTIONRPG_AUTH_TLS_CERT', 'ACTIONRPG_AUTH_TLS_KEY', 'ACTIONRPG_AUTH_CA_FILE', 'ACTIONRPG_GOOGLE_CLIENT_ID', 'ACTIONRPG_AUTH_TOWN_REGISTRY', 'ACTIONRPG_TOWN_ID', 'ACTIONRPG_TOWN_AUTH_KEY', 'ACTIONRPG_TOWN_TLS_CERT', 'ACTIONRPG_TOWN_TLS_KEY', 'ACTIONRPG_DB_CONNECTION_STRING', 'ACTIONRPG_DB_SCHEMA', 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY')
+
+function Fail([string] $message) {
+    $script:failureMessage = $message
+    throw [InvalidOperationException]::new('Local launcher stopped.')
+}
+function Require-File([string] $path, [string] $name) {
+    if (!(Test-Path -LiteralPath $path -PathType Leaf)) { Fail "File required: $name" }
+}
+function Require-AbsolutePath([string] $path, [string] $name) {
+    if ($path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)') { Fail "Absolute path required: $name" }
+}
+
+function New-RandomKey {
+    $bytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes); return [BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant() }
+    finally { $rng.Dispose() }
+}
+function Read-Secret([string] $prompt) {
+    $secure = Read-Host $prompt -AsSecureString
+    $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer); $secure.Dispose() }
+}
+function Get-MySqlDrivers {
+    if (!(Get-Command Get-OdbcDriver -ErrorAction SilentlyContinue)) { Fail '64-bit ODBC driver discovery is unavailable. See the DB preparation guide.' }
+    try { $drivers = @(Get-OdbcDriver -Platform '64-bit' | Where-Object { $_.Name -match 'MySQL.*Unicode' }) }
+    catch { Fail '64-bit ODBC driver discovery failed. Driver readiness is unknown.' }
+    if (!$drivers.Count) { Fail 'Install the official Windows 64-bit MySQL Unicode ODBC driver before setup. See docs/workflows/DATABASE_MIGRATIONS.md.' }
+    return $drivers
+}
+function Assert-OdbcReady($connection) {
+    if (![Environment]::Is64BitProcess) { Fail '64-bit Windows PowerShell is required.' }
+    $driver = @(Get-MySqlDrivers | Where-Object { $_.Name -ceq $connection.Driver })
+    if ($driver.Count -ne 1) { Fail 'The configured 64-bit MySQL Unicode ODBC driver is not registered.' }
+    $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    $key = $null
+    try {
+        $key = $registry.OpenSubKey('SOFTWARE\ODBC\ODBCINST.INI\' + $connection.Driver)
+        if (!$key -or ![IO.File]::Exists([string]$key.GetValue('Driver'))) { Fail 'The configured 64-bit MySQL ODBC driver DLL is unavailable.' }
+    } finally { if ($key) { $key.Dispose() }; $registry.Dispose() }
+}
+function Read-DatabaseSettings {
+    $schema = $env:ACTIONRPG_DB_SCHEMA
+    if (!$schema) { $schema = Read-Host 'Existing account database schema name (no database is created)' }
+    if ([string]::IsNullOrWhiteSpace($schema) -or $schema.Length -gt 64) { Fail 'A valid existing database schema is required.' }
+    if ($env:ACTIONRPG_DB_CONNECTION_STRING) {
+        try { $connection = [Data.Odbc.OdbcConnectionStringBuilder]::new($env:ACTIONRPG_DB_CONNECTION_STRING) }
+        catch { Fail 'Invalid existing DB connection string format.' }
+    } else {
+        $drivers = @(Get-MySqlDrivers)
+        for ($index = 0; $index -lt $drivers.Count; $index++) { Write-Host (($index + 1).ToString() + ': ' + $drivers[$index].Name) }
+        $choice = 0
+        if (![int]::TryParse((Read-Host 'Choose the installed 64-bit Unicode ODBC driver number'), [ref]$choice) -or $choice -lt 1 -or $choice -gt $drivers.Count) { Fail 'Invalid ODBC driver selection.' }
+        $dbHost = Read-Host 'Existing MySQL host'
+        $dbPort = 0
+        if ([string]::IsNullOrWhiteSpace($dbHost) -or ![int]::TryParse((Read-Host 'Existing MySQL port'), [ref]$dbPort) -or $dbPort -lt 1 -or $dbPort -gt 65535) { Fail 'A valid existing MySQL host and port are required.' }
+        $dbUser = Read-Host 'Runtime database user (not the migration account)'
+        if ([string]::IsNullOrWhiteSpace($dbUser)) { Fail 'A runtime database user is required.' }
+        $connection = [Data.Odbc.OdbcConnectionStringBuilder]::new()
+        $connection.Driver = $drivers[$choice - 1].Name
+        $connection['SERVER'] = $dbHost
+        $connection['PORT'] = $dbPort.ToString()
+        $connection['DATABASE'] = $schema
+        $connection['UID'] = $dbUser
+        $connection['PWD'] = Read-Secret 'Database password'
+        $options = Read-Secret 'Actual ODBC TLS/CA and other options as key=value pairs; blank uses driver defaults'
+        if ($options) {
+            try { $extra = [Data.Odbc.OdbcConnectionStringBuilder]::new($options) }
+            catch { Fail 'Invalid additional ODBC options format.' }
+            foreach ($key in $extra.Keys) {
+                if ($key -in @('DRIVER','DSN','SERVER','PORT','DATABASE','UID','USER','PWD','PASSWORD')) { Fail 'Additional ODBC options must not override the database identity or credentials.' }
+                $connection[$key] = $extra[$key]
+            }
+        }
+        $options = $null
+    }
+    if (!$connection.ContainsKey('DATABASE') -or [string]$connection['DATABASE'] -cne $schema) { Fail 'The DB connection database must match ACTIONRPG_DB_SCHEMA.' }
+    if ($connection.ConnectionString.Length -gt 32766) { Fail 'The DB connection string exceeds the supported environment limit.' }
+    Assert-OdbcReady $connection
+    return @{ Schema = $schema; Connection = $connection.ConnectionString }
+}
+
+# Settings, encrypted credentials and TLS key files belong to this Windows user.
+# Existing profiles are validated, never silently replaced or rekeyed.
+function Assert-PrivatePath([string] $path) {
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'Local settings must not use reparse points.' }
+    $acl = Get-Acl -LiteralPath $path
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value) { Fail 'Local settings must be owned by the current Windows user.' }
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and $rule.IdentityReference.Value -ne $sid.Value) { Fail 'Local settings permissions must allow only the current Windows user.' }
+    }
+}
+function Write-Pem([string] $path, [byte[]] $bytes) {
+    $pem = "-----BEGIN CERTIFICATE-----" + [Environment]::NewLine + [Convert]::ToBase64String($bytes, [Base64FormattingOptions]::InsertLineBreaks) + [Environment]::NewLine + "-----END CERTIFICATE-----" + [Environment]::NewLine
+    [IO.File]::WriteAllText($path, $pem, [Text.Encoding]::ASCII)
+}
+function Assert-OpenSslReady([string] $openssl) {
+    # Inspect only version/provider metadata before creating any local certificate material.
+    foreach ($arguments in @('version','list -providers -provider default -provider legacy')) {
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo.FileName = $openssl
+        $process.StartInfo.Arguments = $arguments
+        $process.StartInfo.UseShellExecute = $false
+        $process.StartInfo.CreateNoWindow = $true
+        $process.StartInfo.RedirectStandardOutput = $true
+        $process.StartInfo.RedirectStandardError = $true
+        foreach ($name in @($process.StartInfo.EnvironmentVariables.Keys)) {
+            if ($name.StartsWith('ACTIONRPG_', [StringComparison]::OrdinalIgnoreCase)) { $process.StartInfo.EnvironmentVariables.Remove($name) }
+        }
+        $modulePath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $openssl) '..\lib\ossl-modules'))
+        if (Test-Path -LiteralPath $modulePath -PathType Container) { $process.StartInfo.EnvironmentVariables['OPENSSL_MODULES'] = $modulePath }
+        try {
+            [void]$process.Start()
+            $output = $process.StandardOutput.ReadToEndAsync()
+            $errors = $process.StandardError.ReadToEndAsync()
+            if (!$process.WaitForExit(5000)) { Fail 'OpenSSL prerequisite check timed out; no local certificates were created.' }
+            if ($process.ExitCode -ne 0) { Fail 'OpenSSL version/provider check failed; OpenSSL 3 or newer with its default and legacy providers is required.' }
+            if ($arguments -eq 'version') {
+                $match = [regex]::Match($output.Result, '^OpenSSL ([0-9]+)\.')
+                if (!$match.Success -or [int]$match.Groups[1].Value -lt 3) { Fail 'OpenSSL 3 or newer is required before local certificate setup.' }
+            } elseif ($output.Result -notmatch '(?m)^\s*default\s*$' -or $output.Result -notmatch '(?m)^\s*legacy\s*$') {
+                Fail 'OpenSSL default/legacy providers are unavailable; no local certificates were created.'
+            }
+        } catch {
+            if (!$script:failureMessage) { Fail 'OpenSSL prerequisite check failed; check its executable/runtime/provider files before setup.' }
+            throw
+        } finally { $process.Dispose() }
+    }
+}
+function Export-TlsKey($certificate, [string] $path, [string] $openssl) {
+    $password = New-RandomKey
+    $pfx = $certificate.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password)
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo.FileName = $openssl
+    # Windows PFX exports may use RC2; OpenSSL 3's legacy provider handles that input.
+    $process.StartInfo.Arguments = 'pkcs12 -legacy -nocerts -nodes -passin env:ACTIONRPG_LOCAL_PFX_PASSWORD'
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = $true
+    $process.StartInfo.RedirectStandardInput = $true
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    foreach ($name in @($process.StartInfo.EnvironmentVariables.Keys)) {
+        if ($name.StartsWith('ACTIONRPG_', [StringComparison]::OrdinalIgnoreCase)) { $process.StartInfo.EnvironmentVariables.Remove($name) }
+    }
+    $process.StartInfo.EnvironmentVariables['ACTIONRPG_LOCAL_PFX_PASSWORD'] = $password
+    $modulePath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $openssl) '..\lib\ossl-modules'))
+    if (Test-Path -LiteralPath $modulePath -PathType Container) { $process.StartInfo.EnvironmentVariables['OPENSSL_MODULES'] = $modulePath }
+    try {
+        [void]$process.Start()
+        $output = $process.StandardOutput.ReadToEndAsync()
+        $errors = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.BaseStream.Write($pfx, 0, $pfx.Length)
+        $process.StandardInput.Close()
+        if (!$process.WaitForExit(10000)) { Fail 'OpenSSL key export timed out. No server was started.' }
+        if ($process.ExitCode -ne 0 -or $output.Result -notmatch '-----BEGIN PRIVATE KEY-----') { Fail 'OpenSSL 3 private-key export failed. Check its runtime/provider files.' }
+        [IO.File]::WriteAllText($path, $output.Result, [Text.Encoding]::ASCII)
+    } finally {
+        [Array]::Clear($pfx, 0, $pfx.Length)
+        $password = $null
+        $process.Dispose()
+    }
+}
+function Create-LocalSettings([string] $directory, [string] $settingsPath, [string] $secretPath) {
+    Write-Host 'First local setup: use a real Google Desktop client ID and the existing MySQL database.'
+    $googleId = $env:ACTIONRPG_GOOGLE_CLIENT_ID
+    if (!$googleId) { $googleId = Read-Host 'Google Desktop client ID from Google Cloud Console (blank cancels)' }
+    if ($googleId.Length -gt 256 -or $googleId -cnotmatch '^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com\z') { Fail 'Create a real Google Desktop OAuth client ID before setup; no placeholder is accepted.' }
+    $database = Read-DatabaseSettings
+    $schema = $database.Schema
+    $sqlDirectory = $env:ACTIONRPG_DB_MIGRATIONS_DIRECTORY
+    if (!$sqlDirectory) { $sqlDirectory = Join-Path $root 'ActionRPGServer\Database\Migrations\MySQL' }
+    Require-AbsolutePath $sqlDirectory 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY'
+    Assert-SqlFiles $sqlDirectory
+    $opensslCandidates = @((Join-Path $env:ProgramFiles 'Git\mingw64\bin\openssl.exe'), (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin\openssl.exe'))
+    $openssl = $opensslCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    if (!$openssl) { Fail 'OpenSSL 3 is required for first-time TLS key export; no tool is installed automatically.' }
+    Assert-OpenSslReady $openssl
+    if (!(Get-Command New-SelfSignedCertificate -ErrorAction SilentlyContinue)) { Fail 'Windows PKI certificate creation is unavailable.' }
+    $existingBroker = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like '*DevServerCert*' })
+    if ($existingBroker.Count -gt 0) { Fail 'An existing DevServerCert needs manual reuse review before first setup; it will not be replaced.' }
+    if (Test-Path -LiteralPath $directory) {
+        Assert-PrivatePath $directory
+        if (@(Get-ChildItem -LiteralPath $directory -Force).Count) { Fail 'Incomplete local settings already exist. Review them manually; setup does not overwrite keys or settings.' }
+    }
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $directoryAcl = [Security.AccessControl.DirectorySecurity]::new()
+    $directoryAcl.SetOwner($sid)
+    $directoryAcl.SetAccessRuleProtection($true, $false)
+    $directoryAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+    [void][IO.Directory]::CreateDirectory($directory, $directoryAcl)
+    Set-Acl -LiteralPath $directory -AclObject $directoryAcl
+    $keyAcl = [Security.AccessControl.FileSecurity]::new()
+    $keyAcl.SetOwner($sid)
+    $keyAcl.SetAccessRuleProtection($true, $false)
+    $keyAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow'))
+    $common = @{ Type = 'Custom'; CertStoreLocation = 'Cert:\CurrentUser\My'; KeyAlgorithm = 'RSA'; KeyLength = 3072; HashAlgorithm = 'SHA256'; SecurityDescriptor = $keyAcl; NotBefore = (Get-Date).AddMinutes(-5) }
+    $ca = New-SelfSignedCertificate @common -Subject ('CN=ActionRPG Local CA ' + [Guid]::NewGuid().ToString('N')) -FriendlyName 'ActionRPG Local CA' -KeyExportPolicy NonExportable -KeyUsage CertSign,CRLSign -TextExtension '2.5.29.19={critical}{text}ca=1' -NotAfter (Get-Date).AddYears(2)
+    $certificates = @{}
+    foreach ($name in @('Auth','Town','Broker')) {
+        $subject = 'CN=localhost'
+        if ($name -eq 'Broker') { $subject = 'CN=DevServerCert' }
+        $certificate = New-SelfSignedCertificate @common -Subject $subject -FriendlyName ('ActionRPG Local ' + $name) -Signer $ca -KeyExportPolicy ExportableEncrypted -KeyUsage DigitalSignature,KeyEncipherment -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.1','2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1') -NotAfter (Get-Date).AddYears(1)
+        $certificates[$name] = $certificate
+        if ($name -ne 'Broker') {
+            Write-Pem (Join-Path $directory ($name.ToLowerInvariant() + '.cert.pem')) $certificate.RawData
+            Export-TlsKey $certificate (Join-Path $directory ($name.ToLowerInvariant() + '.key.pem')) $openssl
+        }
+    }
+    $caPath = Join-Path $directory 'local-ca.pem'
+    Write-Pem $caPath $ca.RawData
+    # Auth uses this bundle for both local Auth HTTPS and Google's public JWKS HTTPS.
+    $bundle = [Text.StringBuilder]::new([IO.File]::ReadAllText($caPath))
+    $seen = @{}
+    foreach ($store in @('Cert:\CurrentUser\Root','Cert:\LocalMachine\Root')) {
+        foreach ($certificate in Get-ChildItem -LiteralPath $store) {
+            if (!$seen.ContainsKey($certificate.Thumbprint) -and $certificate.NotBefore -le (Get-Date) -and $certificate.NotAfter -gt (Get-Date)) {
+                [void]$bundle.AppendLine('-----BEGIN CERTIFICATE-----')
+                [void]$bundle.AppendLine([Convert]::ToBase64String($certificate.RawData, [Base64FormattingOptions]::InsertLineBreaks))
+                [void]$bundle.AppendLine('-----END CERTIFICATE-----')
+                $seen[$certificate.Thumbprint] = $true
+            }
+        }
+    }
+    if (!$seen.Count) { Fail 'No Windows trusted public roots are available for Google HTTPS verification.' }
+    $bundlePath = Join-Path $directory 'auth-ca-bundle.pem'
+    [IO.File]::WriteAllText($bundlePath, $bundle.ToString(), [Text.Encoding]::ASCII)
+    $rootStore = [Security.Cryptography.X509Certificates.X509Store]::new('Root', 'CurrentUser')
+    try {
+        $rootStore.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        $rootStore.Add([Security.Cryptography.X509Certificates.X509Certificate2]::new($ca.RawData))
+    } finally { $rootStore.Close() }
+    $townKey = New-RandomKey
+    $secretBytes = [Text.Encoding]::UTF8.GetBytes((@{ dbConnection = $database.Connection; townKey = $townKey } | ConvertTo-Json -Compress))
+    try { [IO.File]::WriteAllBytes($secretPath, [Security.Cryptography.ProtectedData]::Protect($secretBytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)) }
+    finally { [Array]::Clear($secretBytes, 0, $secretBytes.Length); $database = $null; $townKey = $null }
+    $settings = @{
+        schemaVersion = 1
+        environment = @{
+            ACTIONRPG_AUTH_HOST = 'localhost'; ACTIONRPG_AUTH_TLS_CERT = (Join-Path $directory 'auth.cert.pem'); ACTIONRPG_AUTH_TLS_KEY = (Join-Path $directory 'auth.key.pem')
+            ACTIONRPG_AUTH_CA_FILE = $bundlePath; ACTIONRPG_GOOGLE_CLIENT_ID = $googleId; ACTIONRPG_TOWN_ID = 'local-town'
+            ACTIONRPG_TOWN_TLS_CERT = (Join-Path $directory 'town.cert.pem'); ACTIONRPG_TOWN_TLS_KEY = (Join-Path $directory 'town.key.pem')
+            ACTIONRPG_DB_SCHEMA = $schema; ACTIONRPG_DB_MIGRATIONS_DIRECTORY = $sqlDirectory
+        }
+        client = @{ authUrl = 'https://localhost:8443'; googleClientId = $googleId; townCaFile = $caPath; playerName = ''; characterId = 1; servers = @(@{serverId='local-town';name='Local Town';hostname='localhost';port=7777}) }
+        certificates = @{ root = $ca.Thumbprint; auth = $certificates.Auth.Thumbprint; town = $certificates.Town.Thumbprint; broker = $certificates.Broker.Thumbprint }
+    }
+    [IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+    Write-Host 'Local settings saved for this Windows user. DB readiness is checked by Auth; no migration was applied.'
+}
+function Assert-SqlFiles([string] $directory) {
+    foreach ($file in @('Infrastructure\V000000__migration_history.sql','V000001__create_login_accounts.sql','V000002__create_google_login_procedure.sql','V000003__create_auth_account_status_procedure.sql','Down\V000001__create_login_accounts.sql','Down\V000002__create_google_login_procedure.sql','Down\V000003__create_auth_account_status_procedure.sql')) {
+        Require-File (Join-Path $directory $file) ('ACTIONRPG_DB_MIGRATIONS_DIRECTORY/' + $file)
+    }
+}
+function Initialize-LocalSettings {
+    Add-Type -AssemblyName System.Data
+    Add-Type -AssemblyName System.Security
+    $directory = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'ActionRPG\LocalTest'))
+    if ($directory.StartsWith(($root.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { Fail 'Local settings must be outside the repository.' }
+    $ancestor = $directory
+    while ($ancestor) {
+        if (Test-Path -LiteralPath (Join-Path $ancestor '.git')) { Fail 'Local settings must not be inside a Git checkout.' }
+        $ancestor = Split-Path -Parent $ancestor
+    }
+    $parent = Split-Path -Parent $directory
+    if ((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent).Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail 'Local settings parent must not be a reparse point.' }
+    $settingsPath = Join-Path $directory 'settings.json'
+    $secretPath = Join-Path $directory 'credentials.dpapi'
+    if (!(Test-Path -LiteralPath $settingsPath)) {
+        $missing = @($script:required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
+        if (!$missing.Count) { return }
+        Create-LocalSettings $directory $settingsPath $secretPath
+    }
+    Assert-PrivatePath $directory
+    foreach ($path in @($settingsPath,$secretPath)) {
+        Require-File $path 'local settings file'
+        Assert-PrivatePath $path
+        if ((Get-Item -LiteralPath $path).Length -gt 65536) { Fail 'Local settings file is too large.' }
+    }
+    try {
+        $settings = [IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+        if ($settings.schemaVersion -ne 1) { Fail 'Unsupported local settings version.' }
+        $bytes = [Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($secretPath), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        try { $secrets = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json }
+        finally { [Array]::Clear($bytes, 0, $bytes.Length) }
+    } catch {
+        if (!$script:failureMessage) { Fail 'Local settings cannot be read by this Windows user. Review or re-enter them locally; no secret details are displayed.' }
+        throw
+    }
+    foreach ($name in $script:required | Where-Object { $_ -notin @('ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_AUTH_TOWN_REGISTRY') }) {
+        $value = $settings.environment.$name
+        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { Fail "Missing saved configuration: $name" }
+        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+    }
+    if ($secrets.dbConnection -isnot [string] -or $secrets.townKey -isnot [string]) { Fail 'Protected local credentials are invalid.' }
+    $env:ACTIONRPG_DB_CONNECTION_STRING = $secrets.dbConnection
+    $env:ACTIONRPG_TOWN_AUTH_KEY = $secrets.townKey
+    $env:ACTIONRPG_AUTH_TOWN_REGISTRY = @{ $env:ACTIONRPG_TOWN_ID = $secrets.townKey } | ConvertTo-Json -Compress
+    $secrets = $null
+    foreach ($name in @('root','auth','town','broker')) {
+        if ($settings.certificates.$name -notmatch '^[0-9A-Fa-f]{40}\z') { Fail 'Invalid saved local certificate identity.' }
+        $certificatePath = 'Cert:\CurrentUser\My\' + $settings.certificates.$name
+        if (!(Test-Path -LiteralPath $certificatePath)) { Fail 'A saved local certificate is missing. Review the local profile; certificates are not silently regenerated.' }
+        $certificate = Get-Item -LiteralPath $certificatePath
+        if (!$certificate.HasPrivateKey -or $certificate.NotBefore -gt (Get-Date) -or $certificate.NotAfter -le (Get-Date)) { Fail 'A saved local certificate is not currently valid or lacks its private key.' }
+    }
+    if (!(Test-Path -LiteralPath ('Cert:\CurrentUser\Root\' + $settings.certificates.root))) { Fail 'The local CA is not trusted in CurrentUser/Root.' }
+    foreach ($name in @('ACTIONRPG_AUTH_TLS_KEY','ACTIONRPG_TOWN_TLS_KEY')) { Assert-PrivatePath ([Environment]::GetEnvironmentVariable($name)) }
+    $script:clientSettings = $settings.client
+}
+function Supply-ClientSettings {
+    $path = Join-Path $clientDirectory 'Assets\Data\AuthClient.json'
+    if (!$script:clientSettings) {
+        Require-File $path 'client runtime Assets/Data/AuthClient.json'
+        return
+    }
+    $client = $script:clientSettings
+    $servers = @($client.servers)
+    if ($client.authUrl -isnot [string] -or $client.googleClientId -isnot [string] -or $client.townCaFile -isnot [string]) { Fail 'Invalid saved client connection fields.' }
+    if ($client.authUrl -cne ('https://{0}:8443' -f $env:ACTIONRPG_AUTH_HOST) -or $client.googleClientId -cne $env:ACTIONRPG_GOOGLE_CLIENT_ID -or $servers.Count -ne 1 -or $servers[0].serverId -cne $env:ACTIONRPG_TOWN_ID -or $servers[0].hostname -cne 'localhost' -or $servers[0].port -ne 7777) { Fail 'Saved public client settings do not match this local server profile.' }
+    if ($servers[0].name -isnot [string] -or !$servers[0].name -or $servers[0].name.Length -gt 80 -or ($servers[0].port -isnot [int] -and $servers[0].port -isnot [long])) { Fail 'Invalid saved client town entry.' }
+    if ($client.playerName -isnot [string] -or [Text.Encoding]::UTF8.GetByteCount($client.playerName) -gt 32 -or ($client.characterId -isnot [int] -and $client.characterId -isnot [long]) -or $client.characterId -notin @(1,2,3)) { Fail 'Invalid saved client player name or character ID.' }
+    Require-File $client.townCaFile 'saved client townCaFile'
+    if (!(Test-Path -LiteralPath (Split-Path -Parent $path) -PathType Container)) { Fail 'Client runtime Assets/Data directory is missing. Build/supply client assets first.' }
+    foreach ($target in @($clientDirectory,(Join-Path $clientDirectory 'Assets'),(Split-Path -Parent $path),$path)) {
+        if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail 'Client runtime settings must not use reparse points.' }
+    }
+    # Only public client fields go to the client's existing runtime file; source assets stay untouched.
+    $public = @{ authUrl=$client.authUrl; googleClientId=$client.googleClientId; townCaFile=$client.townCaFile; servers=$servers; playerName=$client.playerName; characterId=$client.characterId }
+    [IO.File]::WriteAllText($path, ($public | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+}
+function Start-Client {
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo.FileName = Join-Path $clientDirectory 'ActionRPGClient.exe'
+    $process.StartInfo.WorkingDirectory = $clientDirectory
+    $process.StartInfo.UseShellExecute = $false
+    foreach ($name in @($process.StartInfo.EnvironmentVariables.Keys)) {
+        if ($name.StartsWith('ACTIONRPG_', [StringComparison]::OrdinalIgnoreCase)) { $process.StartInfo.EnvironmentVariables.Remove($name) }
+    }
+    try { [void]$process.Start() }
+    finally { $process.Dispose() }
+}
+function Assert-ServersAlive {
+    foreach ($server in $script:startedServers) {
+        $server.Process.Refresh()
+        if ($server.Process.HasExited) {
+            Fail ($server.Name + ' exited. Check its console window for the startup error.')
+        }
+    }
+}
+function Assert-PortsFree([int[]] $ports) {
+    $listeners = [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+    foreach ($port in $ports) {
+        if ($listeners | Where-Object { $_.Port -eq $port }) { Fail "TCP port already in use: $port" }
+    }
+}
+
+# Keep actual server output in its console after exit. Only its PID crosses an
+# in-memory pipe; credentials are inherited through the process environment.
+function Start-Server([string] $name, [string] $directory, [string[]] $arguments, [int[]] $ports) {
+    Assert-ServersAlive
+    Assert-PortsFree $ports
+    if (Get-Process -Name $name -ErrorAction SilentlyContinue) { Fail "$name is already running." }
+    $pipeName = 'ActionRPGLocal-' + [Guid]::NewGuid().ToString('N')
+    $pipe = [IO.Pipes.NamedPipeServerStream]::new($pipeName, [IO.Pipes.PipeDirection]::In, 1, [IO.Pipes.PipeTransmissionMode]::Byte, [IO.Pipes.PipeOptions]::Asynchronous)
+    $keep = @('ACTIONRPG_ROOM_CONTROL_KEY')
+    if ($name -eq 'AuthServer') { $keep = @('ACTIONRPG_AUTH_TLS_CERT','ACTIONRPG_AUTH_TLS_KEY','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_GOOGLE_CLIENT_ID','ACTIONRPG_AUTH_TOWN_REGISTRY','ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
+    if ($name -eq 'TownServer') { $keep += @('ACTIONRPG_TOWN_TLS_CERT','ACTIONRPG_TOWN_TLS_KEY','ACTIONRPG_AUTH_HOST','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_TOWN_ID','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
+    $payload = @{ Name = $name; Executable = (Join-Path $directory ($name + '.exe')); Directory = $directory; Arguments = $arguments; Pipe = $pipeName; ManagedEnvironment = ($script:required + @('ACTIONRPG_ROOM_CONTROL_KEY')); KeepEnvironment = $keep } | ConvertTo-Json -Compress
+    $payload64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
+    $runner = @'
+$ErrorActionPreference = 'Stop'
+$launch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('PAYLOAD')) | ConvertFrom-Json
+$Host.UI.RawUI.WindowTitle = $launch.Name
+foreach ($name in $launch.ManagedEnvironment) {
+    if ($name -notin $launch.KeepEnvironment) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
+}
+$pipe = $null
+try {
+    $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', $launch.Pipe, [IO.Pipes.PipeDirection]::Out)
+    $pipe.Connect(5000)
+    $options = @{ FilePath = $launch.Executable; WorkingDirectory = $launch.Directory; NoNewWindow = $true; PassThru = $true }
+    if ($launch.Arguments.Count -gt 0) { $options.ArgumentList = $launch.Arguments }
+    $native = Start-Process @options
+    $writer = [IO.StreamWriter]::new($pipe)
+    $writer.WriteLine($native.Id)
+    $writer.Flush()
+    $pipe.Dispose()
+    $pipe = $null
+    $native.WaitForExit()
+    Write-Host ('[ERROR] ' + $launch.Name + ' exited with code ' + $native.ExitCode + '. See the server output above.')
+} catch {
+    Write-Host ('[ERROR] Unable to start or monitor ' + $launch.Name + '. Check the executable and runtime dependencies.')
+} finally {
+    if ($pipe) { $pipe.Dispose() }
+    [void](Read-Host 'Press Enter to close this server window')
+}
+'@
+    $runner = $runner.Replace('PAYLOAD', $payload64)
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($runner))
+    $reader = $null
+    try {
+        $connection = $pipe.WaitForConnectionAsync()
+        [void](Start-Process (Join-Path $PSHOME 'powershell.exe') -ArgumentList @('-NoProfile', '-EncodedCommand', $encoded) -WindowStyle Normal -PassThru)
+        if (!$connection.Wait(8000)) { Fail "$name console did not respond. Check its window before retrying." }
+        $reader = [IO.StreamReader]::new($pipe)
+        $pidRead = $reader.ReadLineAsync()
+        if (!$pidRead.Wait(5000)) { Fail "$name did not report startup. Check its console window." }
+        $nativeId = 0
+        if (![int]::TryParse($pidRead.Result, [ref] $nativeId)) { Fail "$name could not start. Check its console window." }
+        try {
+            $native = [Diagnostics.Process]::GetProcessById($nativeId)
+            # Acquire the native handle before PID reuse; the console wrapper stays alive after exit.
+            [void]$native.Handle
+        } catch { Fail "$name exited during startup. Check its console window." }
+        $script:startedServers += @{ Name = $name; Process = $native }
+    } catch {
+        if (!$script:failureMessage) { Fail "$name could not start. Check its console window." }
+        throw
+    } finally {
+        if ($reader) { $reader.Dispose() }
+        $pipe.Dispose()
+    }
+}
+function Wait-Server([string] $name, [int[]] $ports, [int] $seconds, [string] $authUrl = '') {
+    $deadline = [DateTime]::UtcNow.AddSeconds($seconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        Assert-ServersAlive
+        $listening = @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | ForEach-Object { $_.Port })
+        $missing = @($ports | Where-Object { $_ -notin $listening })
+        if ($missing.Count -eq 0) {
+            if (!$authUrl) { return }
+            # Discard challenge bodies; never log nonce/token values or skip TLS verification.
+            $status = & $script:curl --silent --ipv4 --output NUL --write-out '%{http_code}' --noproxy '*' --cacert $env:ACTIONRPG_AUTH_CA_FILE --connect-timeout 1 --max-time 2 --request POST --header 'Content-Type: application/json' --data '{}' $authUrl
+            $curlResult = $LASTEXITCODE
+            Assert-ServersAlive
+            if ($curlResult -eq 0 -and $status -eq '200') { return }
+            if ($status -eq '503') { Fail 'AuthServer DB verification failed. Check the AuthServer console and deployed DB/SQL configuration.' }
+            if ($curlResult -eq 60 -or $curlResult -eq 77) { Fail 'AuthServer TLS verification failed. Check ACTIONRPG_AUTH_HOST and ACTIONRPG_AUTH_CA_FILE.' }
+            if ($curlResult -eq 0) { Fail 'AuthServer readiness request was rejected. Check its console window.' }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    Fail "$name was not ready within $seconds seconds. Check its console window."
+}
+
+try {
+    foreach ($name in @('AuthServer', 'TownServer')) { Require-File (Join-Path $serverDirectory ($name + '.exe')) ($name + ' Debug x64 executable') }
+    Require-File (Join-Path $roomDirectory 'GameRoomServer.exe') 'GameRoomServer Debug x64 executable'
+    Require-File (Join-Path $clientDirectory 'ActionRPGClient.exe') 'ActionRPGClient Debug x64 executable'
+    $script:curl = (Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue).Source
+    if (!$script:curl) { Fail 'curl.exe is required for the verified Auth HTTPS readiness check.' }
+
+    $required = $script:required
+    Assert-PortsFree @(8443,7777,7780)
+    foreach ($name in @('AuthServer','TownServer','GameRoomServer')) {
+        if (Get-Process -Name $name -ErrorAction SilentlyContinue) { Fail "$name is already running. Close it manually before setup or launch." }
+    }
+    Initialize-LocalSettings
+    $invalid = $false
+    foreach ($name in $required) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ([string]::IsNullOrWhiteSpace($value) -or $value.Length -gt 32766) {
+            Write-Host "[ERROR] Missing or invalid configuration: $name"
+            $invalid = $true
+        }
+    }
+    if ($invalid) { Fail 'Provide the listed environment settings in this launcher process. Values are never displayed.' }
+    foreach ($name in @('ACTIONRPG_AUTH_TLS_CERT', 'ACTIONRPG_AUTH_TLS_KEY', 'ACTIONRPG_AUTH_CA_FILE', 'ACTIONRPG_TOWN_TLS_CERT', 'ACTIONRPG_TOWN_TLS_KEY')) {
+        $path = [Environment]::GetEnvironmentVariable($name)
+        Require-AbsolutePath $path $name
+        Require-File $path $name
+    }
+    if ($env:ACTIONRPG_GOOGLE_CLIENT_ID.Length -gt 256 -or $env:ACTIONRPG_GOOGLE_CLIENT_ID -cnotmatch '^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com\z') { Fail 'Invalid configuration: ACTIONRPG_GOOGLE_CLIENT_ID' }
+    if ([Text.Encoding]::UTF8.GetByteCount($env:ACTIONRPG_TOWN_ID) -gt 64) { Fail 'Invalid configuration: ACTIONRPG_TOWN_ID' }
+    if ($env:ACTIONRPG_TOWN_AUTH_KEY -cnotmatch '^[0-9a-f]{64}\z') { Fail 'Invalid configuration: ACTIONRPG_TOWN_AUTH_KEY' }
+    try { $registry = $env:ACTIONRPG_AUTH_TOWN_REGISTRY | ConvertFrom-Json }
+    catch { Fail 'Invalid JSON: ACTIONRPG_AUTH_TOWN_REGISTRY' }
+    if ($registry -isnot [Management.Automation.PSCustomObject]) { Fail 'JSON object required: ACTIONRPG_AUTH_TOWN_REGISTRY' }
+    $entries = @($registry.PSObject.Properties)
+    if ($entries.Count -eq 0 -or $entries.Count -gt 128) { Fail 'Invalid entry count: ACTIONRPG_AUTH_TOWN_REGISTRY' }
+    foreach ($entry in $entries) {
+        if (!$entry.Name -or [Text.Encoding]::UTF8.GetByteCount($entry.Name) -gt 64 -or $entry.Value -isnot [string] -or $entry.Value -cnotmatch '^[0-9a-f]{64}\z') { Fail 'Invalid town identity: ACTIONRPG_AUTH_TOWN_REGISTRY' }
+    }
+    $matching = @($entries | Where-Object { $_.Name -ceq $env:ACTIONRPG_TOWN_ID -and $_.Value -ceq $env:ACTIONRPG_TOWN_AUTH_KEY })
+    if ($matching.Count -ne 1) { Fail 'ACTIONRPG_TOWN_ID/ACTIONRPG_TOWN_AUTH_KEY do not match ACTIONRPG_AUTH_TOWN_REGISTRY.' }
+    if ($env:ACTIONRPG_DB_SCHEMA.Length -gt 64) { Fail 'Invalid configuration: ACTIONRPG_DB_SCHEMA' }
+    Add-Type -AssemblyName System.Data
+    try { $connection = [Data.Odbc.OdbcConnectionStringBuilder]::new($env:ACTIONRPG_DB_CONNECTION_STRING) }
+    catch { Fail 'Invalid connection string format: ACTIONRPG_DB_CONNECTION_STRING' }
+    Assert-OdbcReady $connection
+    $sqlDirectory = $env:ACTIONRPG_DB_MIGRATIONS_DIRECTORY
+    Require-AbsolutePath $sqlDirectory 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY'
+    if (!(Test-Path -LiteralPath $sqlDirectory -PathType Container)) { Fail 'Directory required: ACTIONRPG_DB_MIGRATIONS_DIRECTORY' }
+    Assert-SqlFiles $sqlDirectory
+    # This launcher starts a local Auth instance; never accidentally probe a remote one.
+    if ($env:ACTIONRPG_AUTH_HOST -notmatch '^[A-Za-z0-9.-]{1,253}\z') { Fail 'Hostname or IPv4 address required: ACTIONRPG_AUTH_HOST' }
+    try {
+        $resolution = [Net.Dns]::GetHostAddressesAsync($env:ACTIONRPG_AUTH_HOST)
+        if (!$resolution.Wait(3000)) { Fail 'ACTIONRPG_AUTH_HOST resolution timed out.' }
+        $addresses = $resolution.Result
+    } catch {
+        if (!$script:failureMessage) { Fail 'Unable to resolve ACTIONRPG_AUTH_HOST.' }
+        throw
+    }
+    if (!$addresses -or @($addresses | Where-Object { ![Net.IPAddress]::IsLoopback($_) }).Count -gt 0 -or !@($addresses | Where-Object { $_.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork }).Count) { Fail 'ACTIONRPG_AUTH_HOST must resolve to local loopback IPv4 for this launcher.' }
+    $authUrl = 'https://{0}:8443/v1/challenges' -f $env:ACTIONRPG_AUTH_HOST
+
+    Require-File (Join-Path $roomDirectory 'ServerOptionFile\CoreOption.txt') 'room runtime ServerOptionFile/CoreOption.txt'
+    $brokerPath = Join-Path $roomDirectory 'ServerOptionFile\SessionBrokerOption.txt'
+    Require-File $brokerPath 'room runtime ServerOptionFile/SessionBrokerOption.txt'
+    $brokerBytes = [IO.File]::ReadAllBytes($brokerPath)
+    if ($brokerBytes.Length -lt 2 -or $brokerBytes[0] -ne 255 -or $brokerBytes[1] -ne 254) { Fail 'Room SessionBrokerOption.txt requires UTF-16 LE BOM.' }
+    $brokerText = [Text.Encoding]::Unicode.GetString($brokerBytes, 2, $brokerBytes.Length - 2)
+    $portMatch = [regex]::Match($brokerText, '(?m)^\s*SESSION_BROKER_PORT\s*=\s*([0-9]+)\s*$')
+    $hostMatch = [regex]::Match($brokerText, '(?m)^\s*CORE_IP\s*=\s*"(127\.0\.0\.1)"\s*$')
+    $brokerPort = 0
+    if (!$hostMatch.Success -or !$portMatch.Success -or ![int]::TryParse($portMatch.Groups[1].Value, [ref] $brokerPort) -or $brokerPort -lt 1 -or $brokerPort -gt 65535) { Fail 'Room broker options must provide local CORE_IP and a valid SESSION_BROKER_PORT.' }
+    $ports = @(8443, 7777, 7780, $brokerPort)
+    if (@($ports | Select-Object -Unique).Count -ne 4) { Fail 'Auth, Town, RoomControl and room broker TCP ports must be distinct.' }
+    Assert-PortsFree $ports
+    foreach ($name in @('AuthServer', 'TownServer', 'GameRoomServer')) {
+        if (Get-Process -Name $name -ErrorAction SilentlyContinue) { Fail "$name is already running. Close it manually before using this launcher." }
+    }
+
+    # Fresh shared secret stays in memory and is inherited by Town and Room.
+    $env:ACTIONRPG_ROOM_CONTROL_KEY = New-RandomKey
+    Supply-ClientSettings
+
+    Write-Host '[1/5] Starting AuthServer...'
+    Start-Server 'AuthServer' $serverDirectory @() @(8443)
+    Wait-Server 'AuthServer' @(8443) 25 $authUrl
+    Write-Host '[2/5] Starting TownServer...'
+    Start-Server 'TownServer' $serverDirectory @('7777', '4', '7780') @(7777, 7780)
+    Wait-Server 'TownServer' @(7777, 7780) 10
+    Write-Host '[3/5] Starting GameRoomServer...'
+    Start-Server 'GameRoomServer' $roomDirectory @('127.0.0.1', '7780', '1', '1000', '4') @($brokerPort)
+    Wait-Server 'GameRoomServer' @($brokerPort) 10
+    foreach ($number in @(1, 2)) {
+        Assert-ServersAlive
+        Write-Host ('[' + ($number + 3) + '/5] Starting client ' + $number + '...')
+        Start-Client
+    }
+    Assert-ServersAlive
+    Write-Host 'Servers and two clients started. Log in manually with two different Google accounts.'
+    Write-Host 'Close each server/client window manually when finished.'
+    exit 0
+} catch {
+    # Only fixed launcher diagnostics are reported; parser/driver exceptions may contain secrets.
+    if ($script:failureMessage) { Write-Host ('[ERROR] ' + $script:failureMessage) }
+    else { Write-Host '[ERROR] Launcher failed. Check settings, executable/runtime files and server console windows.' }
+    Write-Host 'Any servers already started are left running. Close their windows manually before retrying.'
+    exit 1
+}

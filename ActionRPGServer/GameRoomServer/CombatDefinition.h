@@ -16,6 +16,7 @@ namespace GameRoomServer
         std::uint32_t damage{};
         float hitSeconds{};
         float reachHeight{};
+        float hitstopSeconds{};
     };
 
     struct MonsterCombatProfile
@@ -25,6 +26,7 @@ namespace GameRoomServer
         float detectionRange{};
         float bodyHeight{};
         float hitRadius{};
+        float hitRecovery{};
         std::unordered_map<std::string, SkillEffect> skills;
     };
 
@@ -33,11 +35,13 @@ namespace GameRoomServer
     {
         float durationSeconds{};
         std::string motionId;
+        float hitstopSeconds{};
     };
 
     struct CharacterCombatDefinition
     {
         std::uint32_t attackPower{};
+        float hitRecovery{};
         SlideDefinition slide;
     };
 
@@ -47,6 +51,7 @@ namespace GameRoomServer
         std::uint32_t shotDamage{};
         float walkSpeed{}, runSpeed{}, bodyHeight{}, hitRadius{};
         float shotPrepareSeconds{}, shotIntervalSeconds{}, shotRecoverSeconds{};
+        float shotHitstopSeconds{};
         float projectileSpeed{}, projectileRange{}, projectileRadius{};
         float muzzleForward{}, muzzleHeight{}, airMuzzleForward{}, airMuzzleHeight{};
         float jumpPrepareSeconds{}, jumpSpeed{}, gravity{}, hitStunSeconds{}, downSeconds{}, riseSeconds{};

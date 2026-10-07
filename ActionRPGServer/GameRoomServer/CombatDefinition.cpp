@@ -4,6 +4,7 @@
 #include <cmath>
 #include <fstream>
 #include <initializer_list>
+#include <limits>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -30,6 +31,12 @@ namespace GameRoomServer
             Require(std::isfinite(value) && value >= inMin && value <= inMax, "Invalid combat number.");
             return static_cast<float>(value);
         }
+        float NonnegativeFloat(const Json& inValue)
+        {
+            const float value = Number(inValue, 0, std::numeric_limits<float>::max());
+            Require(inValue.get<double>() == 0 || value > 0, "Combat value underflows float.");
+            return value;
+        }
         std::uint32_t Integer(const Json& inValue, std::uint32_t inMin, std::uint32_t inMax)
         {
             Require(inValue.is_number_integer(), "Expected combat integer.");
@@ -47,7 +54,7 @@ namespace GameRoomServer
         Require(input.good(), "Cannot read Combat.json.");
         const Json source = Json::parse(input);
         Keys(source, { "version", "player", "reactions", "monsters" });
-        Require(source.at("version") == 2, "Unsupported combat version.");
+        Require(source.at("version") == 3, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
         const auto& player = source.at("player");
         Keys(player, { "maxHp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });
@@ -59,11 +66,12 @@ namespace GameRoomServer
         const auto& shot = player.at("shot");
         Keys(shot, { "damage", "prepareSeconds", "intervalSeconds", "recoverSeconds", "speed", "range",
             "radius", "muzzleForward", "muzzleHeight", "airMuzzleForward", "airMuzzleHeight",
-            "airFireLift", "airRecoilDistance" });
+            "airFireLift", "airRecoilDistance", "hitstopSeconds" });
         result->shotDamage = Integer(shot.at("damage"), 1, 1000000);
         result->shotPrepareSeconds = Number(shot.at("prepareSeconds"), 0.05, 10);
         result->shotIntervalSeconds = Number(shot.at("intervalSeconds"), 0.05, 10);
         result->shotRecoverSeconds = Number(shot.at("recoverSeconds"), 0.05, 10);
+        result->shotHitstopSeconds = NonnegativeFloat(shot.value("hitstopSeconds", Json(0)));
         result->projectileSpeed = Number(shot.at("speed"), 1, 5000);
         result->projectileRange = Number(shot.at("range"), 1, 5000);
         result->projectileRadius = Number(shot.at("radius"), 0.1, 100);
@@ -87,7 +95,7 @@ namespace GameRoomServer
         Require(profiles.is_array() && profiles.size() <= 256, "Invalid combat profile list.");
         for (const auto& profile : profiles)
         {
-            Keys(profile, { "dataId", "walkSpeed", "runSpeed", "detectionRange", "bodyHeight", "hitRadius", "skills" });
+            Keys(profile, { "dataId", "walkSpeed", "runSpeed", "detectionRange", "bodyHeight", "hitRadius", "hitRecovery", "skills" });
             const auto dataId = Integer(profile.at("dataId"), 1, 1000000);
             Require(inMonsters.contains(dataId), "Combat profile references unknown monster.");
             MonsterCombatProfile monster;
@@ -96,10 +104,11 @@ namespace GameRoomServer
             monster.detectionRange = Number(profile.at("detectionRange"), 0, 10000);
             monster.bodyHeight = Number(profile.at("bodyHeight"), 1, 1000);
             monster.hitRadius = Number(profile.at("hitRadius"), 1, 100);
+            monster.hitRecovery = NonnegativeFloat(profile.value("hitRecovery", Json(0)));
             Require(profile.at("skills").is_array() && profile.at("skills").size() <= 2048, "Invalid combat skills.");
             for (const auto& effect : profile.at("skills"))
             {
-                Keys(effect, { "id", "damage", "hitSeconds", "reachHeight" });
+                Keys(effect, { "id", "damage", "hitSeconds", "reachHeight", "hitstopSeconds" });
                 const std::string id = effect.at("id").get<std::string>();
                 const auto& skills = inMonsters.at(dataId)->GetSkills();
                 const auto skill = std::find_if(skills.begin(), skills.end(), [&id](const auto& value)
@@ -107,7 +116,8 @@ namespace GameRoomServer
                 Require(skill != skills.end(), "Combat effect references unknown skill: " + id);
                 SkillEffect value{ Integer(effect.at("damage"), 1, 1000000),
                     Number(effect.at("hitSeconds"), 0, skill->at("durationSeconds").get<double>()),
-                    Number(effect.at("reachHeight"), 0, 1000) };
+                    Number(effect.at("reachHeight"), 0, 1000),
+                    NonnegativeFloat(effect.value("hitstopSeconds", Json(0.05))) };
                 Require(monster.skills.emplace(id, value).second, "Duplicate combat skill: " + id);
             }
             for (const auto& node : inMonsters.at(dataId)->GetAi().at("nodes"))
@@ -138,14 +148,16 @@ namespace GameRoomServer
             && !characters.empty() && characters.size() <= 256, "Every character needs one combat definition.");
         for (const auto& character : characters)
         {
-            Keys(character, { "characterId", "attackPower", "slide" });
+            Keys(character, { "characterId", "attackPower", "hitRecovery", "slide" });
             const auto characterId = Integer(character.at("characterId"), 1, 1000000);
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
             const auto& slide = character.at("slide");
-            Keys(slide, { "durationSeconds", "motionId" });
+            Keys(slide, { "durationSeconds", "motionId", "hitstopSeconds" });
             CharacterCombatDefinition definition{ Integer(character.at("attackPower"), 1, 1000000),
-                { Number(slide.at("durationSeconds"), 0.05, 2), slide.at("motionId").get<std::string>() } };
+                NonnegativeFloat(character.value("hitRecovery", Json(0))),
+                { Number(slide.at("durationSeconds"), 0.05, 2), slide.at("motionId").get<std::string>(),
+                    NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))) } };
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");
         }

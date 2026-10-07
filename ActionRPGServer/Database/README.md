@@ -24,6 +24,11 @@ Google 토큰이나 이메일은 현재 계정 스키마에 저장하지 않는�
 
 ## 수동 적용
 
+로컬 최초 설정의 DB 입력·64비트 ODBC 준비·보호 저장·실제 대상 검증은
+[DB 준비 계약](../../docs/workflows/DATABASE_MIGRATIONS.md#로컬-최초-설정의-db-준비-계약)을 따른다.
+설정 저장이나 MySQL 설치 파일 버전으로 실제 서버 버전·마이그레이션 상태를 판단하지 않는다.
+드라이버가 없으면 공식 설치 안내 후 중단하며 자동 설치·DB 생성·마이그레이션 적용은 하지 않는다.
+
 서버 기동 시 마이그레이션을 자동 실행하지 않는다. 운영자가
 [UpMigration.bat](../../Tool/Database/UpMigration.bat) 또는
 [DownMigration.bat](../../Tool/Database/DownMigration.bat)를 실행하며, 공통 실행기는

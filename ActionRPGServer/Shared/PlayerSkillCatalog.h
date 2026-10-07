@@ -7,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <initializer_list>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -42,6 +43,13 @@ namespace ActionRPG::PlayerSkills
             const double value = Number(inValue, inMin, inMax);
             Require(std::floor(value) == value, "Expected integer.");
             return static_cast<std::uint32_t>(value);
+        }
+        static float NonnegativeFloat(const Json& inValue)
+        {
+            const double value = Number(inValue, 0, std::numeric_limits<float>::max());
+            const float result = static_cast<float>(value);
+            Require(value == 0 || result > 0, "Attack time underflows float.");
+            return result;
         }
         static bool IsId(const std::string& inValue)
         {
@@ -119,7 +127,7 @@ namespace ActionRPG::PlayerSkills
                 Require(id == "Character" + std::to_string(dataId), "Character mapping differs from characters.ini.");
             }
             std::unordered_set<std::string> commands;
-            for (const auto& skill : inSource.at("skills"))
+            for (auto& skill : inSource.at("skills"))
             {
                 Keys(skill, { "id", "name", "characterId", "type", "input", "cooldownSeconds", "execution", "ground", "air" });
                 const auto id = skill.at("id").get<std::string>();
@@ -138,7 +146,7 @@ namespace ActionRPG::PlayerSkills
                 Require(commands.insert(character + ":" + command.dump()).second, "Duplicate command.");
                 Number(skill.at("input").at("maxStepSeconds"), 0.01, 1.5);
                 Number(skill.at("cooldownSeconds"), 0, 86400);
-                const auto& execution = skill.at("execution");
+                auto& execution = skill.at("execution");
                 if (type == "buff")
                 {
                     Keys(execution, { "target", "stat", "multiplier", "durationSeconds", "refresh" });
@@ -148,8 +156,12 @@ namespace ActionRPG::PlayerSkills
                 }
                 else
                 {
-                    if (type == "direct") Keys(execution, { "damage", "depthRadius" });
-                    else Keys(execution, { "damage", "speed", "radius", "range" });
+                    // Normalize legacy attack data without replacing an explicitly disabled hitstop.
+                    Require(execution.is_object(), "Expected attack execution object.");
+                    if (!execution.contains("hitstopSeconds")) execution["hitstopSeconds"] = 0.0;
+                    if (type == "direct") Keys(execution, { "damage", "depthRadius", "hitstopSeconds" });
+                    else Keys(execution, { "damage", "speed", "radius", "range", "hitstopSeconds" });
+                    (void)NonnegativeFloat(execution.at("hitstopSeconds"));
                     Integer(execution.at("damage"), 1, 1000000);
                     if (type == "direct") Number(execution.at("depthRadius"), 0.1, 500);
                     else

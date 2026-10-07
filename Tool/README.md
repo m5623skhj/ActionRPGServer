@@ -73,6 +73,6 @@ Up은 모든 미적용 버전을 순서대로 적용하고, Down은 현재 적�
 경로에 배포하고, Auth의 기대 스키마 `ACTIONRPG_DB_SCHEMA`를 맞춘다. Auth 실제 head=3 검증
 성공 후 타운/룸을 연결한다. 서버 상세는 [Auth 개발 계약](../ActionRPGServer/AuthServer/DEVELOPMENT.md),
 스키마·현재 버전 조회·권한·실패 복구는
-[DB 마이그레이션 사용 및 규칙 v1.2.0](../docs/workflows/DATABASE_MIGRATIONS.md#9-수동-updown-실행-계약)을 따른다.
+[DB 마이그레이션 사용 및 규칙](../docs/workflows/DATABASE_MIGRATIONS.md#9-수동-updown-실행-계약)을 따른다.
 현재 버전 확인에 Up을 사용하면 대기 SQL이 적용될 수 있으므로 문서의 조회 절차를 사용한다.
 이번 문서 작업은 실제 DB 접속·적용·빌드·테스트를 수행하지 않았다.
