@@ -134,6 +134,17 @@ namespace TownProtocol
 
 namespace TownProtocol
 {
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const CharacterListResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const CharacterCreateResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const CharacterSelectResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const InventoryStateResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const InventoryOperationResponse& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const ItemDefinitionsResponse& inPacket);
+    [[nodiscard]] std::optional<CharacterListRequest> DecodeCharacterListRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<CharacterCreateRequest> DecodeCharacterCreateRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<CharacterSelectRequest> DecodeCharacterSelectRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<InventoryStateRequest> DecodeInventoryStateRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<InventoryOperationRequest> DecodeInventoryOperationRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const PartyDetailRequest& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const AdmissionTicketRequest& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const AdmissionResult& inPacket);

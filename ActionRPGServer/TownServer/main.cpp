@@ -5,11 +5,13 @@
 #include "TownInstance.h"
 #include "TownMap.h"
 #include "../Shared/Database/OdbcDatabase.h"
+#include "../AuthServer/Database/LoginSchemaVerifier.h"
 
 #include <asio.hpp>
 #include <Windows.h>
 
 #include <array>
+#include <atomic>
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
@@ -109,8 +111,10 @@ int main(const int inArgumentCount, char* inArguments[])
     try
     {
         asio::io_context ioContext;
-        auto database = std::make_shared<TownServer::Database::OdbcDatabase>(
-            TownServer::Database::DatabaseOptions::FromEnvironment());
+        TownServer::Database::DatabaseOptions databaseOptions;
+        databaseOptions.connectionString = TownServer::Persistence::Wide(
+            ActionRPG::Authentication::RequiredEnvironment("ACTIONRPG_TOWN_DB_CONNECTION_STRING"));
+        auto database = std::make_shared<TownServer::Database::OdbcDatabase>(std::move(databaseOptions));
         const std::filesystem::path dataDirectory = GetExecutableDirectory() / "Data";
         std::vector<TownServer::Domain::TownMap> townMaps = LoadTownMaps(dataDirectory);
         TownServer::Domain::DungeonCatalog dungeonCatalog = TownServer::Domain::DungeonCatalog::Load(
@@ -136,21 +140,36 @@ int main(const int inArgumentCount, char* inArguments[])
             ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port), townInstance, roomControlServer, tls);
         asio::signal_set shutdownSignals(ioContext, SIGINT, SIGTERM);
 
-        shutdownSignals.async_wait([&server, &roomControlServer, database](const asio::error_code& inError, const int)
+        std::atomic_bool stopping{false};
+        bool startupFailed = false;
+        shutdownSignals.async_wait([&server, &roomControlServer, &stopping](const asio::error_code& inError, const int)
         {
             if (!inError)
             {
-                database->Stop();
+                stopping.store(true);
                 server.Stop();
                 roomControlServer->Stop();
             }
         });
 
-        roomControlServer->Start();
-        server.Start();
-        std::cout << "TownServer listening on TCP port " << port
-            << " and room control port " << roomControlPort
-            << " with " << ioThreadCount << " I/O threads.\n";
+        ActionRPG::Database::LoginSchemaVerifier::Verify(database, ioContext.get_executor(),
+            [&](ActionRPG::Database::SchemaVerificationResult result)
+        {
+            if (stopping.load()) return;
+            if (result.status != ActionRPG::Database::SchemaVerificationStatus::Ready
+                || !result.schema || !result.schema->Matches(database))
+            {
+                startupFailed = true; stopping.store(true);
+                std::cerr << "Town database verification failed. stage=" << result.stage << '\n';
+                shutdownSignals.cancel();
+                return;
+            }
+            roomControlServer->Start();
+            server.Start();
+            std::cout << "TownServer DB verified; listening on TCP port " << port
+                << " and room control port " << roomControlPort
+                << " with " << ioThreadCount << " I/O threads.\n";
+        });
 
         std::vector<std::thread> ioThreads;
         ioThreads.reserve(ioThreadCount - 1);
@@ -168,6 +187,7 @@ int main(const int inArgumentCount, char* inArguments[])
             ioThread.join();
         }
         database->Stop();
+        if (startupFailed) return 1;
     }
     catch (const std::exception& inException)
     {

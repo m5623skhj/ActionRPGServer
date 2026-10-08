@@ -65,6 +65,12 @@ namespace TownServer::Domain
         const auto self = shared_from_this();
         asio::post(strand, [self, inSessionId]
         {
+            if (self->characterWork.contains(inSessionId) || self->characterReleases.contains(inSessionId))
+            {
+                self->deferredAdmissionReleases.emplace(inSessionId);
+                self->DrainCharacterRelease(inSessionId);
+                return;
+            }
             const auto found = self->admissions.find(inSessionId);
             if (found == self->admissions.end()) return;
             const auto admission = found->second;
@@ -78,6 +84,8 @@ namespace TownServer::Domain
     {
         if (!running) return;
         const auto now = std::chrono::steady_clock::now();
+        const std::vector<std::uint64_t> releases(deferredAdmissionReleases.begin(), deferredAdmissionReleases.end());
+        for (const auto id : releases) DrainCharacterRelease(id);
         for (auto& [id, admission] : admissions)
         {
             const auto session = admission.session.lock();

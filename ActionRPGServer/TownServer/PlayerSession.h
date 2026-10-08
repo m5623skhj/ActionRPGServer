@@ -57,6 +57,6 @@ namespace TownServer::Network
         std::atomic_uint64_t loginAttemptId{};
         std::atomic_int64_t admissionDeadline{};
         std::atomic<LoginState> loginState{ LoginState::Unauthenticated };
-        bool enterRequested = false;
+        std::atomic_bool enterRequested{ false };
     };
 }

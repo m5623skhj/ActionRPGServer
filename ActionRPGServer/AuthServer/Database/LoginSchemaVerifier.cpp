@@ -21,7 +21,7 @@ namespace ActionRPG::Database
             std::wstring upChecksum;
             std::optional<std::wstring> downChecksum;
         };
-        using Deployment = std::array<Migration, 4>;
+        using Deployment = std::array<Migration, 6>;
 
         [[noreturn]] void InvalidSchema()
         {
@@ -99,8 +99,9 @@ namespace ActionRPG::Database
             const std::filesystem::path directory(Environment(L"ACTIONRPG_DB_MIGRATIONS_DIRECTORY"));
             if (!directory.is_absolute() || !std::filesystem::is_directory(directory)) InvalidSchema();
             Deployment deployment;
-            const std::array<std::wstring, 4> names{L"migration_history", L"create_login_accounts",
-                L"create_google_login_procedure", L"create_auth_account_status_procedure"};
+            const std::array<std::wstring, 6> names{L"migration_history", L"create_login_accounts",
+                L"create_google_login_procedure", L"create_auth_account_status_procedure", L"create_characters_and_skills",
+                L"create_character_inventory_persistence"};
             for (std::size_t version = 0; version < deployment.size(); ++version)
             {
                 auto& migration = deployment[version];
@@ -227,7 +228,7 @@ namespace ActionRPG::Database
             const auto& row = inResponse.resultSets[0].front();
             const auto& version = Required(row, 3);
             const auto comment = Lower(Required(row, 4));
-            if (Required(row, 0) != L"1" || Required(row, 1) != L"sha256-utf8-lf-v1"
+            if (Required(row, 0) != L"3" || Required(row, 1) != L"sha256-utf8-lf-v1"
                 || Required(row, 2) != inDatabase || (version != L"8.0.46" && !version.starts_with(L"8.0.46-")
                     && !version.starts_with(L"8.0.46+"))
                 || comment.find(L"mysql") == std::wstring::npos || comment.find(L"mariadb") != std::wstring::npos
@@ -391,6 +392,7 @@ namespace ActionRPG::Database
                 auto result = Primary();
                 if (Take(L"=")) return L"(" + result + L"=" + Primary() + L")";
                 if (Take(L">")) return L"(" + result + L">" + Primary() + L")";
+                if (Take(L"<")) return L"(" + result + L"<" + Primary() + L")";
                 if (Take(L"is"))
                 {
                     const bool negated = Take(L"not");
@@ -472,6 +474,34 @@ namespace ActionRPG::Database
                 Column(L"accounts", L"status", L"int", L"NO", {}, L"", L"0"),
                 Column(L"accounts", L"created_at", L"datetime(6)", L"NO"),
                 Column(L"accounts", L"last_login_at", L"datetime(6)", L"YES"),
+                Column(L"character_items", L"instance_id", L"binary(16)", L"NO"),
+                Column(L"character_items", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_items", L"definition_id", L"varbinary(64)", L"NO"),
+                Column(L"character_items", L"quantity", L"int unsigned", L"NO"),
+                Column(L"character_items", L"container", L"int unsigned", L"NO"),
+                Column(L"character_items", L"slot", L"int unsigned", L"NO"),
+                Column(L"character_operations", L"account_id", L"bigint unsigned", L"NO"),
+                Column(L"character_operations", L"request_id", L"binary(32)", L"NO"),
+                Column(L"character_operations", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_operations", L"request_kind", L"varbinary(16)", L"NO"),
+                Column(L"character_operations", L"payload_hash", L"binary(32)", L"NO"),
+                Column(L"character_operations", L"revision", L"bigint unsigned", L"NO"),
+                Column(L"character_operations", L"created_at", L"datetime(6)", L"NO"),
+                Column(L"character_skills", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_skills", L"skill_id", L"varbinary(64)", L"NO"),
+                Column(L"character_skills", L"skill_level", L"int unsigned", L"NO"),
+                Column(L"character_state", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_state", L"revision", L"bigint unsigned", L"NO"),
+                Column(L"character_state", L"owner_generation", L"bigint unsigned", L"NO"),
+                Column(L"character_state", L"owner_token", L"binary(32)", L"YES"),
+                Column(L"characters", L"character_id", L"bigint unsigned", L"NO", {}, L"auto_increment"),
+                Column(L"characters", L"account_id", L"bigint unsigned", L"NO"),
+                Column(L"characters", L"character_definition_id", L"int unsigned", L"NO"),
+                Column(L"characters", L"level", L"int unsigned", L"NO"),
+                Column(L"characters", L"name", L"varchar(32)", L"NO", L"utf8mb4_0900_bin", L"", {}, L"utf8mb4"),
+                Column(L"characters", L"skill_points", L"int unsigned", L"NO"),
+                Column(L"characters", L"created_at", L"datetime(6)", L"NO"),
+                Column(L"characters", L"updated_at", L"datetime(6)", L"NO"),
                 Column(L"schema_migrations", L"execution_id", L"bigint unsigned", L"NO", {}, L"auto_increment"),
                 Column(L"schema_migrations", L"version", L"int unsigned", L"NO"),
                 Column(L"schema_migrations", L"name", L"varchar(128)", L"NO", L"ascii_bin", L"", {}, L"ascii"),
@@ -493,6 +523,34 @@ namespace ActionRPG::Database
                 Check(L"account_identities", L"ck_account_identities_subject", L"OCTET_LENGTH(subject) > 0"),
                 {L"account_identities", L"fk_account_identities_account", L"FOREIGN KEY", L"account_id", L"accounts",
                     L"account_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                Primary(L"characters", L"character_id"),
+                {L"characters", L"uk_characters_name", L"UNIQUE", L"name", {}, {}, {}, {}, {}, {}, {}},
+                {L"characters", L"fk_characters_account", L"FOREIGN KEY", L"account_id", L"accounts",
+                    L"account_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                Check(L"characters", L"ck_characters_definition", L"character_definition_id > 0"),
+                Check(L"characters", L"ck_characters_level", L"level > 0 AND level < 1000001"),
+                Check(L"characters", L"ck_characters_name", L"OCTET_LENGTH(name) > 0 AND OCTET_LENGTH(name) < 33"),
+                Primary(L"character_skills", L"character_id"), Primary(L"character_skills", L"skill_id"),
+                {L"character_skills", L"fk_character_skills_character", L"FOREIGN KEY", L"character_id", L"characters",
+                    L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                Check(L"character_skills", L"ck_character_skills_id", L"OCTET_LENGTH(skill_id) > 0"),
+                Check(L"character_skills", L"ck_character_skills_level", L"skill_level > 0 AND skill_level < 1000001"),
+                Primary(L"character_state", L"character_id"),
+                {L"character_state", L"fk_character_state_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                Primary(L"character_items", L"instance_id"),
+                {L"character_items", L"uk_character_items_position", L"UNIQUE", L"character_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_items", L"uk_character_items_position", L"UNIQUE", L"container", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_items", L"uk_character_items_position", L"UNIQUE", L"slot", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_items", L"fk_character_items_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                Check(L"character_items", L"ck_character_items_definition", L"OCTET_LENGTH(definition_id) > 0"),
+                Check(L"character_items", L"ck_character_items_quantity", L"quantity > 0"),
+                Check(L"character_items", L"ck_character_items_container", L"container < 5"),
+                Check(L"character_items", L"ck_character_items_equipment", L"container = 1 OR container = 2 OR container = 3 OR quantity = 1"),
+                Check(L"character_items", L"ck_character_items_slot", L"(container < 4 AND slot < 40) OR (container = 4 AND slot < 7)"),
+                Primary(L"character_operations", L"account_id"),
+                Primary(L"character_operations", L"request_id"),
+                {L"character_operations", L"fk_character_operations_account", L"FOREIGN KEY", L"account_id", L"accounts", L"account_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                {L"character_operations", L"fk_character_operations_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
                 Primary(L"schema_migrations", L"execution_id"),
                 Check(L"schema_migrations", L"ck_migrations_completion",
                     L"(state = 'RUNNING' AND finished_at IS NULL) OR (state IN ('SUCCEEDED', 'FAILED') AND finished_at IS NOT NULL)"),
@@ -509,12 +567,44 @@ namespace ActionRPG::Database
                 {L"account_identities", L"PRIMARY", L"0", L"1", L"provider", {}},
                 {L"account_identities", L"PRIMARY", L"0", L"2", L"subject", {}},
                 {L"account_identities", L"ix_account_identities_account_id", L"1", L"1", L"account_id", {}},
+                {L"characters", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"characters", L"uk_characters_name", L"0", L"1", L"name", {}},
+                {L"characters", L"ix_characters_account_id", L"1", L"1", L"account_id", {}},
+                {L"character_skills", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"character_skills", L"PRIMARY", L"0", L"2", L"skill_id", {}},
+                {L"character_state", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"character_items", L"PRIMARY", L"0", L"1", L"instance_id", {}},
+                {L"character_items", L"uk_character_items_position", L"0", L"1", L"character_id", {}},
+                {L"character_items", L"uk_character_items_position", L"0", L"2", L"container", {}},
+                {L"character_items", L"uk_character_items_position", L"0", L"3", L"slot", {}},
+                {L"character_operations", L"PRIMARY", L"0", L"1", L"account_id", {}},
+                {L"character_operations", L"PRIMARY", L"0", L"2", L"request_id", {}},
+                {L"character_operations", L"ix_character_operations_character", L"1", L"1", L"character_id", {}},
                 {L"schema_migrations", L"PRIMARY", L"0", L"1", L"execution_id", {}}});
         }
 
-        std::vector<std::wstring> RoutineBody(const std::wstring& inSql)
+        std::vector<std::wstring> RoutineBody(const std::wstring& inSql, std::wstring_view inRoutineName = {})
         {
             auto tokens = SqlTokens(inSql, false);
+            if (!inRoutineName.empty())
+            {
+                // V5 contains several routines. Select one complete source statement, not the
+                // first BEGIN and final END of the whole migration. Quoted $ stays one token.
+                std::size_t start = tokens.size(), finish = tokens.size();
+                for (std::size_t index = 0; index + 2 < tokens.size(); ++index)
+                {
+                    if (tokens[index] != L"create" || tokens[index + 1] != L"procedure"
+                        || tokens[index + 2] != inRoutineName) continue;
+                    start = index;
+                    for (std::size_t end = start + 3; end + 1 < tokens.size(); ++end)
+                    {
+                        if (tokens[end] == L"$" && tokens[end + 1] == L"$") { finish = end; break; }
+                    }
+                    break;
+                }
+                if (start == tokens.size() || finish == tokens.size()) InvalidSchema();
+                tokens = std::vector<std::wstring>(tokens.begin() + start, tokens.begin() + finish);
+            }
             const auto begin = std::find(tokens.begin(), tokens.end(), L"begin");
             const auto end = std::find(tokens.rbegin(), tokens.rend(), L"end");
             if (begin == tokens.end() || end == tokens.rend() || begin >= end.base()) InvalidSchema();
@@ -544,33 +634,73 @@ namespace ActionRPG::Database
 
         void ValidateRoutines(const SchemaHistoryResponse& inResponse, const Deployment& inDeployment)
         {
-            const std::array<std::wstring, 4> names{L"get_schema_migration_history", L"", L"login_google_account", L"get_auth_account_status"};
+            struct Definition { std::wstring name; std::size_t version; std::wstring access; };
+            const std::array<Definition, 11> definitions{{
+                {L"get_schema_migration_history", 0, L"READS SQL DATA"},
+                {L"login_google_account", 2, L"MODIFIES SQL DATA"},
+                {L"get_auth_account_status", 3, L"READS SQL DATA"},
+                {L"get_character_schema_migration_history", 4, L"READS SQL DATA"},
+                {L"emit_character_state", 5, L"READS SQL DATA"},
+                {L"list_characters", 5, L"MODIFIES SQL DATA"},
+                {L"create_character", 5, L"MODIFIES SQL DATA"},
+                {L"claim_character", 5, L"MODIFIES SQL DATA"},
+                {L"save_character_state", 5, L"MODIFIES SQL DATA"},
+                {L"release_character", 5, L"MODIFIES SQL DATA"},
+                {L"get_inventory_schema_migration_history", 5, L"READS SQL DATA"}
+            }};
             std::set<std::wstring> seen;
             for (const auto& row : inResponse.resultSets[5])
             {
                 const auto& name = Required(row, 0);
-                const auto found = std::find(names.begin(), names.end(), name);
-                if (found == names.end() || name.empty() || !seen.insert(name).second) InvalidSchema();
-                const auto version = static_cast<std::size_t>(std::distance(names.begin(), found));
-                if (Required(row, 1) != L"DEFINER" || Required(row, 2) != (version == 2 ? L"MODIFIES SQL DATA" : L"READS SQL DATA"))
-                    InvalidSchema();
-                // definition_utf8 drops charset introducers; use it only to require visibility.
-                if (Required(row, 3).empty()) InvalidSchema();
+                const auto found = std::find_if(definitions.begin(), definitions.end(),
+                    [&](const auto& definition) { return definition.name == name; });
+                if (found == definitions.end() || !seen.insert(name).second
+                    || Required(row, 1) != L"DEFINER" || Required(row, 2) != found->access
+                    || Required(row, 3).empty()) InvalidSchema();
             }
-            constexpr std::array<std::size_t, 3> VERSIONS{0, 2, 3};
-            for (std::size_t index = 0; index < VERSIONS.size(); ++index)
+            if (seen.size() != definitions.size()) InvalidSchema();
+            for (std::size_t index = 0; index < definitions.size(); ++index)
             {
-                const auto version = VERSIONS[index];
+                const auto& definition = definitions[index];
                 const auto& row = inResponse.resultSets[index + 7].front();
-                if (Required(row, 0) != names[version]) InvalidSchema();
+                if (Required(row, 0) != definition.name) InvalidSchema();
                 ValidateMode(Required(row, 1));
                 for (std::size_t column = 2; column < row.size(); ++column)
                     if (Required(row, column).empty()) InvalidSchema();
-                if (RoutineBody(Required(row, 2)) != RoutineBody(inDeployment[version].upSql)) InvalidSchema();
+                if (RoutineBody(Required(row, 2))
+                    != RoutineBody(inDeployment[definition.version].upSql, definition.name)) InvalidSchema();
             }
             SameRows(inResponse.resultSets[6], {
                 {L"login_google_account", L"1", L"IN", L"inSubject", L"text", L"utf8mb4", L"utf8mb4_bin"},
-                {L"get_auth_account_status", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}}});
+                {L"get_auth_account_status", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"emit_character_state", L"1", L"IN", L"inResultCode", L"int", {}, {}},
+                {L"emit_character_state", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"emit_character_state", L"3", L"IN", L"inIncludeInventory", L"tinyint(1)", {}, {}},
+                {L"list_characters", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"create_character", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"create_character", L"2", L"IN", L"inRequestId", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"create_character", L"3", L"IN", L"inName", L"text", L"utf8mb4", L"utf8mb4_0900_bin"},
+                {L"create_character", L"4", L"IN", L"inDefinitionId", L"int unsigned", {}, {}},
+                {L"create_character", L"5", L"IN", L"inInitialLevel", L"int unsigned", {}, {}},
+                {L"create_character", L"6", L"IN", L"inInitialSp", L"int unsigned", {}, {}},
+                {L"claim_character", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"claim_character", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"claim_character", L"3", L"IN", L"inOwnerToken", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"claim_character", L"4", L"IN", L"inExpectedOwnerGeneration", L"bigint unsigned", {}, {}},
+                {L"save_character_state", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"save_character_state", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"save_character_state", L"3", L"IN", L"inOwnerToken", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"save_character_state", L"4", L"IN", L"inOwnerGeneration", L"bigint unsigned", {}, {}},
+                {L"save_character_state", L"5", L"IN", L"inRequestId", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"save_character_state", L"6", L"IN", L"inExpectedRevision", L"bigint unsigned", {}, {}},
+                {L"save_character_state", L"7", L"IN", L"inOperationJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_state", L"8", L"IN", L"inProgressionJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_state", L"9", L"IN", L"inInventoryJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"release_character", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"release_character", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"release_character", L"3", L"IN", L"inOwnerToken", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"release_character", L"4", L"IN", L"inOwnerGeneration", L"bigint unsigned", {}, {}}
+            });
         }
 
         void ValidateStructure(const SchemaHistoryResponse& inResponse, const Deployment& inDeployment,

@@ -155,6 +155,10 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\Shared\Database\OdbcDatabase.cpp" />
     <ClCompile Include="TownAuthentication.cpp" />
+    <ClCompile Include="TownCharacters.cpp" />
+    <ClCompile Include="TownInventory.cpp" />
+    <ClCompile Include="..\AuthServer\Database\LoginSchemaVerifier.cpp" />
+    <ClCompile Include="..\AuthServer\Database\SchemaHistoryProcedure.cpp" />
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
     <ClCompile Include="..\Shared\TcpAcceptServer.cpp" />
     <ClCompile Include="..\Shared\TcpSession.cpp" />
@@ -188,9 +192,13 @@
     <ClInclude Include="TownMap.h" />
     <ClInclude Include="..\Shared\CharacterProgression.h" />
     <ClInclude Include="..\Shared\SkillTreeCatalog.h" />
+    <ClInclude Include="..\Shared\Inventory.h" />
+    <ClInclude Include="..\Shared\CharacterRuntimeState.h" />
+    <ClInclude Include="Database\CharacterStoreProcedure.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />
+    <None Include="Data\Items.json" />
     <None Include="Data\TownMap.json" />
     <None Include="Data\TownMapCapital.json" />
     <None Include="Data\TownMapHarbor.json" />

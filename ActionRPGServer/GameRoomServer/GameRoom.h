@@ -4,6 +4,7 @@
 #include "DungeonDefinition.h"
 #include "DungeonProtocol.h"
 #include "CombatDefinition.h"
+#include "../Shared/CharacterRuntimeState.h"
 
 #include <asio.hpp>
 
@@ -163,6 +164,8 @@ namespace GameRoomServer
             std::vector<ActiveBuff> buffs;
             SlideState slide;
             ActionRPG::PlayerSkills::CharacterProgression progression;
+            std::uint64_t persistentCharacterId{}, inventoryRevision{};
+            nlohmann::json equipment = nlohmann::json::array();
         };
 
         // Definitions are shared read-only; each room owns HP and the current AI node.

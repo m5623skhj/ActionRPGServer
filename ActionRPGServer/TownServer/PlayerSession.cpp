@@ -131,20 +131,37 @@ namespace TownServer::Network
         if (GetAccountId() == 0) { Stop(); return; }
         switch (*type)
         {
+        case TownProtocol::PacketType::CharacterListRequest:
+        case TownProtocol::PacketType::CharacterCreateRequest:
+        case TownProtocol::PacketType::CharacterSelectRequest:
+        {
+            std::string json;
+            if (*type == TownProtocol::PacketType::CharacterListRequest)
+            { const auto request = TownProtocol::DecodeCharacterListRequest(inPacket); if (request) json = request->json; }
+            else if (*type == TownProtocol::PacketType::CharacterCreateRequest)
+            { const auto request = TownProtocol::DecodeCharacterCreateRequest(inPacket); if (request) json = request->json; }
+            else
+            { const auto request = TownProtocol::DecodeCharacterSelectRequest(inPacket); if (request) json = request->json; }
+            if (json.empty() || enterRequested.load()) { Stop(); return; }
+            town->CharacterRequest(shared_from_this(), *type, std::move(json));
+            return;
+        }
+        case TownProtocol::PacketType::InventoryStateRequest:
+        case TownProtocol::PacketType::InventoryOperationRequest:
+        {
+            std::string json;
+            if (*type == TownProtocol::PacketType::InventoryStateRequest)
+            { const auto request = TownProtocol::DecodeInventoryStateRequest(inPacket); if (request) json = request->json; }
+            else
+            { const auto request = TownProtocol::DecodeInventoryOperationRequest(inPacket); if (request) json = request->json; }
+            if (json.empty() || !enterRequested.load() || GetPlayerId() == 0) { Stop(); return; }
+            town->InventoryRequest(shared_from_this(), *type, std::move(json));
+            return;
+        }
         case TownProtocol::PacketType::EnterTownRequest:
         {
-            const std::optional<TownProtocol::EnterTownRequest> request =
-                TownProtocol::DecodeEnterTownRequest(inPacket);
-            if (!request.has_value() || enterRequested || request->playerName.empty()
-                || request->characterId == 0
-                || request->playerName.size() > 32)
-            {
-                Stop();
-                return;
-            }
-            enterRequested = true;
-            characterId.store(request->characterId, std::memory_order_release);
-            town->Enter(shared_from_this(), request->playerName, request->characterId);
+            // Character identity, name and definition must originate from the owned DB row.
+            Stop();
             return;
         }
         case TownProtocol::PacketType::MoveInput:

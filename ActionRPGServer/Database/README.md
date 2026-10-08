@@ -1,11 +1,12 @@
-# 계정 DB와 마이그레이션
+# 계정·캐릭터·인벤토리 DB와 마이그레이션
 
 현재 SQL과 검증 계약은 **MySQL 8.0.46 / InnoDB**를 대상으로 한다. 계정 DB 호출은
 AuthServer가 소유하며, [공유 ODBC 모듈](../Shared/Database)과 `IStoreProcedure<Req, Res>`
-객체로 저장 프로시저를 비동기 실행한다. DB 전용 서버 프로세스는 구현하지 않았다.
+객체로 저장 프로시저를 비동기 실행한다. TownServer는 V5 공개 프로시저로 캐릭터·성장·인벤토리를 저장/복원한다. DB 전용 서버 프로세스는 구현하지 않았다.
 
 DB에는 내부 계정, Google `sub`와 계정의 연결, 계정 상태·시각, 마이그레이션 감사 이력을
-저장한다. 로그인 세션·티켓·입장 소유권과 캐릭터 성장 상태는 현재 메모리에서 관리한다.
+저장한다. V4에 캐릭터·보유 SP·습득 스킬 저장용 테이블을 추가했다.
+로그인 세션·티켓은 메모리에서 관리한다. V5는 캐릭터별 revision·소유 토큰 세대와 성공 요청 이력을 영속화한다.
 Google 토큰이나 이메일은 현재 계정 스키마에 저장하지 않는다.
 
 ## SQL 구성과 요구 버전
@@ -21,12 +22,37 @@ Google 토큰이나 이메일은 현재 계정 스키마에 저장하지 않는�
 | 000001 | [V000001__create_login_accounts.sql](Migrations/MySQL/V000001__create_login_accounts.sql) | 계정·외부 식별자 테이블 |
 | 000002 | [V000002__create_google_login_procedure.sql](Migrations/MySQL/V000002__create_google_login_procedure.sql) | Google 로그인 조회·최초 자동 가입 |
 | 000003 | [V000003__create_auth_account_status_procedure.sql](Migrations/MySQL/V000003__create_auth_account_status_procedure.sql) | 계정 상태 재확인 |
+| 000004 | [V000004__create_characters_and_skills.sql](Migrations/MySQL/V000004__create_characters_and_skills.sql) | 캐릭터·습득 스킬과 확장 검사 프로시저 |
+| 000005 | [V000005__create_character_inventory_persistence.sql](Migrations/MySQL/V000005__create_character_inventory_persistence.sql) | 캐릭터 소유권·인벤토리·중복 요청과 저장/복원 프로시저 |
 
 역변환 SQL은 [Migrations/MySQL/Down](Migrations/MySQL/Down)에 있다. 파일 최신 버전은
-000003이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 요구 head는
-**3**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
-준비 여부를 결정한다. 사용자 제공 로컬 완료 로그는 **V000003 / 종료 코드 0**이며,
-다른 대상 DB의 실제 적용 버전은 해당 환경에서 확인한다.
+000005이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 요구 head는
+**5**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
+준비 여부를 결정한다. 2026-10-08 로컬 DB는 V4 적용 성공과 런타임 검사 권한을 조회로 확인했다.
+V5의 실제 적용 결과는 적용 단계에서 별도로 확인하며, 다른 대상 DB의 버전을 추정하지 않는다.
+
+`characters`는 고유 character_id PK, account_id 비고유 IX·FK, character_definition_id(종류),
+level, 전역 UK name, skill_points, UTC 생성/수정 시각을 가진다. `character_skills`는
+(character_id, skill_id) PK와 skill_level을 가진다. 이름은 UTF-8 1~32바이트이며 대소문자·악센트·
+공백을 구분한다. 성장·스킬 트리 규칙은 기존 JSON에 유지한다. 상세 계약과 향후 SP 원자적 사용은
+[캐릭터 스키마](../../docs/workflows/DATABASE_MIGRATIONS.md#캐릭터습득-스킬-스키마-v000004)를 따른다.
+
+V5의 character_items는 장비 한 개 또는 스택 하나를 한 행으로 저장한다. instance_id는
+서버가 생성한 32자리 lowercase hex를 BINARY(16)으로 저장하며, definition_id는 ASCII ID다.
+container 0/1/2/3은 장비/재료/소모품/퀘스트 가방, 4는 장착이다. 가방 slot은 0~39,
+장착 slot은 0~6(무기/상의/하의/신발/반지/목걸이/팔찌)이며 위치 UK로 중복을 막는다.
+아이템 정의·maxStack·장착 조건·능력치·효과는 서버 JSON에 유지한다. DB가 마스터를 복제하지 않는다.
+
+공개 호출은 list_characters/create_character/claim_character/save_character_state/release_character다.
+저장은 원본 명령과 요청 ID의 성공 이력을 먼저 확인하고, 소유 토큰·세대 및 revision으로
+이전 세션과 오래된 상태의 쓰기를 거절한다. 성장·스킬·가방·장비는 한 CALL에서 함께 저장한다.
+SQL 안에서 COMMIT하지 않으며 ODBC가 결과 검증 후 커밋한다.
+[전체 인자·결과·동시성 계약](../../docs/workflows/DATABASE_MIGRATIONS.md#캐릭터인벤토리-저장복원-v000005)을 따른다.
+
+기존 head=4는 새 Auth에서 준비 실패한다. 서비스 정지 → 수동 Up4→5 → Auth/Town 새 검사와 Town 공개
+프로시저 EXECUTE 부여 → 같은 SQL 11개와 새 Auth/Town 배포 → head=5 검증 순서다.
+내부 emit_character_state에는 런타임 EXECUTE를 부여하지 않는다. V5 Down은 세 신규 테이블이
+모두 비어 있을 때만 허용한다. Down 후 감사 이력이 남으므로 과거 바이너리로 즉시 복귀할 수 없다.
 
 ## 수동 적용
 

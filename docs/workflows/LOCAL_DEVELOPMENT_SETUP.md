@@ -1,12 +1,15 @@
 # 새 Windows PC의 로컬 개발 환경 설정과 문제 해결
 
-기준일: 2026-10-07. 다른 PC에 MySQL·Auth·Town·Room·클라이언트를 모두 설치하여 로컬에서
+기준일: 2026-10-08. 다른 PC에 MySQL·Auth·Town·Room·클라이언트를 모두 설치하여 로컬에서
 실행하는 절차다. 기존 PC의 DB 데이터 이관이나 원격 서버 접속용 배포 절차는 별도다.
 `RunLocalTest.bat`은 localhost 구성과 Debug/x64 출력 경로를 사용한다.
 
-사용자는 기존 PC에서 V000003 마이그레이션 성공과 Google 로그인 후 정상 입장을 확인했다.
-새 PC의 동작과 던전 전투·성능까지 확인된 것은 아니다. 에이전트는 이번 정리에서 빌드·실행·DB
-접속을 수행하지 않았다. 다른 PC에서도 아래 순서를 직접 진행하고 완료 조건을 확인한다.
+사용자는 기존 PC에서 V000003 적용과 Google 로그인 후 정상 입장을 확인했다.
+2026-10-08 로컬 DB의 V000004 성공 이력과 검사 EXECUTE도 조회로 확인했다.
+현재 배포 파일은 저장/복원 V000005이며 새 Auth는 head=5를 요구한다. V5 적용 결과는
+대상에서 별도로 확인한다. 기존 head=4는 새 Auth에서 준비 실패하므로 서비스 정지 후 Up4→5와
+새 검사·Town 공개 프로시저 권한, 동일 SQL/서버 배포가 필요하다.
+새 PC의 동작과 던전 전투·성능까지 확인된 것은 아니다. 다른 PC에서도 아래 순서를 진행한다.
 
 ## 1. 설치 및 저장소 준비
 
@@ -169,13 +172,18 @@ finally {
 }
 ```
 
-기대 결과는 `Complete. Active version: V000003.`과 종료 코드 **0**이다. 기반 V000000 다음에
-V000001→V000002→V000003이 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
+기대 결과는 `Complete. Active version: V000005.`과 종료 코드 **0**이다. 기반 V000000 다음에
+V000001→V000002→V000003→V000004→V000005가 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
 실패 출력이 있으면 일반 Up을 반복하지 말고 아래 문제 해결 절차를 따른다.
 이 예제는 실행 정책을 자식 프로세스에만 지정한다. 조직의 상위 정책을 덮어쓰는 기능은 아니다.
 [실행 정책 범위 설명](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy?view=powershell-5.1).
 
-마이그레이션 성공 후 관리자로 런타임 계정에 **세 프로시저의 EXECUTE만** 부여한다.
+마이그레이션 성공 후 관리자로 기존 EXECUTE를 유지하고 **새 V5 검사와 Town 공개 프로시저 EXECUTE**를 추가한다.
+새 Auth의 필수 호출은 login_google_account/get_auth_account_status/get_inventory_schema_migration_history다.
+Town은 list_characters/create_character/claim_character/save_character_state/release_character를 호출한다.
+아래는 로컬에서 Auth/Town이 actionrpg_auth를 공유하는 예제다. 별도 계정이면 해당 역할의 호출만 부여한다.
+내부 emit_character_state에는 EXECUTE를 부여하지 않는다.
+기존 V0/V4 검사 EXECUTE는 새 검사 권한을 대신하지 않는다.
 계정과 프로시저가 모두 존재하는지 먼저 확인한다.
 
 ```sql
@@ -184,6 +192,20 @@ TO 'actionrpg_auth'@'127.0.0.1';
 GRANT EXECUTE ON PROCEDURE actionrpg.login_google_account
 TO 'actionrpg_auth'@'127.0.0.1';
 GRANT EXECUTE ON PROCEDURE actionrpg.get_auth_account_status
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.get_character_schema_migration_history
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.get_inventory_schema_migration_history
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.list_characters
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.create_character
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.claim_character
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.save_character_state
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.release_character
 TO 'actionrpg_auth'@'127.0.0.1';
 SHOW GRANTS FOR 'actionrpg_auth'@'127.0.0.1';
 ```
@@ -253,7 +275,7 @@ Google secret은 ID와 짝지어 클라이언트 환경에만 전달되고 로�
 | private settings directory에서 `PrivilegeNotHeldException` | 최신 실행기는 생성 시 ACL을 적용하고 검증함. 기존 디렉터리의 소유자·허용 주체를 확인하며 관리자 실행이나 전체 사용자 접근 허용으로 우회하지 않음 |
 | 64-bit MySQL Unicode ODBC driver not registered | `Get-OdbcDriver -Platform '64-bit'`로 실제 등록명 확인. 32비트/ANSI 드라이버와 혼동하지 않음. 최신 실행기는 연결 문자열 Driver의 중괄호 표기를 제거해 등록명과 대조 |
 | Auth TLS 오류, curl 60 `revocation status is unknown` | 현재 사용자 CA 신뢰·localhost SAN·CA 경로 확인. 최신 실행기의 로컬 검사에는 `--ssl-revoke-best-effort`가 적용됨. `--insecure`나 전체 인증서 검증 해제로 대체하지 않음 |
-| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=3, 세 EXECUTE 권한, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
+| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=5, 새 검사/로그인/상태 조회 EXECUTE 권한, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
 | `ODBC driver substituted the connection timeout` | 이전 공통 ODBC 코드의 MySQL 비지원 속성 검사. 최신 소스의 로그인 타임아웃 검사로 Auth와 Town을 모두 다시 빌드 |
 | Room 출력 없이 종료 | EXE 옆 해당 빌드의 OpenSSL DLL 두 개와 Debug C++ 런타임 확인. Room과 의존 프로젝트를 재빌드해 app-local 배포. 최신 프로젝트는 후속 빌드의 DLL 삭제도 방지 |
 | Room 종료 코드가 빈칸 | 최신 실행기는 네이티브 프로세스 핸들을 보유해 종료 코드를 읽음. 빈 코드 자체를 원인으로 보지 말고 위 런타임 파일 검사 |

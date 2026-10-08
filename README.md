@@ -1,7 +1,7 @@
 # ActionRPGServer
 
 현재 서버는 AuthServer, TownServer, GameRoomServer의 세 프로세스로 구성된다. 이 문서는
-2026-10-07 소스를 기준으로 설명한다. 사용자가 로컬 V000003 마이그레이션 성공과 Google 로그인 후
+2026-10-08 소스를 기준으로 설명한다. 사용자가 이전 로컬 V000003 마이그레이션 성공과 Google 로그인 후
 정상 입장을 확인했다. 에이전트는 문서 작성 중 빌드·실행·실제 DB/Google 요청을 수행하지 않았다.
 새 PC의 동작과 던전 전투·성능은 별도 검증 대상이다.
 
@@ -32,7 +32,7 @@ flowchart LR
 | AuthServer | Google ID 토큰 검증, 계정 조회/첫 가입, 게임 토큰·입장 티켓·타운 소유권 | Google JWKS, MySQL; HTTPS 공개/내부 API |
 | TownServer | 인증된 연결, 마을 이동·가시성, 파티·던전 예약, 접속 중 성장·스킬 | 클라이언트 TLS, Auth HTTPS, 룸 제어 TCP |
 | GameRoomServer | 여러 던전 인스턴스, 입장 인원 확정, 몬스터·전투·HP·월드 전송 | MultiSocketRUDP 세션, Town 제어 TCP |
-| MySQL | 계정·Google 식별자·로그인 시각 및 마이그레이션 감사 이력 | Auth의 공통 ODBC 실행기 |
+| MySQL | 계정·캐릭터 성장·인벤토리·장비·요청 이력 및 마이그레이션 감사 이력 | Auth/Town의 서비스별 연결 설정과 공통 ODBC 실행기 |
 
 하나의 Auth에 여러 타운 ID를 등록할 수 있다. 타운마다 별도 등록 키와 룸 서버 묶음을 사용한다.
 Town↔Room 제어 채널은 같은 호스트의 loopback만 허용한다. 현재 구조로 룸 프로세스를 다른
@@ -44,14 +44,16 @@ Town↔Room 제어 채널은 같은 호스트의 loopback만 허용한다. 현�
 |---|---|---|
 | 계정, 외부 provider/sub, 상태, 로그인 시각 | MySQL | DB 영속 데이터 |
 | challenge, gameToken, ticket, 타운 lease/소유권 | Auth 메모리 | Auth 재시작 시 소실 |
-| playerId, 위치, 파티, 레벨·SP·습득 스킬 | Town 메모리 | 새 EnterTown에서 생성; 계정별 복원/타운 간 이관 없음 |
+| 캐릭터 ID·이름·종류·레벨·SP·습득 스킬·인벤토리·장비 | MySQL, Town의 확정 상태 캐시 | 인증 계정의 캐릭터를 선택해 복원; 커밋 후 변경 확정 |
+| playerId, 위치, 파티 | Town 메모리 | 새 입장에서 생성; 종료 후 복원하지 않음 |
 | 룸, 몬스터 HP·AI, 전투 상태 | Room 메모리 | 같은 인스턴스 안에서 유지; 재도전은 새 룸 |
 | 맵·던전·몬스터·스킬 정의 | 각 서버 실행 파일 옆 Data | 시작 시 로딩; 배포 파일 갱신 후 재시작 |
 | 이미지·스프라이트 등 클라이언트 자산 | ActionRPGClient의 Assets | 서버 저장소에 복사하지 않음 |
 
 DB의 accountId는 영속 계정 ID다. playerId는 타운 프로세스에서 발급하는 플레이어 ID이며
-계정 ID와 다르다. characterId는 현재 캐릭터 정의를 고르는 값으로, DB에 저장된 소유 캐릭터
-레코드가 아니다. 로그인 가능하다는 사실이 성장·아이템의 영속 저장까지 구현되었다는 뜻은 아니다.
+계정 ID와 다르다. 신규 캐릭터·인벤토리 JSON의 characterId는 DB 영속 캐릭터 ID이며,
+characterDefinitionId는 종류 ID다. 기존 EnterTownResponse와 전투 패킷의 characterId는 종류 ID를 유지한다.
+V5 소유 토큰·generation·revision이 이전 서버의 지연 저장을 차단한다. 신규 저장·복원 경로는 정적 검토 단계다.
 
 ## 로그인에서 전투까지
 
@@ -60,7 +62,9 @@ DB의 accountId는 영속 계정 ID다. playerId는 타운 프로세스에서 �
 2. Auth `/v1/login`이 ID 토큰을 검증하고 MySQL 계정을 조회/첫 가입한 뒤 gameToken을 발급한다.
    클라이언트는 이 토큰으로 `/v1/tickets`에서 목적 타운의 단일 사용 티켓을 받는다.
 3. ready=true 티켓으로 Town TLS의 첫 패킷 36을 보낸다. Town의 Auth consume 승인을 받은
-   성공 패킷 37 이후에 EnterTownRequest(1)을 보내 마을에 입장한다.
+   성공 패킷 37 이후 캐릭터 목록(38)·필요 시 생성(40)·선택(42)을 진행한다.
+   서버가 계정 소유권과 DB 상태를 확인하면 선택 성공(43) 뒤 마을 입장 응답(2)을 보낸다.
+   이전 EnterTownRequest(1)로 이름·종류를 임의 지정하는 입장 경로는 차단한다.
 4. Town이 던전 참가자를 예약하고 룸을 생성한다. Room 연결의 challenge를 인증된 Town
    연결로 확인하고 월드를 받은 뒤 플레이한다. 이동·전투 판정과 HP 변경은 Room이 수행한다.
 
@@ -102,17 +106,18 @@ Auth의 DB 검증용 SQL 배포 디렉터리는 환경 변수로 별도 지정�
 ## 설정과 실행 순서
 
 1. 실제 MySQL 8.0.46 대상·스키마, ODBC 드라이버·권한·접속 보안을 준비한다.
-2. 관련 서비스를 종료한 상태에서 수동 Up으로 V000000 이력 기반과 V000001→000003을 준비한다.
+2. 관련 서비스를 종료한 상태에서 수동 Up으로 V000000 이력 기반과 V000001→000005를 준비한다.
    대상 스키마가 없으면 Up의 `-CreateDatabase` 옵션으로 DB 생성부터 수행할 수 있다.
    [DB 적용 계약](docs/workflows/DATABASE_MIGRATIONS.md)을 따른다. Auth가 SQL을 자동 적용하지 않는다.
-3. 동일한 Up/Down/Infrastructure SQL을 Auth 검증 경로에 배포하고 인증서·환경 변수를 제공한다.
-4. Auth를 시작하여 실제 DB 구조/이력 검증에 성공한 head=3을 확인한다. 단순 포트 개방은 준비 증거가 아니다.
+3. 동일한 Up/Down/Infrastructure SQL 11개를 Auth/Town 검증 경로에 배포한다. 실운영에서는 Auth와 Town의 runtime DB 계정 분리를 권장하며,
+   양쪽에 새 검사 프로시저 EXECUTE, Town에 공개 캐릭터 프로시저 5개 EXECUTE를 제공한다. 내부 snapshot helper에는 직접 권한을 주지 않는다.
+4. 새 Auth/Town을 시작하여 실제 DB 구조/이력 검증에 성공한 head=5를 확인한다. 이전 head는 준비 실패하며 단순 포트 개방은 준비 증거가 아니다.
 5. Town을 시작하고 같은 호스트의 Room을 연결·등록한 뒤, 설정된 클라이언트로 입장한다.
 
 | 서버/채널 | 기본값·인자 | 전제 |
 |---|---|---|
 | Auth HTTPS | 0.0.0.0:8443, CLI 설정 없음 | PEM 인증서/키, CA, Google client ID, 타운 등록, DB/SQL 배포 |
-| Town 클라이언트 | [client-port=7777] [ioThreads=4] [roomControlPort=7780] | TLS 1.2 이상, 별도 PEM 인증서/키, Auth 설정 |
+| Town 클라이언트 | [client-port=7777] [ioThreads=4] [roomControlPort=7780] | TLS 1.2 이상, 별도 PEM 인증서/키, Auth 설정, Town DB 검증 |
 | Town 룸 제어 | 127.0.0.1:7780 | 양쪽 동일한 ACTIONRPG_ROOM_CONTROL_KEY |
 | Room | [townHost=127.0.0.1] [controlPort=7780] [roomServerId=1] [maxRooms=1000] [ioThreads=4] [coreOptionPath] [brokerOptionPath] | loopback 타운, 고유 룸 서버 ID |
 | Room 세션 브로커 | 옵션 파일 SESSION_BROKER_PORT=11011 | Windows 인증서 저장소 MY/DevServerCert |
@@ -136,6 +141,10 @@ Auth 내부 API는 공개 API와 같은 HTTPS listener에 있으므로 내부 �
 배포 환경에서 마련한다. 서버별 키 검증만으로 네트워크 분리가 구현된 것은 아니다.
 
 RunLocalTest.bat은 사전 검사 뒤 Auth → Town → Room → 클라이언트 두 개를 순서대로 시작한다.
+Auth는 `ACTIONRPG_DB_CONNECTION_STRING`, Town은 `ACTIONRPG_TOWN_DB_CONNECTION_STRING`을 사용한다.
+로컬에서는 Town 설정이 없으면 기존 보호 DB 연결을 재사용하며, 명시한 Town 환경 변수가 우선한다.
+공유 로컬 계정에는 두 서비스의 EXECUTE 권한 합집합이 필요하다. 신규 계정 생성·비밀번호 재입력을 요구하지 않는다.
+기존 인증서·Google/DB 자격 증명을 교체하지 않는다. Room에는 DB 연결 문자열을 전달하지 않는다.
 Debug x64 솔루션 빌드 기준 Auth/Town은 `ActionRPGServer/x64/Debug`, Room은
 `artifacts/bin/x64/Debug`, 클라이언트는 인접 저장소의
 `ActionRPGClient/ActionRPGClient/artifacts/bin/x64/Debug`를 사용한다.
@@ -182,7 +191,7 @@ Google 항목을 추가할 때 기존 필드를 보존하고 암호화 완료 �
 `ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET`을 프로세스 환경에 제공한다. 값을 명령 인자나 소스에 기록하지 않는다.
 `ACTIONRPG_AUTH_HOST`는 인증서 호스트명과 일치하며 로컬 loopback IPv4로 해석되는 DNS 이름
 또는 IPv4 주소여야 한다. 타운 ID/비밀 키는 Auth 등록과 일치해야 한다. DB 연결 문자열 형식,
-스키마 이름과 V000000~000003의 Up/Down SQL 파일 존재를 검사하지만 DB를 생성하거나
+스키마 이름과 V000000~000005의 Up/Down SQL 파일 존재를 검사하지만 DB를 생성하거나
 마이그레이션을 적용하지 않는다. 실제 Google 프로젝트, MySQL 적용·권한·접속 보안은 사용자가
 준비한다. 첫 설정의 SQL 경로는 저장소의 기존 MySQL 폴더를 재사용하며 RoomControl 키만 매 실행 메모리에서 생성한다.
 
@@ -221,7 +230,7 @@ PlayerSkills.json, SkillTrees.json을 읽는다. Room은 Data/Dungeons, Data/Mon
 현재 방의 몬스터가 모두 처치되면 게이트를 통한 다른 방 이동을 허용한다. 전투 중 방 안의
 이동 자체는 가능하다. 몬스터는 룸 생성 때 한 번 배치되며 같은 인스턴스에서 방을 다시 방문해도
 죽은 몬스터를 다시 생성하지 않는다. 빈 방의 게이트는 즉시 열리며 재도전은 새 룸/새 몬스터다.
-보스 처치 클리어와 실제 잔류 참가자 보상 대상 전달은 있으나 아이템 드랍·보상 지급·영속 인벤토리,
+보스 처치 클리어와 실제 잔류 참가자 보상 대상 전달은 있으나 아이템 드랍·보상 지급,
 사망 후 부활 및 전멸 종료 정책은 별도 구현 대상이다.
 
 ## 연결 종료와 지원 한계
@@ -233,7 +242,8 @@ PlayerSkills.json, SkillTrees.json을 읽는다. Room은 Data/Dungeons, Data/Mon
 권한 만료는 이전 소유권의 자동 해제가 아니다. 룸 제어 단절은 퇴장 확인으로 처리하지 않으며,
 확인/해제 응답 유실이나 서버 장애에는 새 입장이 막힐 수 있다. 자동 복구·자동 제어 재연결은 없다.
 Auth 재시작 전에는 기존 Town/Room 접속을 모두 종료하고 확인해야 한다. 토큰 refresh API,
-앱 종료 후 자동 로그인, 캐릭터 성장 저장/이관도 구현하지 않았다.
+앱 종료 후 자동 로그인은 구현하지 않았다. 캐릭터 성장·인벤토리·장비는 DB에 저장하며,
+타운 입장 시 선택한 계정 소유 캐릭터의 상태를 복원한다.
 
 ## 상세 문서와 소스 탐색
 

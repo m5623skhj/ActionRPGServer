@@ -245,10 +245,14 @@ namespace GameRoomServer
             if (found == self->players.end() || !self->enteredPlayers.contains(inPlayerId)) return;
             try
             {
-                auto progression = ActionRPG::PlayerSkills::CharacterProgression::Parse(nlohmann::json::parse(data));
+                auto runtime = ActionRPG::Items::CharacterRuntimeState::Parse(nlohmann::json::parse(data));
+                if (runtime.characterId != found->second.persistentCharacterId
+                    || runtime.revision <= found->second.inventoryRevision) return;
                 self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills,
-                    progression, found->second.characterId);
-                found->second.progression = std::move(progression);
+                    runtime.progression, found->second.characterId);
+                found->second.progression = std::move(runtime.progression);
+                found->second.inventoryRevision = runtime.revision;
+                found->second.equipment = std::move(runtime.equipment);
             }
             catch (const std::exception&) { return; }
         });
@@ -283,11 +287,11 @@ namespace GameRoomServer
         asio::dispatch(strand, [self, inPlayerId, inCharacterId, data = std::move(inProgression),
             resultHandler = std::move(inResultHandler)]() mutable
         {
-            ActionRPG::PlayerSkills::CharacterProgression progression;
+            ActionRPG::Items::CharacterRuntimeState runtime;
             try
             {
-                progression = ActionRPG::PlayerSkills::CharacterProgression::Parse(nlohmann::json::parse(data));
-                self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills, progression, inCharacterId);
+                runtime = ActionRPG::Items::CharacterRuntimeState::Parse(nlohmann::json::parse(data));
+                self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills, runtime.progression, inCharacterId);
             }
             catch (const std::exception&)
             {
@@ -303,7 +307,11 @@ namespace GameRoomServer
             {
                 self->players.at(inPlayerId).characterId = inCharacterId;
                 self->players.at(inPlayerId).actor.hitRecovery = self->combatDefinition->characters.at(inCharacterId).hitRecovery;
-                self->players.at(inPlayerId).progression = std::move(progression);
+                auto& player = self->players.at(inPlayerId);
+                player.progression = std::move(runtime.progression);
+                player.persistentCharacterId = runtime.characterId;
+                player.inventoryRevision = runtime.revision;
+                player.equipment = std::move(runtime.equipment);
             }
             if (accepted && self->enteredPlayers.size() == self->expectedPlayers.size())
             {

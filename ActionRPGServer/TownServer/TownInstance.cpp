@@ -55,7 +55,8 @@ namespace TownServer::Domain
           dungeonCatalog(std::move(inDungeonCatalog)),
           progressionPolicy(ActionRPG::PlayerSkills::ProgressionPolicy::Load(inDataDirectory / "CharacterProgression.json")),
           playerSkills(ActionRPG::PlayerSkills::Catalog::Load(inDataDirectory / "PlayerSkills.json")),
-          skillTrees(ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inDataDirectory / "SkillTrees.json", playerSkills))
+          skillTrees(ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inDataDirectory / "SkillTrees.json", playerSkills)),
+          itemsCatalog(ActionRPG::Items::Catalog::Load(inDataDirectory / "Items.json"))
     {
         if (!database)
             throw std::invalid_argument("TownInstance requires a DB execution service, even when disabled.");
@@ -122,7 +123,7 @@ namespace TownServer::Domain
     {
         const auto roomId = inEntry.dungeonRoomId != 0 ? inEntry.dungeonRoomId : inEntry.reservedDungeonRoomId;
         if (roomId != 0 && progressionChangedHandler)
-            progressionChangedHandler(roomId, inPlayerId, inEntry.progression.ToJson().dump());
+            progressionChangedHandler(roomId, inPlayerId, RuntimeState(inEntry).dump());
     }
 
     void TownInstance::RequestSkillState(PlayerId inPlayerId)
@@ -141,7 +142,7 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self, inPlayerId, handler = std::move(inHandler)]()
         {
             const auto found = self->players.find(inPlayerId);
-            handler(found == self->players.end() ? std::string{} : found->second.progression.ToJson().dump());
+            handler(found == self->players.end() ? std::string{} : self->RuntimeState(found->second).dump());
         });
     }
 
@@ -153,6 +154,7 @@ namespace TownServer::Domain
             const auto found = self->players.find(inPlayerId);
             if (found == self->players.end()) return;
             auto& entry = found->second;
+            if (entry.saving) { self->SendSkillState(entry, "Busy"); return; }
             // Include reserved rooms so delayed entry confirmation cannot permit a skill purchase.
             if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != 0)
             {
@@ -164,8 +166,19 @@ namespace TownServer::Domain
                 entry.player.GetCharacterId(), id, inExpectedSkillLevel);
             if (result == "Succeeded")
             {
-                entry.progression = std::move(proposed);
-                self->NotifyProgression(inPlayerId, entry);
+                std::string requestId;
+                try { requestId = Persistence::RandomHex(32); }
+                catch (const std::exception&) { self->SendSkillState(entry, "IdentityUnavailable"); return; }
+                self->SaveCharacter(inPlayerId, std::move(requestId), entry.revision,
+                    std::move(proposed), entry.inventory,
+                    {{"action", "LearnSkill"}, {"skillId", id}, {"expectedLevel", inExpectedSkillLevel}},
+                    [weakTown = self->weak_from_this(), inPlayerId](std::string status)
+                {
+                    if (const auto town = weakTown.lock())
+                        if (const auto player = town->players.find(inPlayerId); player != town->players.end())
+                            town->SendSkillState(player->second, status);
+                });
+                return;
             }
             self->SendSkillState(entry, result);
         });
@@ -177,20 +190,22 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self, inPlayerId, inLevel, handler = std::move(inHandler)]()
         {
             const auto found = self->players.find(inPlayerId);
-            bool accepted = false;
-            if (found != self->players.end())
+            if (found != self->players.end() && !found->second.saving)
             {
                 auto& entry = found->second;
                 auto proposed = entry.progression;
-                accepted = self->progressionPolicy.AdvanceLevel(proposed, inLevel);
-                if (accepted)
+                if (self->progressionPolicy.AdvanceLevel(proposed, inLevel))
                 {
-                    entry.progression = std::move(proposed);
-                    self->NotifyProgression(inPlayerId, entry);
-                    self->SendSkillState(entry, "LevelAdvanced");
+                    std::string requestId;
+                    try { requestId = Persistence::RandomHex(32); }
+                    catch (const std::exception&) { if (handler) handler(false); return; }
+                    self->SaveCharacter(inPlayerId, std::move(requestId), entry.revision,
+                        std::move(proposed), entry.inventory, {{"action", "AdvanceLevel"}, {"level", inLevel}},
+                        [handler = std::move(handler)](std::string status) { if (handler) handler(status == "Succeeded"); });
+                    return;
                 }
             }
-            if (handler) handler(accepted);
+            if (handler) handler(false);
         });
     }
 
@@ -223,17 +238,6 @@ namespace TownServer::Domain
                 if (const auto session = admission.session.lock()) session->Stop();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
-        });
-    }
-
-    void TownInstance::Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
-        const std::uint32_t inCharacterId)
-    {
-        const std::shared_ptr<TownInstance> self = shared_from_this();
-        asio::dispatch(strand, [self, session = std::move(inSession),
-            playerName = std::move(inPlayerName), inCharacterId]() mutable
-        {
-            self->EnterOnStrand(std::move(session), std::move(playerName), inCharacterId);
         });
     }
 
@@ -1057,7 +1061,7 @@ namespace TownServer::Domain
     }
 
     void TownInstance::EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession,
-        std::string inPlayerName, const std::uint32_t inCharacterId)
+        const Persistence::CharacterState& inState, std::string inOwnerToken, const std::string& inRequestId)
     {
         const std::uint64_t sessionId = inSession->GetSessionId();
         const auto accountId = inSession->GetAccountId();
@@ -1071,20 +1075,18 @@ namespace TownServer::Domain
             return;
         }
 
-        if (!playerSkills.characterIds.contains("Character" + std::to_string(inCharacterId)))
+        if (!playerSkills.characterIds.contains("Character" + std::to_string(inState.definitionId)))
         {
             inSession->Disconnect();
             return;
         }
-        auto progression = progressionPolicy.Create();
-
         const PlayerId playerId = nextPlayerId++;
         const TownProtocol::MapInfo& mapInfo = maps.at(defaultMapId).GetInfo();
         const TownProtocol::Vector2 spawn{ mapInfo.spawnX, mapInfo.spawnY };
         const SectorCoordinate sector = GetSector(defaultMapId, spawn);
 
         PlayerEntry entry{
-            Player(playerId, std::move(inPlayerName), inCharacterId, spawn),
+            Player(playerId, inState.name, inState.definitionId, spawn),
             std::move(inSession),
             defaultMapId,
             sector,
@@ -1094,14 +1096,23 @@ namespace TownServer::Domain
             0,
             {}
         };
-        entry.progression = std::move(progression);
         entry.accountId = accountId;
+        entry.persistentCharacterId = inState.characterId;
+        entry.ownerGeneration = inState.generation;
+        entry.ownerToken = std::move(inOwnerToken);
+        if (!ApplyCharacterState(entry, inState)) { entry.session->Stop(); return; }
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);
         AddToSector(playerId, sector);
 
         PlayerEntry& playerEntry = players.at(playerId);
         playerEntry.session->SetPlayerId(playerId);
+        playerEntry.session->characterId.store(inState.definitionId, std::memory_order_release);
+        playerEntry.session->enterRequested.store(true, std::memory_order_release);
+        playerEntry.session->Send(TownProtocol::Encode(TownProtocol::CharacterSelectResponse{
+            ActionRPG::Items::Json{ {"requestId", inRequestId}, {"result", "Succeeded"},
+                {"characterId", std::to_string(inState.characterId)},
+                {"revision", std::to_string(inState.revision)} }.dump() }));
         playerEntry.session->Send(TownProtocol::Encode(TownProtocol::EnterTownResponse{
             playerId,
             playerEntry.player.GetCharacterId(),
@@ -1109,6 +1120,7 @@ namespace TownServer::Domain
         }));
         RefreshVisibility(playerId);
         SendSkillState(playerEntry, "State");
+        SendInventoryState(playerEntry, inRequestId);
     }
 
     void TownInstance::LeaveOnStrand(const std::uint64_t inSessionId)
@@ -1145,6 +1157,9 @@ namespace TownServer::Domain
         {
             HideFromTown(playerId, playerIterator->second);
         }
+        const auto& leaving = playerIterator->second;
+        characterReleases[inSessionId] = { Persistence::Operation::Release, leaving.accountId,
+            leaving.persistentCharacterId, leaving.ownerGeneration, 0, 0, 0, 0, {}, leaving.ownerToken };
         players.erase(playerIterator);
         sessionToPlayer.erase(sessionIterator);
         PrunePartyJoinRequests();

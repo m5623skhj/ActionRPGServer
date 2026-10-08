@@ -1060,6 +1060,9 @@ namespace GameRoomServer
                 auto& record = snapshot["players"].back();
                 addActorTiming(record, player.actor);
                 record["characterId"] = player.characterId; record["skillSequence"] = player.skillSequence;
+                record["persistentCharacterId"] = std::to_string(player.persistentCharacterId);
+                record["inventoryRevision"] = std::to_string(player.inventoryRevision);
+                record["equipment"] = player.equipment;
                 record["skillId"] = player.lastSkillId;
                 record["skillActive"] = player.skill.has_value();
                 record["skillAirborne"] = player.lastSkillAirborne;

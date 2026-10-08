@@ -8,6 +8,8 @@
 #include "../Shared/SkillTreeCatalog.h"
 #include "../Shared/Database/OdbcDatabase.h"
 #include "Authentication/AuthControlClient.h"
+#include "../Shared/CharacterRuntimeState.h"
+#include "Database/CharacterStoreProcedure.h"
 
 #include <asio.hpp>
 
@@ -42,6 +44,15 @@ namespace TownServer::Domain
 
         void Admit(std::shared_ptr<Network::PlayerSession> inSession, std::string inTicket);
         void ReleaseAdmission(std::uint64_t inSessionId);
+        void CharacterRequest(std::shared_ptr<Network::PlayerSession> inSession,
+            TownProtocol::PacketType inType, std::string inJson);
+        void InventoryRequest(std::shared_ptr<Network::PlayerSession> inSession,
+            TownProtocol::PacketType inType, std::string inJson);
+        /// Server content entry points only; never accept a client-supplied acquisition/automatic consumption.
+        void AcquireItem(PlayerId inPlayerId, std::string inRequestId, std::uint64_t inExpectedRevision, std::string inDefinitionId,
+            std::uint32_t inCount, std::function<void(std::string)> inHandler);
+        void ConsumeItem(PlayerId inPlayerId, std::string inRequestId, std::uint64_t inExpectedRevision, std::string inDefinitionId,
+            std::uint32_t inCount, std::function<void(std::string)> inHandler);
 
         /// Handler runs on the town strand. Re-find players by ID and validate their current session/state.
         template <typename TProcedure, typename THandler>
@@ -65,8 +76,6 @@ namespace TownServer::Domain
 
         void Start();
         void Stop();
-        void Enter(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
-            std::uint32_t inCharacterId);
         void Leave(std::uint64_t inSessionId,
             std::function<void(ActionRPG::RoomControlProtocol::RoomId, PlayerId, std::function<void()>)> inDungeonLeaveHandler);
         void ApplyMovementInput(std::uint64_t inSessionId, TownProtocol::MoveInput inInput);
@@ -130,6 +139,10 @@ namespace TownServer::Domain
             ActionRPG::PlayerSkills::CharacterProgression progression;
             std::chrono::steady_clock::time_point lastSimulationTime{ std::chrono::steady_clock::now() };
             std::uint64_t accountId{};
+            std::uint64_t persistentCharacterId{}, revision{}, ownerGeneration{};
+            std::string ownerToken;
+            ActionRPG::Items::Inventory inventory;
+            bool saving{};
         };
 
         struct Admission
@@ -143,13 +156,21 @@ namespace TownServer::Domain
             bool renewing{};
         };
         void PollAdmissions();
+        void FinishCharacterWork(std::uint64_t inSessionId);
+        void DrainCharacterRelease(std::uint64_t inSessionId);
+        bool ApplyCharacterState(PlayerEntry& inEntry, const Persistence::CharacterState& inState);
+        void SendInventoryState(PlayerEntry& inEntry, const std::string& inRequestId);
+        ActionRPG::Items::Json RuntimeState(const PlayerEntry& inEntry) const;
+        void SaveCharacter(PlayerId inPlayerId, std::string inRequestId, std::uint64_t inExpectedRevision,
+            ActionRPG::PlayerSkills::CharacterProgression inProgression, ActionRPG::Items::Inventory inInventory,
+            ActionRPG::Items::Json inOperation, std::function<void(std::string)> inHandler);
 
         void ScheduleTick();
         void Tick();
         bool SimulateMovement(PlayerId inPlayerId, PlayerEntry& inEntry,
             std::chrono::steady_clock::time_point inNow);
-        void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession, std::string inPlayerName,
-            std::uint32_t inCharacterId);
+        void EnterOnStrand(std::shared_ptr<Network::PlayerSession> inSession,
+            const Persistence::CharacterState& inState, std::string inOwnerToken, const std::string& inRequestId);
         void LeaveOnStrand(std::uint64_t inSessionId);
         bool EnterDungeonOnStrand(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
@@ -202,6 +223,12 @@ namespace TownServer::Domain
         const ActionRPG::PlayerSkills::ProgressionPolicy progressionPolicy;
         const ActionRPG::PlayerSkills::Catalog playerSkills;
         const ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
+        const ActionRPG::Items::Catalog itemsCatalog;
+        std::unordered_map<std::uint64_t, std::size_t> characterWork;
+        std::unordered_set<std::uint64_t> deferredAdmissionReleases;
+        std::unordered_map<std::uint64_t, Persistence::Request> characterReleases;
+        std::unordered_map<std::uint64_t, std::chrono::steady_clock::time_point> characterReleaseRetry;
+        std::unordered_set<std::uint64_t> characterRequests;
         ProgressionChangedHandler progressionChangedHandler;
         std::unordered_map<PlayerId, PlayerEntry> players;
         std::unordered_map<std::uint64_t, PlayerId> sessionToPlayer;

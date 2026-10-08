@@ -21,7 +21,7 @@ $script:googleDesktopClientId = $env:ACTIONRPG_GOOGLE_CLIENT_ID
 $script:googleDesktopClientSecret = $env:ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET
 # Only Start-Client receives this value; server processes must not inherit it.
 [Environment]::SetEnvironmentVariable('ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET', $null, 'Process')
-$script:required = @('ACTIONRPG_AUTH_HOST', 'ACTIONRPG_AUTH_TLS_CERT', 'ACTIONRPG_AUTH_TLS_KEY', 'ACTIONRPG_AUTH_CA_FILE', 'ACTIONRPG_GOOGLE_CLIENT_ID', 'ACTIONRPG_AUTH_TOWN_REGISTRY', 'ACTIONRPG_TOWN_ID', 'ACTIONRPG_TOWN_AUTH_KEY', 'ACTIONRPG_TOWN_TLS_CERT', 'ACTIONRPG_TOWN_TLS_KEY', 'ACTIONRPG_DB_CONNECTION_STRING', 'ACTIONRPG_DB_SCHEMA', 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY')
+$script:required = @('ACTIONRPG_AUTH_HOST', 'ACTIONRPG_AUTH_TLS_CERT', 'ACTIONRPG_AUTH_TLS_KEY', 'ACTIONRPG_AUTH_CA_FILE', 'ACTIONRPG_GOOGLE_CLIENT_ID', 'ACTIONRPG_AUTH_TOWN_REGISTRY', 'ACTIONRPG_TOWN_ID', 'ACTIONRPG_TOWN_AUTH_KEY', 'ACTIONRPG_TOWN_TLS_CERT', 'ACTIONRPG_TOWN_TLS_KEY', 'ACTIONRPG_DB_CONNECTION_STRING', 'ACTIONRPG_TOWN_DB_CONNECTION_STRING', 'ACTIONRPG_DB_SCHEMA', 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY')
 
 function Fail([string] $message) {
     $script:failureMessage = $message
@@ -165,6 +165,27 @@ function Read-DatabaseSettings {
     $script:launchStage = 'Checking installed ODBC driver'
     Assert-OdbcReady $connection
     return @{ Schema = $schema; Connection = $connection.ConnectionString }
+}
+
+function Read-TownDatabaseSettings([string] $authConnection) {
+    $script:launchStage = 'Preparing Town database connection'
+    $auth = [Data.Odbc.OdbcConnectionStringBuilder]::new($authConnection)
+    if ($env:ACTIONRPG_TOWN_DB_CONNECTION_STRING) {
+        try { $town = [Data.Odbc.OdbcConnectionStringBuilder]::new($env:ACTIONRPG_TOWN_DB_CONNECTION_STRING) }
+        catch { Fail 'Invalid Town database connection string.' }
+    } else {
+        $town = [Data.Odbc.OdbcConnectionStringBuilder]::new($authConnection)
+    }
+    foreach ($key in @('SERVER','PORT','DATABASE')) {
+        if (!$town.ContainsKey($key) -or [string]$town[$key] -cne [string]$auth[$key]) {
+            Fail 'Auth and Town must target the same configured database host, port and schema.'
+        }
+    }
+    $townUser = if ($town.ContainsKey('UID')) { [string]$town['UID'] } else { [string]$town['USER'] }
+    if ([string]::IsNullOrWhiteSpace($townUser)) { Fail 'Town requires a valid runtime database user.' }
+    if ($town.ConnectionString.Length -gt 32766) { Fail 'Town DB connection string exceeds the environment limit.' }
+    Assert-OdbcReady $town
+    return $town.ConnectionString
 }
 
 # Settings, encrypted credentials and TLS key files belong to this Windows user.
@@ -342,7 +363,8 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
     } finally { $rootStore.Close() }
     $script:launchStage = 'Saving protected credentials and public settings'
     $townKey = New-RandomKey
-    $secretBytes = [Text.Encoding]::UTF8.GetBytes((@{ dbConnection = $database.Connection; townKey = $townKey } | ConvertTo-Json -Compress))
+    $townDatabaseConnection = Read-TownDatabaseSettings $database.Connection
+    $secretBytes = [Text.Encoding]::UTF8.GetBytes((@{ dbConnection = $database.Connection; townDbConnection = $townDatabaseConnection; townKey = $townKey } | ConvertTo-Json -Compress))
     try { [IO.File]::WriteAllBytes($secretPath, [Security.Cryptography.ProtectedData]::Protect($secretBytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)) }
     finally { [Array]::Clear($secretBytes, 0, $secretBytes.Length); $database = $null; $townKey = $null }
     $settings = @{
@@ -357,10 +379,10 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
         certificates = @{ root = $ca.Thumbprint; auth = $certificates.Auth.Thumbprint; town = $certificates.Town.Thumbprint; broker = $certificates.Broker.Thumbprint }
     }
     [IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
-    Write-Host 'Local settings saved for this Windows user. DB readiness is checked by Auth; no migration was applied.'
+    Write-Host 'Local settings saved for this Windows user. DB readiness is checked by Auth and Town; no migration was applied.'
 }
 function Assert-SqlFiles([string] $directory) {
-    foreach ($file in @('Infrastructure\V000000__migration_history.sql','V000001__create_login_accounts.sql','V000002__create_google_login_procedure.sql','V000003__create_auth_account_status_procedure.sql','Down\V000001__create_login_accounts.sql','Down\V000002__create_google_login_procedure.sql','Down\V000003__create_auth_account_status_procedure.sql')) {
+    foreach ($file in @('Infrastructure\V000000__migration_history.sql','V000001__create_login_accounts.sql','V000002__create_google_login_procedure.sql','V000003__create_auth_account_status_procedure.sql','V000004__create_characters_and_skills.sql','V000005__create_character_inventory_persistence.sql','Down\V000001__create_login_accounts.sql','Down\V000002__create_google_login_procedure.sql','Down\V000003__create_auth_account_status_procedure.sql','Down\V000004__create_characters_and_skills.sql','Down\V000005__create_character_inventory_persistence.sql')) {
         Require-File (Join-Path $directory $file) ('ACTIONRPG_DB_MIGRATIONS_DIRECTORY/' + $file)
     }
 }
@@ -379,6 +401,9 @@ function Initialize-LocalSettings {
     $settingsPath = Join-Path $directory 'settings.json'
     $secretPath = Join-Path $directory 'credentials.dpapi'
     if (!(Test-Path -LiteralPath $settingsPath)) {
+        if (!$env:ACTIONRPG_TOWN_DB_CONNECTION_STRING -and $env:ACTIONRPG_DB_CONNECTION_STRING) {
+            $env:ACTIONRPG_TOWN_DB_CONNECTION_STRING = $env:ACTIONRPG_DB_CONNECTION_STRING
+        }
         $missing = @($script:required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
         if (!$missing.Count) {
             if ($null -ne $script:googleDesktopClientSecret) { Assert-GoogleDesktopSecret $script:googleDesktopClientSecret }
@@ -403,13 +428,22 @@ function Initialize-LocalSettings {
         if (!$script:failureMessage) { Fail 'Local settings cannot be read by this Windows user. Review or re-enter them locally; no secret details are displayed.' }
         throw
     }
-    foreach ($name in $script:required | Where-Object { $_ -notin @('ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_AUTH_TOWN_REGISTRY') }) {
+    foreach ($name in $script:required | Where-Object { $_ -notin @('ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_TOWN_DB_CONNECTION_STRING','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_AUTH_TOWN_REGISTRY') }) {
         $value = $settings.environment.$name
         if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { Fail "Missing saved configuration: $name" }
         [Environment]::SetEnvironmentVariable($name, $value, 'Process')
     }
     if ($secrets.dbConnection -isnot [string] -or $secrets.townKey -isnot [string]) { Fail 'Protected local credentials are invalid.' }
     $env:ACTIONRPG_DB_CONNECTION_STRING = $secrets.dbConnection
+    # Explicit environment wins; legacy profiles reuse their protected Auth connection without rewriting the profile.
+    if (!$env:ACTIONRPG_TOWN_DB_CONNECTION_STRING) {
+        $env:ACTIONRPG_TOWN_DB_CONNECTION_STRING = if ($secrets.PSObject.Properties['townDbConnection']) {
+            if ($secrets.townDbConnection -isnot [string] -or [string]::IsNullOrWhiteSpace($secrets.townDbConnection)) {
+                Fail 'Protected Town database credentials are invalid.'
+            }
+            $secrets.townDbConnection
+        } else { $secrets.dbConnection }
+    }
     $env:ACTIONRPG_TOWN_AUTH_KEY = $secrets.townKey
     $env:ACTIONRPG_AUTH_TOWN_REGISTRY = @{ $env:ACTIONRPG_TOWN_ID = $secrets.townKey } | ConvertTo-Json -Compress
     foreach ($name in @('root','auth','town','broker')) {
@@ -495,7 +529,7 @@ function Start-Server([string] $name, [string] $directory, [string[]] $arguments
     $pipe = [IO.Pipes.NamedPipeServerStream]::new($pipeName, [IO.Pipes.PipeDirection]::In, 1, [IO.Pipes.PipeTransmissionMode]::Byte, [IO.Pipes.PipeOptions]::Asynchronous)
     $keep = @('ACTIONRPG_ROOM_CONTROL_KEY')
     if ($name -eq 'AuthServer') { $keep = @('ACTIONRPG_AUTH_TLS_CERT','ACTIONRPG_AUTH_TLS_KEY','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_GOOGLE_CLIENT_ID','ACTIONRPG_AUTH_TOWN_REGISTRY','ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
-    if ($name -eq 'TownServer') { $keep += @('ACTIONRPG_TOWN_TLS_CERT','ACTIONRPG_TOWN_TLS_KEY','ACTIONRPG_AUTH_HOST','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_TOWN_ID','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
+    if ($name -eq 'TownServer') { $keep += @('ACTIONRPG_TOWN_TLS_CERT','ACTIONRPG_TOWN_TLS_KEY','ACTIONRPG_AUTH_HOST','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_TOWN_ID','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_TOWN_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
     $payload = @{ Name = $name; Executable = (Join-Path $directory ($name + '.exe')); Directory = $directory; Arguments = $arguments; Pipe = $pipeName; ManagedEnvironment = ($script:required + @('ACTIONRPG_ROOM_CONTROL_KEY')); KeepEnvironment = $keep } | ConvertTo-Json -Compress
     $payload64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     $runner = @'
@@ -625,6 +659,7 @@ try {
     try { $connection = [Data.Odbc.OdbcConnectionStringBuilder]::new($env:ACTIONRPG_DB_CONNECTION_STRING) }
     catch { Fail 'Invalid connection string format: ACTIONRPG_DB_CONNECTION_STRING' }
     Assert-OdbcReady $connection
+    $null = Read-TownDatabaseSettings $env:ACTIONRPG_DB_CONNECTION_STRING
     $sqlDirectory = $env:ACTIONRPG_DB_MIGRATIONS_DIRECTORY
     Require-AbsolutePath $sqlDirectory 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY'
     if (!(Test-Path -LiteralPath $sqlDirectory -PathType Container)) { Fail 'Directory required: ACTIONRPG_DB_MIGRATIONS_DIRECTORY' }

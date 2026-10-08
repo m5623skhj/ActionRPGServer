@@ -356,6 +356,51 @@ namespace
 
 namespace TownProtocol
 {
+    namespace
+    {
+        std::vector<std::uint8_t> EncodeJsonPacket(PacketType inType, const std::string& inJson)
+        {
+            if (inJson.empty() || inJson.size() > 60000) throw std::invalid_argument("JSON response exceeds packet limit.");
+            PacketWriter writer(inType);
+            writer.WriteString(inJson);
+            return writer.Finish();
+        }
+
+        template <typename T>
+        std::optional<T> DecodeJsonPacket(const std::vector<std::uint8_t>& inPacket, PacketType inType)
+        {
+            PacketReader reader(inPacket);
+            T result;
+            if (inPacket.size() > 4100 || !ReadExpectedType(reader, inType)
+                || !reader.ReadString(result.json) || result.json.empty() || result.json.size() > 4096
+                || !reader.Finished()) return std::nullopt;
+            return result;
+        }
+    }
+
+    std::vector<std::uint8_t> Encode(const CharacterListResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::CharacterListResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const CharacterCreateResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::CharacterCreateResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const CharacterSelectResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::CharacterSelectResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const InventoryStateResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::InventoryStateResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const InventoryOperationResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::InventoryOperationResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const ItemDefinitionsResponse& inPacket)
+    { return EncodeJsonPacket(PacketType::ItemDefinitionsResponse, inPacket.json); }
+    std::optional<CharacterListRequest> DecodeCharacterListRequest(const std::vector<std::uint8_t>& inPacket)
+    { return DecodeJsonPacket<CharacterListRequest>(inPacket, PacketType::CharacterListRequest); }
+    std::optional<CharacterCreateRequest> DecodeCharacterCreateRequest(const std::vector<std::uint8_t>& inPacket)
+    { return DecodeJsonPacket<CharacterCreateRequest>(inPacket, PacketType::CharacterCreateRequest); }
+    std::optional<CharacterSelectRequest> DecodeCharacterSelectRequest(const std::vector<std::uint8_t>& inPacket)
+    { return DecodeJsonPacket<CharacterSelectRequest>(inPacket, PacketType::CharacterSelectRequest); }
+    std::optional<InventoryStateRequest> DecodeInventoryStateRequest(const std::vector<std::uint8_t>& inPacket)
+    { return DecodeJsonPacket<InventoryStateRequest>(inPacket, PacketType::InventoryStateRequest); }
+    std::optional<InventoryOperationRequest> DecodeInventoryOperationRequest(const std::vector<std::uint8_t>& inPacket)
+    { return DecodeJsonPacket<InventoryOperationRequest>(inPacket, PacketType::InventoryOperationRequest); }
+
     std::optional<PacketType> ReadPacketType(const std::vector<std::uint8_t>& inPacket)
     {
         PacketReader reader(inPacket);

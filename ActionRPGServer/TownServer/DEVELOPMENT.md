@@ -336,12 +336,13 @@ DB worker의 입력 바인딩·결과 매핑에서는 마을 상태를 접근하
 
 ### 연결과 실행 범위
 
-- 프로세스 환경 변수 `ACTIONRPG_DB_CONNECTION_STRING`으로 ODBC 연결 문자열을 전달한다.
+- Town 프로세스 환경 변수 `ACTIONRPG_TOWN_DB_CONNECTION_STRING`으로 ODBC 연결 문자열을 전달한다.
   비밀정보를 소스·설정 사본·로그·명령 인자에 남기지 않는다. 실행 환경에 대상 DB용
   ODBC 드라이버가 필요하며 드라이버와 서버 프로그램의 32/64비트 구성이 일치해야 한다.
-- 변수가 없으면 DB 기능이 비활성화되고 기존 마을 기능은 유지된다. DB 요청에는
-  `NotConfigured` 오류가 비동기로 반환된다. 이는 Town의 일반 DB 모듈에 대한 설명이다.
-  클라이언트 입장은 별도 Auth의 계정 DB 검증·소비 승인이 반드시 필요하며 인증 우회는 없다.
+- Town은 서비스별 `ACTIONRPG_TOWN_DB_CONNECTION_STRING`을 요구한다. 로컬 런처는 명시 설정이 없으면
+  기존 보호 DB 연결을 재사용한다. 실운영에서는 Auth와 분리한 최소 권한 계정을 권장한다.
+  V5 스키마/이력/프로시저 원문 검증에 실패하면 입장을 열지 않는다. 공개 캐릭터 프로시저 5개와
+  `get_inventory_schema_migration_history` EXECUTE만 부여하며 Google 로그인·내부 helper 직접 실행 권한은 제외한다.
 - 연결은 첫 요청에서 생성하고 worker별로 유지한다. 기본 연결 수 2, 대기 요청 상한 128,
   큐 대기 제한 30초, 연결 제한 5초, statement 제한 10초다. 값은 `DatabaseOptions`에서 지정한다.
 - 연결 실패나 실행·매핑 오류 후 해당 연결을 폐기한다. 다음 새 요청에서 다시 연결하며,
@@ -472,7 +473,9 @@ Google ID 토큰 검증과 `login_google_account` 계정 조회는 별도 AuthSe
 클라이언트는 Auth HTTPS에서 목적 타운 ID가 지정된 30초 단일 사용 티켓을 받은 뒤,
 TLS 타운 연결의 첫 패킷으로 `AdmissionTicketRequest(36)`을 전송한다.
 타운은 Auth 내부 HTTPS `/internal/consume` 승인으로만 계정 ID를 설정하고
-`AdmissionResult(37, result=0)`을 응답한다. 이후 기존 `EnterTownRequest(1)`을 보낸다.
+`AdmissionResult(37, result=0)`을 응답한다. 이후 캐릭터 목록/생성/선택(38~43)을 진행한다.
+DB 소유 캐릭터 복원에 성공하면 선택 응답(43), 기존 입장 응답(2), 스킬·인벤토리 상태를 차례로 보낸다.
+이전 `EnterTownRequest(1)`의 이름·종류 직접 지정 입장은 거절한다.
 계정 ID나 Google ID 토큰을 타운 패킷으로 제출하지 않는다.
 기존 패킷 ID 1~35는 유지하며 새 패킷은 YAML 마지막에 추가했다. 클라이언트의 헤더·
 로그인/TLS 연결은 별도 클라이언트 담당 소스에 구현 경로가 있다. 실제 설정과 사용 절차는
@@ -492,7 +495,9 @@ Auth HTTP 작업은 제한된 별도 worker에서 처리하며 town strand를 �
 연결 종료 시 타운 객체를 제거한다. 던전 참여 또는 입장 예약이 있었다면 RoomServer의
 멤버 제거/부재 확인 응답 이후 Auth 소유권을 해제한다. RoomControl 연결 단절을 퇴장
 확인으로 간주하지 않는다. 퇴장 확인 또는 Auth 해제 응답을 잃으면 새 타운 입장을 차단한다.
-재시도와 캐릭터 진행 상태 이관은 구현하지 않았다. 관련 운영 제한은 Auth 문서를 따른다.
+룸 퇴장 확인과 Auth 해제의 자동 복구는 구현하지 않았다. 캐릭터 DB 소유권 해제는 실패 시
+실행 중인 Town에서 5초 간격으로 재시도하며, 완료 전에는 Auth 소유권을 유지한다.
+캐릭터 성장·인벤토리·장비는 저장 후 새 타운에서 복원한다. 관련 운영 제한은 Auth 문서를 따른다.
 
 Auth 기동 시 실제 DB 적용 이력·체크섬·구조 검증에 실패하면 로그인/입장을 503으로 차단한다.
 [DB 마이그레이션 규칙](../../docs/workflows/DATABASE_MIGRATIONS.md)의 수동 Up/Down을
@@ -511,7 +516,7 @@ acceptor를 연결하고 지정한 I/O 스레드가 실행한다. 공유 상태�
 | 인증 전 | PlayerSession::HandlePacket → AdmissionTicketRequest | 인증 전 다른 게임 패킷, malformed, 중복 인증 시도 |
 | Auth 소비 중 | TownInstance::Admit → AuthControlClient | 10초 admission 제한, 과다 대기, Auth 거절/timeout |
 | 인증 완료 | 계정 ID·lease/local deadline 설정, 패킷 37 | 지연 결과의 이전 시도/종료 세션은 적용하지 않음 |
-| 마을 입장 | EnterTownRequest → EnterOnStrand | 미인증, 이미 입장 요청, 존재하지 않는 캐릭터 정의 |
+| 마을 입장 | CharacterSelectRequest → DB claim → EnterOnStrand | 미인증, 소유권/generation 충돌, DB 복원 실패 |
 | 게임 중 | 마을 이동·파티·스킬·던전 요청 | 계정 local deadline 만료 시 이후 게임 요청 차단 |
 | 연결 종료 | Disconnect → CloseAuth → TownInstance::Leave | 던전/예약 정리 확인 후 Auth release |
 
@@ -520,10 +525,9 @@ PlayerSession은 Unauthenticated → ResolvingAccount → Authenticated → Clos
 로그인 프로시저를 직접 실행한다는 뜻이 아니다. 계정 ID는 클라이언트 EnterTown 입력이 아니라
 Auth consume 응답에서만 설정한다.
 
-새 EnterTown은 Town의 nextPlayerId로 ID를 발급하고 선택 캐릭터의 기본 성장 상태를 만든다.
-기본 맵의 spawn에 배치하여 EnterTownResponse, 가시성 갱신, 스킬 상태를 보낸다.
-`Character<characterId>` 정의가 있어야 하지만 DB의 캐릭터 소유권 조회/복원은 없다.
-연결이 새로 입장할 때 이전 레벨·SP·습득 스킬을 저장 데이터에서 불러오지 않는다.
+선택 성공 시 Town의 nextPlayerId로 런타임 ID를 발급하고 기본 맵 spawn에 배치한다.
+이름·종류·성장·가방·장비는 인증 계정의 DB 캐릭터에서 복원하며 실패를 기본 상태로 대체하지 않는다.
+영속 characterId와 기존 패킷의 종류 characterId/runtime playerId는 구분한다.
 
 ### Auth 대기와 만료
 
@@ -541,7 +545,9 @@ Town의 admission 레코드는 활성 연결을 포함해 최대 10000개이고 
 
 클라이언트 TCP 종료만으로 Room의 플레이어가 제거되었다고 판단하지 않는다. 타운에 던전
 참여/예약이 있으면 RoomControl LeaveRoom을 요청하고 멤버 제거 또는 부재 확인을 기다린다.
-확인 후 해당 lease/connection을 Auth release에 제출한다. 응답이 없거나 RoomControl이
+확인 후 진행 중 DB 작업과 캐릭터 소유권 해제를 마치고 해당 lease/connection을 Auth release에 제출한다.
+DB release의 일시 실패는 기존 admission 타이머에서 5초 간격으로 재시도한다. 저장 명령은 자동 재실행하지 않는다.
+응답이 없거나 RoomControl이
 끊기면 소유권을 자동 해제하지 않는다. RoomControl 장애 시 관련 세션을 종료하면서 기존
 룸 관계를 보존하여 종료 확인을 우회하지 않는다. 자동 복구/재연결은 구현하지 않았다.
 
@@ -595,7 +601,8 @@ GameRoom 상태는 WaitingForPlayers → Running → Cleared/Stopped다. 참가�
 
 Room의 몬스터는 생성 때 한 번 배치한다. 현재 방에 살아 있는 몬스터가 없으면 게이트 이동을
 허용하고, 같은 룸에서 처치한 몬스터는 재방문해도 부활하지 않는다. 보스 처치 클리어 순간의
-잔류 플레이어가 보상 대상이며 현재는 대상 전달/로그까지다. 실제 지급/인벤토리 저장은 없다.
+잔류 플레이어가 보상 대상이며 현재는 대상 전달/로그까지다. 인벤토리 영속 저장은 지원하지만
+던전 보상 지급과 아이템 드랍은 연결하지 않았다.
 재도전은 새 룸 생성 성공 후 이전 룸을 정리하며 새 몬스터 상태로 시작한다.
 
 정상 복귀/재도전은 실제 참가자 집합과 완료 상태를 검증한다. 클리어 뒤 바로 타운 상태로
@@ -641,6 +648,89 @@ strand의 동기 DB/HTTPS 호출이나 큰 파일 처리로 서버 업데이트�
 | [GameRoom.cpp](../GameRoomServer/GameRoom.cpp) | tick·몬스터·전투·완료 판정 |
 | [DungeonSession.cpp](../GameRoomServer/DungeonSession.cpp) | RUDP 연결 challenge, 월드/실시간 전송 |
 
-설정·서비스 시작 순서는 [저장소 README](../../README.md)를 따른다. 캐릭터 영속 저장,
-타운 간 성장 이관, 원격 RoomControl, 제어 연결 장애 복구는 현재 API/데이터 소유권 밖의
-별도 설계 대상이다. 이번 문서 변경으로 이 기능을 추가하거나 실제 실행을 검증하지 않았다.
+설정·서비스 시작 순서는 [저장소 README](../../README.md)를 따른다. 원격 RoomControl과 제어 연결
+장애 자동 복구는 별도 설계 대상이다. V5 캐릭터·인벤토리 연동은 정적으로 검토했으며 빌드·실행 검증은 하지 않았다.
+
+## 14. 영속 캐릭터·인벤토리 계약
+
+`TownCharacters.cpp`는 목록/생성/선택/해제를, `TownInventory.cpp`는 저장 확정과 인벤토리 요청을 담당한다.
+규칙은 `Shared/Inventory.h`, DB의 5개 공개 프로시저 래퍼는 `Database/CharacterStoreProcedure.h`에 있다.
+DB worker가 CALL 전체 결과를 검증하고 커밋한 뒤 town strand가 세션·계정·소유 토큰·generation을 다시 확인한다.
+캐릭터별 저장을 직렬화하며 DB 오류/불명확한 commit을 성공으로 보고하거나 초기 상태로 대체하지 않는다.
+
+### 아이템 데이터와 슬롯
+
+`Data/Items.json`은 `format=Items`, `schemaVersion=1`, `items` 배열이다. 초기 배열은 비어 있으며
+임의 보상/드랍/테스트 아이템을 지급하지 않는다. 각 정의의 필수 필드는
+`id/name/description/icon/category/maxStack`이다. ID는 영문으로 시작하는 1~64바이트의
+영문·숫자·밑줄·점·하이픈이고 icon은 `Images/` 아래 PNG 상대 경로다.
+장비는 추가로 `equipmentSlot/requiredLevel/characterDefinitionIds/stats/effects`를 가진다.
+비어 있는 characterDefinitionIds는 모든 종류를 허용한다. stats는 숫자 객체, effects는 배열이며 실행하지 않는다.
+
+| container | 의미 | slot |
+|---|---|---|
+| 0 | Equipment, 비스택 | 0~39 |
+| 1 | Material | 0~39 |
+| 2 | Consumable | 0~39 |
+| 3 | Quest | 0~39 |
+| 4 | 장착 | 0 Weapon, 1 Top, 2 Bottom, 3 Shoes, 4 Ring, 5 Necklace, 6 Bracelet |
+
+인벤토리 JSON은 `{"items":[{"instanceId":"32자리 소문자 hex","definitionId":"item ID","count":1,"container":0,"slot":0}]}`다.
+ID는 CSPRNG 128비트이며 장착/해제에도 유지한다. 장비 maxStack은 1, 나머지는 정의 값을 따른다.
+최대 167행·정의 ID 64바이트·uint32 최대 수량을 넣은 JSON의 계산상 상한은 29,236바이트다.
+저장 JSON은 32KB 이내로 검증하며 ODBC 문자열·전역 TCP 버퍼 한도는 확대하지 않는다.
+
+획득은 기존 스택의 여유를 슬롯 순서로 채우고 빈칸에 나눈다. 전량을 넣을 수 없으면 아무것도 바꾸지 않는다.
+자동 소비는 수량 오름차순, 동률이면 instanceId 오름차순이다. 지정 차감은 해당 스택에서만 수행한다.
+장착 조건을 통과한 교체는 새 장비의 원래 칸으로 이전 장비를 반환하며 해제에는 빈 장비칸이 필요하다.
+던전에서도 장착/교체/해제를 허용한다. Use/Sell은 NotImplemented로 거절하고 수량을 유지한다.
+Discard는 지정 수량을 영구 삭제하며 월드 드랍을 만들지 않는다. 클라이언트는 삭제 확인창을 제공해야 한다.
+
+### 패킷과 크기
+
+기존 ID 1~37을 유지하고 다음 ID에 `std::string json` 필드 하나를 사용한다.
+
+| ID | 패킷 |
+|---|---|
+| 38/39 | CharacterListRequest/Response |
+| 40/41 | CharacterCreateRequest/Response |
+| 42/43 | CharacterSelectRequest/Response |
+| 44/45 | InventoryStateRequest/Response |
+| 46/47 | InventoryOperationRequest/Response |
+| 48 | ItemDefinitionsResponse |
+
+requestId는 CSPRNG 256비트의 64자리 소문자 hex다. 64비트 characterId/revision/ownerGeneration은
+10진 문자열로 표현하고 종류 ID·수량·슬롯·배치 번호는 JSON 정수로 보낸다. 요청 본문은 4KB,
+응답은 60KB 이내다. 선택 성공 뒤 43 → 2 → 스킬 상태 → 인벤토리 상태·정의 배치 순서로 전송한다.
+
+- 목록/인벤토리 조회: `{requestId}`. 목록의 characters 행은
+  `characterId/name/characterDefinitionId/level/ownerGeneration/revision`이며 64행 단위 batchIndex/batchCount를 포함한다.
+- 생성: `{requestId,name,characterDefinitionId}`. 기본 레벨/SP는 서버 정책에서 결정한다.
+- 선택: `{requestId,characterId,expectedOwnerGeneration}`. 목록의 generation으로 CAS claim한다.
+- 변경: `{requestId,revision,action,instanceId,count}`. action은 Equip/Unequip/Discard/Use/Sell이며 장착/해제 count는 1이다.
+- 결과 공통: `{requestId,result,characterId,revision}`. 성공 문자열은 Succeeded이며 변경 성공에는 inventory가 포함된다.
+  DB 오류는 AccountUnavailable/CharacterNotFound/RevisionConflict/NameTaken/StaleOwner/RequestConflict다.
+
+상태(45)는 inventory와 definitionBatchCount를 보낸다. 그 상태가 참조한 정의만 48의 definitions 배열로 전송한다.
+정의 한 건은 8KB, 배치는 16KB 이내다. `(requestId,characterId,revision)`을 공통 키로 하고
+batchIndex/batchCount로 완료를 판정한다. 최대 167종의 정의 전송은 약 1.4MB 이내이며 기존 4MB 송신 큐를 따른다.
+마스터 파일 상한은 4MB다. 클라이언트는 모든 배치 수신 전 정의를 로딩 중으로 두고 미수신 정의를 삭제로 취급하지 않는다.
+오래된 snapshot key의 배치는 현재 상태에 합치지 않는다.
+
+### 저장·재접속·룸 연동
+
+save에는 원본 명령을 정규화한 operationJson(2KB 이내), 원래 expectedRevision, 제안 성장/인벤토리를 전달한다.
+DB는 account/character/ownerToken/generation을 잠근 뒤 영속 요청 ID·명령 해시를 먼저 확인한다.
+중복 성공은 재수정 없이 최신 상태를 반환한다. 오래된 revision 요청은 도메인 재계산 전에 이 경로로 보내므로
+이미 장착된 아이템의 재전송도 기존 성공을 확인할 수 있다. 새 충돌 요청은 저장하지 않는다.
+타임아웃 시 클라이언트 자동 재전송 대신 상태를 조회한다. DB 저장 결과가 불명확하면 서버는 세션을 종료한다.
+
+`AcquireItem/ConsumeItem`은 서버 콘텐츠 전용 API다. 호출자는 64자리 requestId와 원래 expectedRevision을 유지해야 한다.
+클라이언트용 획득/자동 소비 패킷, 몬스터 보상·드랍, 상점·사용 효과·장비 능력치 적용은 이번 범위에 없다.
+레벨/SP/습득 스킬도 같은 저장 트랜잭션으로 확정한다.
+
+Town→Room의 ConfirmJoin/UpdatePlayerProgress는 기존 progression 문자열에
+`{characterId,revision,progression,equipment}` 문서를 전달한다. equipment는 장착된 items 행만 담는다.
+룸은 다른 영속 캐릭터 또는 이전/equal revision 갱신을 무시하며 DB 자격 증명을 가지지 않는다.
+월드 JSON에 persistentCharacterId/inventoryRevision/equipment를 덧붙이고 realtime 바이너리 레이아웃은 유지한다.
+신규 Town/Room과 패킷 38~48을 사용하는 클라이언트를 함께 배포해야 한다.

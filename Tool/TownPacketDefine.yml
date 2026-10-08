@@ -350,3 +350,69 @@ Packet:
     Items:
       - Type: std::uint8_t
         Name: result
+
+  - Type: RequestPacket
+    PacketName: CharacterListRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: CharacterListResponse
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: RequestPacket
+    PacketName: CharacterCreateRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: CharacterCreateResponse
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: RequestPacket
+    PacketName: CharacterSelectRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: CharacterSelectResponse
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: RequestPacket
+    PacketName: InventoryStateRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: InventoryStateResponse
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: RequestPacket
+    PacketName: InventoryOperationRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: InventoryOperationResponse
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: ItemDefinitionsResponse
+    Items:
+      - Type: std::string
+        Name: json

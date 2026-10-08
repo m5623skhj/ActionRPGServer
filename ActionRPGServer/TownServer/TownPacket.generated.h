@@ -46,6 +46,17 @@ namespace TownProtocol
         PartyKicked = 35,
         AdmissionTicketRequest = 36,
         AdmissionResult = 37,
+        CharacterListRequest = 38,
+        CharacterListResponse = 39,
+        CharacterCreateRequest = 40,
+        CharacterCreateResponse = 41,
+        CharacterSelectRequest = 42,
+        CharacterSelectResponse = 43,
+        InventoryStateRequest = 44,
+        InventoryStateResponse = 45,
+        InventoryOperationRequest = 46,
+        InventoryOperationResponse = 47,
+        ItemDefinitionsResponse = 48,
     };
 
     struct EnterTownRequest
@@ -286,6 +297,61 @@ namespace TownProtocol
     struct AdmissionResult
     {
         std::uint8_t result{};
+    };
+
+    struct CharacterListRequest
+    {
+        std::string json{};
+    };
+
+    struct CharacterListResponse
+    {
+        std::string json{};
+    };
+
+    struct CharacterCreateRequest
+    {
+        std::string json{};
+    };
+
+    struct CharacterCreateResponse
+    {
+        std::string json{};
+    };
+
+    struct CharacterSelectRequest
+    {
+        std::string json{};
+    };
+
+    struct CharacterSelectResponse
+    {
+        std::string json{};
+    };
+
+    struct InventoryStateRequest
+    {
+        std::string json{};
+    };
+
+    struct InventoryStateResponse
+    {
+        std::string json{};
+    };
+
+    struct InventoryOperationRequest
+    {
+        std::string json{};
+    };
+
+    struct InventoryOperationResponse
+    {
+        std::string json{};
+    };
+
+    struct ItemDefinitionsResponse
+    {
+        std::string json{};
     };
 
 }
