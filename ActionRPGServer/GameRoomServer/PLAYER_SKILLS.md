@@ -11,6 +11,22 @@ Combat version 3는 이 파일의 캐릭터 목록과 캐릭터별 전투 정의
 `Shared/PlayerSkillCatalog.h`와 클라이언트 `Game/PlayerSkillCatalog.h`는 같은 바이트의 계약 로더입니다.
 계약을 변경할 때 양쪽을 함께 갱신해야 합니다. 룸의 정의는 공유 읽기 전용이며 실행 중 다시 읽지 않습니다.
 
+지상/공중 모션에 선택 배열 `frameDurationsSeconds`를 지정할 수 있습니다. 프레임 index순으로 정확히
+`frameCount`개이며, 각 값은 유한한 양수이고 float 변환 후에도 양수여야 합니다. 누적 시간은 유한하고
+double·float 누적 및 double 경계의 float 변환에서도 엄격히 증가해야 합니다.
+총시간은 기존 0.001~60초 범위를 따릅니다. `fps`는 기존 범위로 유지하되 배열이
+있으면 배열을 우선하고, 없으면 프레임당 `1/fps`초입니다. `durationSeconds`는 실제 총시간과
+기존 허용 오차 0.0001초 안에서 같아야 합니다. 누락 배열을 자동 생성하지 않으며 schemaVersion 1을 유지합니다.
+
+공유 시간 API `Catalog::FrameStartSeconds(variant, index)`, `FrameDurationSeconds(variant, index)`,
+`MotionDurationSeconds(variant)`는 검증된 모션에서 double 초를 반환합니다. `T[0]=0`,
+`T[i+1]=T[i]+d[i]`이며 시작 시간 API는 `index==frameCount`에서 총시간을 반환합니다.
+이벤트는 `T[eventFrame]`, 각 `attackRects` 프레임은 `[T[index],T[index+1])`, 시전 종료는 `T[frameCount]`를
+사용합니다. 틱 사이에 짧은 활성 프레임을 여러 개 지나도 이전·현재 행동 시간과 겹치는 모든 타격 구간을 검사하고,
+시전당 같은 몬스터의 중복 피해를 막는 기존 hitIds와 역경직 처리를 유지합니다.
+INI의 대응 키 `frame_seconds_list`와 시각 전용 effect 모션은 클라이언트 담당 범위이며 서버가 읽지 않습니다.
+몬스터의 기존 공격 총시간·타격 시간 및 상태 패킷은 이 확장으로 변경하지 않습니다.
+
 실행 규칙:
 
 - DungeonSkillInput은 인증된 세션의 플레이어로 실행합니다. 입력/기본 액션이 sequence와 20회/초 제한을 공유합니다.

@@ -61,10 +61,34 @@ namespace ActionRPG::PlayerSkills
                 if (!letter(value) && !(value >= '0' && value <= '9') && value != '_' && value != '.' && value != '-') return false;
             return true;
         }
-        static void Keys(const Json& inValue, std::initializer_list<const char*> inNames)
+        static void Keys(const Json& inValue, std::initializer_list<const char*> inNames,
+            std::initializer_list<const char*> inOptionalNames = {})
         {
-            Require(inValue.is_object() && inValue.size() == inNames.size(), "Unexpected fields.");
+            Require(inValue.is_object(), "Expected object.");
             for (const auto name : inNames) Require(inValue.contains(name), std::string("Missing field: ") + name);
+            auto expectedSize = inNames.size();
+            for (const auto name : inOptionalNames) if (inValue.contains(name)) ++expectedSize;
+            Require(inValue.size() == expectedSize, "Unexpected fields.");
+        }
+        // Timing helpers consume validated variants; the end index denotes the total motion time.
+        [[nodiscard]] static double FrameStartSeconds(const Json& inVariant, std::uint32_t inIndex)
+        {
+            Require(inIndex <= inVariant.at("frameCount").get<std::uint32_t>(), "Frame index out of range.");
+            if (!inVariant.contains("frameDurationsSeconds")) return inIndex / inVariant.at("fps").get<double>();
+            double seconds{};
+            const auto& durations = inVariant.at("frameDurationsSeconds");
+            for (std::uint32_t index = 0; index < inIndex; ++index) seconds += durations.at(index).get<double>();
+            return seconds;
+        }
+        [[nodiscard]] static double FrameDurationSeconds(const Json& inVariant, std::uint32_t inIndex)
+        {
+            Require(inIndex < inVariant.at("frameCount").get<std::uint32_t>(), "Frame index out of range.");
+            return inVariant.contains("frameDurationsSeconds")
+                ? inVariant.at("frameDurationsSeconds").at(inIndex).get<double>() : 1.0 / inVariant.at("fps").get<double>();
+        }
+        [[nodiscard]] static double MotionDurationSeconds(const Json& inVariant)
+        {
+            return FrameStartSeconds(inVariant, inVariant.at("frameCount").get<std::uint32_t>());
         }
         static void Point(const Json& inValue)
         {
@@ -80,14 +104,36 @@ namespace ActionRPG::PlayerSkills
         static void Variant(const Json& inValue, const std::string& inType)
         {
             if (inValue.is_null()) return;
-            if (inType == "direct") Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame", "attackRects" });
-            else if (inType == "projectile") Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame", "spawn", "yawDegrees", "pitchDegrees" });
-            else Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame" });
+            if (inType == "direct") Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame", "attackRects" }, { "frameDurationsSeconds" });
+            else if (inType == "projectile") Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame", "spawn", "yawDegrees", "pitchDegrees" }, { "frameDurationsSeconds" });
+            else Keys(inValue, { "motionId", "frameCount", "fps", "durationSeconds", "eventFrame", "endFrame" }, { "frameDurationsSeconds" });
             Require(IsId(inValue.at("motionId").get<std::string>()), "Invalid motion ID.");
             const auto frames = Integer(inValue.at("frameCount"), 1, 512);
-            const double fps = Number(inValue.at("fps"), 0.001, 240);
+            (void)Number(inValue.at("fps"), 0.001, 240);
             const double duration = Number(inValue.at("durationSeconds"), 0.001, 60);
-            Require(std::abs(duration - frames / fps) <= 0.0001, "Motion timing differs from FPS.");
+            if (inValue.contains("frameDurationsSeconds"))
+            {
+                const auto& durations = inValue.at("frameDurationsSeconds");
+                Require(durations.is_array() && durations.size() == frames, "Frame duration count differs from frame count.");
+                double total{};
+                float floatTotal{};
+                for (const auto& value : durations)
+                {
+                    const double seconds = Number(value, 0, 60);
+                    const float floatSeconds = static_cast<float>(seconds);
+                    Require(floatSeconds > 0, "Frame duration must remain positive as float.");
+                    const double next = total + seconds;
+                    Require(std::isfinite(next) && next > total && next <= 60, "Invalid cumulative frame time.");
+                    const float floatNext = floatTotal + floatSeconds;
+                    Require(std::isfinite(floatNext) && floatNext > floatTotal
+                        && static_cast<float>(next) > static_cast<float>(total), "Cumulative frame time collapses as float.");
+                    total = next;
+                    floatTotal = floatNext;
+                }
+            }
+            const double total = MotionDurationSeconds(inValue);
+            Require(std::isfinite(total) && total >= 0.001 && total <= 60, "Motion duration out of range.");
+            Require(std::abs(duration - total) <= 0.0001, "Motion timing differs from frame durations.");
             const auto first = Integer(inValue.at("eventFrame"), 0, frames - 1);
             const auto last = Integer(inValue.at("endFrame"), first, frames - 1);
             if (inType == "direct")

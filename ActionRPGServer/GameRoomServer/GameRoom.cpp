@@ -59,6 +59,7 @@ namespace GameRoomServer
             const auto& character = combatDefinition->characters.at(id);
             slideDefinitions.push_back({ { "characterId", id }, { "attackPower", character.attackPower },
                 { "durationSeconds", character.slide.durationSeconds }, { "motionId", character.slide.motionId },
+                { "distancePerRunSpeedSeconds", character.slide.distancePerRunSpeedSeconds },
                 { "hitRecovery", character.hitRecovery }, { "hitstopSeconds", character.slide.hitstopSeconds } });
         }
         // Create monsters once per dungeon instance; map transfers preserve their IDs and HP.

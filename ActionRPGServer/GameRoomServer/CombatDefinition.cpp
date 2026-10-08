@@ -153,10 +153,11 @@ namespace GameRoomServer
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
             const auto& slide = character.at("slide");
-            Keys(slide, { "durationSeconds", "motionId", "hitstopSeconds" });
+            Keys(slide, { "durationSeconds", "distancePerRunSpeedSeconds", "motionId", "hitstopSeconds" });
             CharacterCombatDefinition definition{ Integer(character.at("attackPower"), 1, 1000000),
                 NonnegativeFloat(character.value("hitRecovery", Json(0))),
-                { Number(slide.at("durationSeconds"), 0.05, 2), slide.at("motionId").get<std::string>(),
+                { Number(slide.at("durationSeconds"), 0.05, 2),
+                    Number(slide.at("distancePerRunSpeedSeconds"), 0.05, 5), slide.at("motionId").get<std::string>(),
                     NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))) } };
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");

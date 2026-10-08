@@ -95,9 +95,9 @@ namespace GameRoomServer
         const auto type = skill.at("type").get<std::string>();
         const float before = cast.seconds;
         cast.seconds += inDeltaSeconds;
-        const float fps = variant.at("fps").get<float>();
         const float sign = cast.facingLeft ? -1.0f : 1.0f;
-        if (!cast.eventApplied && cast.seconds >= variant.at("eventFrame").get<float>() / fps)
+        if (!cast.eventApplied && cast.seconds >= ActionRPG::PlayerSkills::Catalog::FrameStartSeconds(
+            variant, variant.at("eventFrame").get<std::uint32_t>()))
         {
             cast.eventApplied = true;
             if (type == "buff")
@@ -145,7 +145,9 @@ namespace GameRoomServer
             const auto found = monsterIdsByMap.find(inPlayer.mapId);
             if (found != monsterIdsByMap.end()) for (const auto& frame : variant.at("attackRects"))
             {
-                const float first = frame.at("index").get<float>() / fps, last = first + 1.0f / fps;
+                const auto index = frame.at("index").get<std::uint32_t>();
+                const double first = ActionRPG::PlayerSkills::Catalog::FrameStartSeconds(variant, index);
+                const double last = first + ActionRPG::PlayerSkills::Catalog::FrameDurationSeconds(variant, index);
                 if (cast.seconds < first || before >= last) continue;
                 const auto& rectangle = frame.at("rect");
                 const float width = rectangle.at("width").get<float>();
@@ -180,7 +182,8 @@ namespace GameRoomServer
                 }
             }
         }
-        if (cast.seconds >= variant.at("durationSeconds").get<float>() && inPlayer.actor.hitstopRemainingSeconds == 0)
+        if (cast.seconds >= ActionRPG::PlayerSkills::Catalog::MotionDurationSeconds(variant)
+            && inPlayer.actor.hitstopRemainingSeconds == 0)
             inPlayer.skill.reset();
     }
 }

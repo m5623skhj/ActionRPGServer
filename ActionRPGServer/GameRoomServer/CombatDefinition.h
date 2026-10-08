@@ -34,6 +34,8 @@ namespace GameRoomServer
     struct SlideDefinition
     {
         float durationSeconds{};
+        // Seconds of buffed run speed converted into the total slide distance.
+        float distancePerRunSpeedSeconds{};
         std::string motionId;
         float hitstopSeconds{};
     };

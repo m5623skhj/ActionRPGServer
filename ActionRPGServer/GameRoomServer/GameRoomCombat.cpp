@@ -206,7 +206,9 @@ namespace GameRoomServer
         slide.hitstopSeconds = definition->second.slide.hitstopSeconds;
         slide.directionX = inInput.directionX / length;
         slide.directionY = inInput.directionY / length;
-        slide.speed = inPlayer.runSpeed * BuffMultiplier(inPlayer, "movementMultiplier");
+        // The coefficient controls total distance, independently of the slide's action duration.
+        slide.speed = inPlayer.runSpeed * BuffMultiplier(inPlayer, "movementMultiplier")
+            * definition->second.slide.distancePerRunSpeedSeconds / slide.durationSeconds;
         slide.damage = static_cast<std::uint32_t>(std::clamp(
             static_cast<double>(definition->second.attackPower) * BuffMultiplier(inPlayer, "damageMultiplier")
                 * SLIDE_DAMAGE_COEFFICIENT, 1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
