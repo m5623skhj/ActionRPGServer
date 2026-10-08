@@ -78,6 +78,7 @@ namespace GameRoomServer
                 instance.facingLeft = monster.at("facingLeft").get<bool>();
                 instance.actor.hp = monsterDefinition->maxHp;
                 instance.actor.hitRecovery = combatDefinition->monsters.at(monsterDefinition->dataId).hitRecovery;
+                InitializeMonsterBehavior(instance, instanceId);
                 monsters.emplace(instanceId, std::move(instance));
                 monsterIdsByMap[mapId].push_back(instanceId);
                 monster["instanceId"] = instanceId;

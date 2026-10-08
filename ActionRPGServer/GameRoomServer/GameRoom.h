@@ -180,6 +180,10 @@ namespace GameRoomServer
             DungeonPoint spawnPosition;
             PlayerId targetId{}, skillTargetId{};
             float stateSeconds{}, actionSeconds{};
+            std::uint64_t behaviorSeed{};
+            DungeonPoint pursuitDirection;
+            float movementMultiplier{ 1.0f }, stopDistanceMultiplier{ 1.0f }, cooldownMultiplier{ 1.0f };
+            float attackDelaySeconds{}, attackWaitSeconds{}, separationBudget{};
             bool actionStarted{}, actionComplete{}, hitApplied{};
             std::unordered_map<std::string, float> cooldowns;
         };
@@ -204,6 +208,8 @@ namespace GameRoomServer
         void ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
             ActorState* inAttacker, float inHitstopSeconds);
         void UpdateMonster(MonsterState& inMonster, float inDeltaSeconds, float inWorldDeltaSeconds);
+        void InitializeMonsterBehavior(MonsterState& inMonster, std::uint64_t inInstanceId);
+        void SeparateMonsters(float inDeltaSeconds);
         bool EvaluateCondition(const MonsterState& inMonster, const nlohmann::json& inCondition) const;
         void EnterNode(MonsterState& inMonster, const std::string& inNodeId);
         bool AdvanceNode(MonsterState& inMonster, const std::string& inTrigger);

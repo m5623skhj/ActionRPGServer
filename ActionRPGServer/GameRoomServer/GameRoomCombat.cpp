@@ -20,6 +20,16 @@ namespace GameRoomServer
         constexpr float SLIDE_DAMAGE_COEFFICIENT = 1.0f;
         float Distance(DungeonPoint a, DungeonPoint b) { return std::hypot(a.x - b.x, a.y - b.y); }
 
+        // Pure per-instance sampling: no shared RNG and no fresh steering noise on each tick.
+        float MonsterBehaviorUnit(std::uint64_t inSeed)
+        {
+            inSeed += 0x9e3779b97f4a7c15ULL;
+            inSeed = (inSeed ^ (inSeed >> 30)) * 0xbf58476d1ce4e5b9ULL;
+            inSeed = (inSeed ^ (inSeed >> 27)) * 0x94d049bb133111ebULL;
+            inSeed ^= inSeed >> 31;
+            return static_cast<float>(inSeed >> 40) / 16777216.0f;
+        }
+
         // Detect even a narrow gate crossed between movement samples; sliding never changes maps.
         bool CrossesPolygon(const nlohmann::json& inPolygon, DungeonPoint inStart, DungeonPoint inEnd)
         {
@@ -504,11 +514,80 @@ namespace GameRoomServer
         }
     }
 
+    // Stable differences belong to the room instance, never to shared monster definitions.
+    void GameRoom::InitializeMonsterBehavior(MonsterState& inMonster, std::uint64_t inInstanceId)
+    {
+        inMonster.behaviorSeed = combatSeed ^ (inInstanceId * 0x9e3779b97f4a7c15ULL);
+        const float angle = 6.283185307f * MonsterBehaviorUnit(inMonster.behaviorSeed);
+        inMonster.pursuitDirection = { std::cos(angle), std::sin(angle) };
+        inMonster.movementMultiplier = 0.9f + 0.2f * MonsterBehaviorUnit(inMonster.behaviorSeed ^ 1);
+        inMonster.stopDistanceMultiplier = 0.8f + 0.15f * MonsterBehaviorUnit(inMonster.behaviorSeed ^ 2);
+        inMonster.cooldownMultiplier = 0.9f + 0.2f * MonsterBehaviorUnit(inMonster.behaviorSeed ^ 3);
+        inMonster.attackDelaySeconds = 0.04f + 0.16f * MonsterBehaviorUnit(inMonster.behaviorSeed ^ 4);
+    }
+
+    /** Soft foot-space separation on the room strand. Each map has at most 256 monsters;
+     * distant pairs use only squared distance, and each actor has one bounded movement budget.
+     * Attacks, hit reactions, hitstop, corpses and stationary dummies never get displaced.
+     */
+    void GameRoom::SeparateMonsters(float inDeltaSeconds)
+    {
+        for (auto& [id, monster] : monsters)
+        {
+            monster.separationBudget = 0;
+            if (monster.actor.hp == 0 || monster.actor.reaction != Reaction::None
+                || ActionDelta(monster.actor) == 0 || monster.targetId == 0) continue;
+            const auto& action = monster.definition->GetNode(monster.aiNodeId).at("action");
+            if (action.at("type") == "UseSkill" && monster.actionStarted) continue;
+            monster.separationBudget = std::min(8.0f,
+                combatDefinition->monsters.at(monster.definition->dataId).walkSpeed * 0.3f
+                * std::min(inDeltaSeconds, ActionDelta(monster.actor)));
+        }
+        for (const auto& [mapId, ids] : monsterIdsByMap)
+            for (std::size_t first = 0; first < ids.size(); ++first)
+            {
+                auto& a = monsters.at(ids[first]);
+                if (a.actor.hp == 0) continue;
+                const float radiusA = combatDefinition->monsters.at(a.definition->dataId).hitRadius;
+                for (std::size_t second = first + 1; second < ids.size(); ++second)
+                {
+                    auto& b = monsters.at(ids[second]);
+                    if (b.actor.hp == 0 || (a.separationBudget == 0 && b.separationBudget == 0)) continue;
+                    const float minimum = radiusA + combatDefinition->monsters.at(b.definition->dataId).hitRadius + 8.0f;
+                    float dx = a.position.x - b.position.x, dy = a.position.y - b.position.y;
+                    const float squared = dx * dx + dy * dy * 4.0f;
+                    if (squared >= minimum * minimum) continue;
+                    const float distance = std::sqrt(squared);
+                    if (distance > 0.001f) { dx /= distance; dy /= distance; }
+                    else
+                    {
+                        const float angle = 6.283185307f * MonsterBehaviorUnit(a.behaviorSeed ^ b.behaviorSeed);
+                        dx = std::cos(angle); dy = std::sin(angle) * 0.5f;
+                    }
+                    const float overlap = minimum - distance;
+                    const float share = a.separationBudget > 0 && b.separationBudget > 0 ? 0.5f : 1.0f;
+                    const auto separate = [this, overlap, share](MonsterState& actor, float x, float y)
+                    {
+                        if (actor.separationBudget == 0) return;
+                        const float amount = std::min(overlap * share, actor.separationBudget);
+                        const auto before = actor.position;
+                        const DungeonPoint destination{ before.x + x * amount, before.y + y * amount };
+                        actor.position = MoveOnMap(actor.mapId, before, destination, Distance(before, destination));
+                        actor.separationBudget = std::max(0.0f, actor.separationBudget - Distance(before, actor.position));
+                    };
+                    separate(a, dx, dy); separate(b, -dx, -dy);
+                }
+            }
+    }
+
     void GameRoom::EnterNode(MonsterState& inMonster, const std::string& inNodeId)
     {
         inMonster.aiNodeId = inNodeId;
         ++inMonster.actionSequence;
         inMonster.stateSeconds = inMonster.actionSeconds = 0;
+        inMonster.attackWaitSeconds = 0;
+        inMonster.attackDelaySeconds = 0.04f + 0.16f * MonsterBehaviorUnit(
+            inMonster.behaviorSeed ^ (static_cast<std::uint64_t>(inMonster.actionSequence) * 0xd1b54a32d192ed03ULL));
         inMonster.actionStarted = inMonster.actionComplete = inMonster.hitApplied = false;
         inMonster.skillTargetId = 0;
     }
@@ -607,12 +686,33 @@ namespace GameRoomServer
                     const auto target = players.find(inMonster.targetId);
                     if (type == "ReturnToSpawn" || target != players.end())
                     {
-                        const DungeonPoint destination = type == "ReturnToSpawn" ? inMonster.spawnPosition : target->second.position;
-                        const float tolerance = parameters.at(type == "ReturnToSpawn" ? "arrivalDistance" : "stopDistance").get<float>();
-                        const float speed = type == "MoveToTarget" && parameters.at("run").get<bool>() ? profile.runSpeed : profile.walkSpeed;
-                        if (destination.x != inMonster.position.x) inMonster.facingLeft = destination.x < inMonster.position.x;
+                        const bool chasing = type == "MoveToTarget";
+                        DungeonPoint destination = chasing ? target->second.position : inMonster.spawnPosition;
+                        float tolerance = parameters.at(chasing ? "stopDistance" : "arrivalDistance").get<float>();
+                        const float stopDistance = tolerance;
+                        if (chasing)
+                        {
+                            const float radius = stopDistance * inMonster.stopDistanceMultiplier;
+                            const DungeonPoint approach{ destination.x + inMonster.pursuitDirection.x * radius,
+                                destination.y + inMonster.pursuitDirection.y * radius };
+                            if (DungeonDefinition::Movable(dungeonWorld.at("maps").at(inMonster.mapId), approach))
+                            { destination = approach; tolerance = std::min(4.0f, stopDistance * 0.1f); }
+                        }
+                        const float speed = (chasing && parameters.at("run").get<bool>() ? profile.runSpeed : profile.walkSpeed)
+                            * inMonster.movementMultiplier;
+                        const auto facingTarget = chasing ? target->second.position : destination;
+                        if (facingTarget.x != inMonster.position.x) inMonster.facingLeft = facingTarget.x < inMonster.position.x;
+                        const auto before = inMonster.position;
                         inMonster.position = MoveOnMap(inMonster.mapId, inMonster.position, destination,
                             std::min(speed * elapsed, std::max(0.0f, Distance(inMonster.position, destination) - tolerance)));
+                        // A flank point behind a wall must not prevent the original direct approach.
+                        if (chasing && Distance(before, inMonster.position) < 0.001f
+                            && Distance(inMonster.position, destination) > tolerance + 0.01f)
+                        {
+                            destination = target->second.position; tolerance = stopDistance;
+                            inMonster.position = MoveOnMap(inMonster.mapId, inMonster.position, destination,
+                                std::min(speed * elapsed, std::max(0.0f, Distance(inMonster.position, destination) - tolerance)));
+                        }
                         inMonster.actionStarted = true;
                         inMonster.actionComplete = Distance(inMonster.position, destination) <= tolerance + 0.01f;
                     }
@@ -632,14 +732,22 @@ namespace GameRoomServer
                     const auto& skill = inMonster.definition->GetSkill(skillId);
                     const auto& effect = profile.skills.at(skillId);
                     const auto target = players.find(inMonster.actionStarted ? inMonster.skillTargetId : inMonster.targetId);
-                    if (!inMonster.actionStarted && target != players.end() && inMonster.cooldowns[skillId] <= 0)
+                    if (!inMonster.actionStarted) inMonster.attackWaitSeconds += elapsed;
+                    // The target can leave range during the individual pre-attack delay.
+                    if (!inMonster.actionStarted && (target == players.end()
+                        || Distance(inMonster.position, target->second.position) > skill.at("maxRange").get<float>()
+                        || Distance(inMonster.position, target->second.position) < skill.at("minRange").get<float>()))
+                        inMonster.actionComplete = true;
+                    if (!inMonster.actionStarted && !inMonster.actionComplete
+                        && inMonster.attackWaitSeconds >= inMonster.attackDelaySeconds
+                        && target != players.end() && inMonster.cooldowns[skillId] <= 0)
                     {
                         const float range = Distance(inMonster.position, target->second.position);
                         if (range >= skill.at("minRange").get<float>() && range <= skill.at("maxRange").get<float>())
                         {
                             inMonster.actionStarted = true;
                             inMonster.skillTargetId = target->first;
-                            inMonster.cooldowns[skillId] = skill.at("cooldownSeconds").get<float>();
+                            inMonster.cooldowns[skillId] = skill.at("cooldownSeconds").get<float>() * inMonster.cooldownMultiplier;
                             inMonster.facingLeft = target->second.position.x < inMonster.position.x;
                         }
                     }
@@ -897,6 +1005,7 @@ namespace GameRoomServer
                 EnterNode(monster, monster.definition->GetAi().at("initialNodeId").get<std::string>());
             UpdateMonster(monster, ActionDelta(monster.actor), inDeltaSeconds);
         }
+        SeparateMonsters(inDeltaSeconds);
         for (auto& [id, player] : players)
             if (player.slide.active && (player.actor.hp == 0 || player.actor.reaction != Reaction::None)) StopSlide(player);
         CheckClear();
