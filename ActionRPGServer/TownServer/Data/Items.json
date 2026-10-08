@@ -1,5 +1,28 @@
 {
   "format": "Items",
   "schemaVersion": 1,
-  "items": []
+  "items": [
+    {
+      "id": "WornPistol",
+      "name": "낡은 총",
+      "description": "손때가 묻고 표면이 닳은 오래된 권총.",
+      "icon": "Images/Items/worn_pistol.png",
+      "category": "Equipment",
+      "maxStack": 1,
+      "equipmentSlot": "Weapon",
+      "requiredLevel": 1,
+      "characterDefinitionIds": [],
+      "stats": { "AttackPower": 2 },
+      "effects": []
+    },
+    {
+      "id": "UnripeStrawberry",
+      "name": "설익은 딸기",
+      "description": "아직 조금 시큼한 딸기. 사용하면 HP를 30 회복합니다.",
+      "icon": "Images/Items/unripe_strawberry.png",
+      "category": "Consumable",
+      "maxStack": 20,
+      "effects": [{ "type": "RestoreHp", "amount": 30 }]
+    }
+  ]
 }

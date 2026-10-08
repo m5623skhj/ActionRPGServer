@@ -30,6 +30,7 @@ namespace ActionRPG::Items
     {
         std::string id;
         std::uint32_t category{}, maxStack{}, equipmentSlot{}, requiredLevel{};
+        std::uint32_t restoreHp{};
         std::unordered_set<std::uint32_t> characterDefinitionIds;
     };
 
@@ -96,9 +97,22 @@ namespace ActionRPG::Items
                             "Invalid equipment stat.");
                 }
                 else
+                {
                     Rules::Require(!item.contains("equipmentSlot") && !item.contains("requiredLevel")
-                        && !item.contains("characterDefinitionIds") && !item.contains("stats")
-                        && !item.contains("effects"), "Equipment fields on a non-equipment item.");
+                        && !item.contains("characterDefinitionIds") && !item.contains("stats"),
+                        "Equipment fields on a non-equipment item.");
+                    if (item.contains("effects"))
+                    {
+                        Rules::Require(definition.category == 2 && item.at("effects").is_array()
+                            && item.at("effects").size() <= 1, "Invalid consumable effects.");
+                        for (const auto& effect : item.at("effects"))
+                        {
+                            Rules::Keys(effect, { "type", "amount" });
+                            Rules::Require(effect.at("type") == "RestoreHp", "Unsupported consumable effect.");
+                            definition.restoreHp = Rules::Integer(effect.at("amount"), 1, 1000000);
+                        }
+                    }
+                }
                 result.presentations.emplace(definition.id, item);
                 const auto id = definition.id;
                 Rules::Require(result.definitions.emplace(id, std::move(definition)).second,
