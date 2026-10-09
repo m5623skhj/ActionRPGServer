@@ -33,19 +33,25 @@ DB 개요와 버전 SQL 구성은 [계정 DB README](../ActionRPGServer/Database
 수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000005이며 실제 DB
 직전 확인 결과는 2026-10-08 로컬 V000004 적용 성공과 새 검사 EXECUTE 확인이다.
 V5 적용 결과와 새 PC의 상태는 해당 대상에서 별도로 확인한다. 처음 구성하는 경우 [새 PC 설정·트러블슈팅](../docs/workflows/LOCAL_DEVELOPMENT_SETUP.md)의
-계정 생성·권한·보호된 연결 문자열 입력 예제부터 따른다.
+계정 생성·권한·대화형 마이그레이션 안내부터 따른다.
 
 1. 대상 MySQL·스키마 이름, 64비트 MySQL ODBC 드라이버, TLS·전용 실행 주체와 권한을 준비한다.
    스키마가 없으면 Up의 `-CreateDatabase`로 생성할 수 있다. 이때 대상 DB의 CREATE 권한이 필요하다.
 2. Auth·Town·Room과 DB를 사용하는 기존 접속을 종료하고 서비스 정지를 확인한다.
-3. 보호된 환경에 `ACTIONRPG_MIGRATION_CONNECTION_STRING`을 제공한다. 암호를 파일·Git·
-   명령 인자에 쓰지 않는다. runtime의 `ACTIONRPG_DB_CONNECTION_STRING`을 대신 사용하지 않는다.
-4. 아래 명령을 저장소 루트에서 실행한다. `actionrpg`는 실제 스키마 이름으로 바꾼다.
+3. `Tool\Database`의 UpMigration.bat 또는 DownMigration.bat을 실행하고 콘솔 안내를 따른다.
+   대상 DB 기본값은 `actionrpg`이며 서버 종료 확인에 `Y` 또는 `y`를 입력한다. 연결 환경 변수가 없으면
+   64비트 MySQL Unicode 드라이버를 찾아 호스트·포트·마이그레이션 계정과 숨김 비밀번호를 받는다.
+   기본값은 `127.0.0.1:3306` / `actionrpg_migrator`이며 Enter로 선택한다. 드라이버가 여러 개면 번호를 고른다.
+4. 기존 자동화는 `ACTIONRPG_MIGRATION_CONNECTION_STRING`과 아래 인자를 그대로 제공할 수 있다.
+   암호를 파일·Git·명령 인자에 쓰지 않으며 runtime 연결 문자열을 대신 사용하지 않는다.
 
-`-Database`는 필수 대상 이름이다. 기본 모드에서는 연결에서 이미 선택한 DATABASE()와 대조한다.
+`-Database`를 생략하면 대상 이름을 묻는다. 기본 모드에서는 연결에서 이미 선택한 DATABASE()와 대조한다.
 Up에 `-CreateDatabase`를 주면 DB가 없을 때 생성하고 선택한 뒤 기존 마이그레이션을 이어간다.
 이 옵션은 소문자 영문자로 시작하는 1~64자의 소문자 영문·숫자·밑줄 이름만 받으며 시스템 DB는 거부한다.
-`-ServicesStopped`도 필수이며 운영자의 정지 확인일 뿐 자동 정지·검사 기능은 아니다.
+`-ServicesStopped`를 생략하면 서버 종료 확인을 묻는다. 이 옵션과 콘솔 확인은 운영자의 정지 확인이며
+프로세스를 자동으로 종료하거나 검사하지 않는다. 비밀번호·접속 정보는 저장하지 않고 환경 변수도 변경하지 않는다.
+배치는 자식 PowerShell에만 RemoteSigned 실행 정책을 지정하며 상위 조직 정책은 변경하지 않는다.
+인자 없이 실행하면 결과 창을 유지하기 위해 마지막에 키 입력을 기다리고 원래 종료 코드를 반환한다.
 
 ```bat
 Tool\Database\UpMigration.bat -Database actionrpg -ServicesStopped

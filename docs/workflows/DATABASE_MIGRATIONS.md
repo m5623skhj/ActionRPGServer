@@ -545,9 +545,10 @@ head=5 검증 계약은 유지하며 버전 문자열을 설정값으로 대신�
 정식 도구는 `Tool/Database/UpMigration.bat`, `DownMigration.bat`이며 공통 실행기는
 `Migrate.ps1`이다. 64비트 Windows PowerShell 5.1과 동일 비트의 MySQL ODBC 드라이버를 사용한다.
 별도 마이그레이션 제품 설치 없이 ODBC로 실행한다. 서비스용 접속 문자열을 자동으로 재사용하지
-않으며 전용 환경 변수 `ACTIONRPG_MIGRATION_CONNECTION_STRING`을 사용한다. 암호가 포함된
+않으며 전용 환경 변수 `ACTIONRPG_MIGRATION_CONNECTION_STRING` 또는 대화형 입력을 사용한다. 암호가 포함된
 값을 명령 인자·배치 파일·Git에 넣거나 로그로 출력하지 않는다. DB 접속의 TLS/인증 설정은 실제
-환경에 맞게 별도로 준비한다. 로컬 PowerShell 실행 정책은 존중하며 도구가 자동 우회하지 않는다.
+환경에 맞게 별도로 준비한다. 배치는 자식 PowerShell에 RemoteSigned 실행 정책을 지정하며
+조직의 상위 정책은 변경하지 않는다. 인자 없이 실행하면 결과 확인을 위해 마지막에 키 입력을 기다린다.
 
 모든 DB 사용 서비스를 정지한 뒤 실행한다. 다음 `actionrpg`는 실제 DB 이름으로 바꾸는 예시다.
 기본 모드에서 `-Database`는 접속 문자열이 선택한 스키마와 정확히 일치해야 한다.
@@ -562,13 +563,13 @@ Up의 `-CreateDatabase` 옵션은 대상 DB 생성·선택부터 수행하며 �
 | 인자/설정 | 구현된 의미 |
 |---|---|
 | UpMigration.bat / DownMigration.bat | 공통 실행기에 각각 -Direction Up/Down을 전달 |
-| -Database 이름 | 필수, 1~64자; 기본 모드는 연결에서 선택된 DATABASE()와 정확히 대조 |
+| -Database 이름 | 1~64자; 생략하면 입력 요청(기본 actionrpg); 연결에서 선택된 DATABASE()와 정확히 대조 |
 | -CreateDatabase | Up 전용; DB가 없으면 생성하고 선택한 뒤 기존 이력·구조 검사와 적용 수행 |
 | -InspectOnly -InspectVersion 0..5 | Up 배치의 읽기 전용 진단; 지정 구조와 비교하며 실제 head/복구 성공을 확정하지 않음 |
 | -RecoverBootstrap | Up 전용; 완전한 V0와 초기 실패 1건을 재검증해 원본 보존 및 복구 확인 행 추가, V0에서 종료 |
 | -RecoverAccounts | Up 전용; 정상 V0 이력과 완전한 빈 V1의 첫 실패를 재검증해 복구 확인 행 추가, V1에서 종료 |
-| -ServicesStopped | 필수 정지 확인; 빠지면 DB 접속 전에 중단 |
-| ACTIONRPG_MIGRATION_CONNECTION_STRING | 실행기 전용 ODBC 연결; 값 없으면 접속하지 않음 |
+| -ServicesStopped | 운영자 정지 확인; 생략하면 DB 접속 전에 Y 또는 y 입력을 요청하고 다른 응답은 중단 |
+| ACTIONRPG_MIGRATION_CONNECTION_STRING | 실행기 전용 ODBC 연결; 없으면 드라이버·호스트·포트·계정·숨김 비밀번호로 구성 |
 | ACTIONRPG_DB_CONNECTION_STRING | Auth runtime 전용 ODBC 연결; 마이그레이션 도구가 대신 사용하지 않음 |
 | ACTIONRPG_DB_SCHEMA | Auth가 기대하는 DB 이름; runtime 연결의 DATABASE()와 대조 |
 | ACTIONRPG_DB_MIGRATIONS_DIRECTORY | Auth에 배포한 MySQL SQL 디렉터리의 절대 경로; Up·Down·Infrastructure 모두 필요 |
@@ -696,9 +697,13 @@ MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초
 4. 기존 관리 DB는 아래 조회 절차로 전체 이력과 구조를 먼저 확인한다. 정상 head=1이면 2→3→4,
    head=2이면 3→4→5, head=3이면 4→5, head=4이면 5, head=5이면 새 감사 행 없이 검사만 끝낸다. Down 성공으로 낮아진 head에도
    같은 규칙을 사용한다. 이력이 없는 비어 있지 않은 DB를 자동으로 기준 버전 등록하지 않는다.
-5. 보호된 환경의 전용 접속 문자열과 실제 스키마 이름으로 Up 배치를 실행한다. 대상 host:port,
+5. Up 배치를 실행한다. `-Database`가 없으면 대상 이름을, `-ServicesStopped`가 없으면 서버 종료
+   확인 `Y` 또는 `y`를 입력받는다. `ACTIONRPG_MIGRATION_CONNECTION_STRING`이 없으면 설치된
+   64비트 MySQL Unicode 드라이버와 호스트·포트·마이그레이션 계정·숨김 비밀번호로 TLS 연결을
+   구성한다. 입력은 파일이나 환경 변수에 저장하지 않는다. 환경 변수와 두 인자를 모두 제공하면
+   기존처럼 추가 질문 없이 실행한다. 대상 host:port,
    DB 이름, 계획, 각 버전의 성공, 마지막 `Complete. Active version: V000005.`을 확인한다.
-   표시한 계획 뒤에 바로 SQL을 실행하며 추가 확인 프롬프트나 dry-run 단계는 없다.
+   연결 전 확인을 마치고 표시한 계획 뒤에는 바로 SQL을 실행하며 dry-run 단계는 없다.
 6. 종료 코드 0과 최종 상태를 확인하고 동일 Up/Down/Infrastructure 파일을 Auth 배포 디렉터리에
    둔다. 종료 코드 1·중간 중단·불명확한 완료에서는 후속 서비스 배포를 진행하지 않는다.
 7. Auth를 기동해 실제 계정 DB 검증과 로그인/입장 준비 상태를 확인한 후 타운·룸을 연결한다.

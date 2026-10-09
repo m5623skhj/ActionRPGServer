@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][ValidateSet('Up', 'Down')][string]$Direction,
-    [Parameter(Mandatory = $true)][ValidateLength(1, 64)][string]$Database,
+    [ValidateLength(1, 64)][string]$Database,
     [switch]$ServicesStopped,
     [switch]$CreateDatabase,
     [switch]$InspectOnly,
@@ -25,6 +25,57 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
         $failure = [System.InvalidOperationException]::new($Message)
         $failure.Data['SafeMigrationMessage'] = $Message
         throw $failure
+    }
+}
+
+function Read-MigrationValue([string]$Label, [string]$Default) {
+    $value = ([string](Read-Host "$Label [$Default]")).Trim()
+    if ($value.Length -eq 0) { return $Default }
+    return $value
+}
+
+function Get-MigrationConnectionString {
+    $configured = [Environment]::GetEnvironmentVariable('ACTIONRPG_MIGRATION_CONNECTION_STRING')
+    if (-not [string]::IsNullOrWhiteSpace($configured)) { return $configured }
+
+    $drivers = @(Get-OdbcDriver -Platform '64-bit' | Where-Object { $_.Name -match 'MySQL.*Unicode' })
+    Assert-Condition ($drivers.Count -gt 0) 'Install a 64-bit MySQL Unicode ODBC driver.'
+    $driverNumber = 1
+    if ($drivers.Count -gt 1) {
+        for ($index = 0; $index -lt $drivers.Count; ++$index) {
+            Write-Host ('[{0}] {1}' -f ($index + 1), $drivers[$index].Name)
+        }
+        $choice = Read-MigrationValue 'ODBC driver number' '1'
+        Assert-Condition ([int]::TryParse($choice, [ref]$driverNumber) -and
+            $driverNumber -ge 1 -and $driverNumber -le $drivers.Count) 'Choose a listed ODBC driver number.'
+    }
+
+    $server = Read-MigrationValue 'MySQL host' '127.0.0.1'
+    $portText = Read-MigrationValue 'MySQL port' '3306'
+    $port = 0
+    Assert-Condition ([int]::TryParse($portText, [ref]$port) -and $port -ge 1 -and $port -le 65535) 'Invalid MySQL port.'
+    $user = Read-MigrationValue 'Migration account' 'actionrpg_migrator'
+    Write-Host "Connection: $server`:$port / $Database / $user (TLS required)"
+
+    $builder = [System.Data.Odbc.OdbcConnectionStringBuilder]::new()
+    $password = $null
+    $passwordPointer = [IntPtr]::Zero
+    try {
+        $builder.set_Driver([string]$drivers[$driverNumber - 1].Name)
+        $builder['SERVER'] = $server
+        $builder['PORT'] = [string]$port
+        $builder['DATABASE'] = $Database
+        $builder['UID'] = $user
+        $builder['SSLMODE'] = 'REQUIRED'
+        $password = Read-Host 'Migration account password' -AsSecureString
+        Assert-Condition ($null -ne $password -and $password.Length -gt 0) 'A migration account password is required.'
+        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+        $builder['PWD'] = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+        return $builder.ConnectionString
+    } finally {
+        if ($passwordPointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer) }
+        if ($null -ne $password) { $password.Dispose() }
+        $builder.Clear()
     }
 }
 
@@ -798,7 +849,14 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
 }
 
 try {
-    Assert-Condition $ServicesStopped.IsPresent 'Stop all DB-using services first, then supply -ServicesStopped.'
+    $script:stage = 'operator confirmation'
+    if ([string]::IsNullOrWhiteSpace($Database)) { $Database = Read-MigrationValue 'Target database' 'actionrpg' }
+    Assert-Condition ($Database.Length -ge 1 -and $Database.Length -le 64) 'Database name must contain 1..64 characters.'
+    if (-not $ServicesStopped.IsPresent) {
+        Write-Host "Requested direction: $Direction / database: $Database"
+        $confirmation = Read-Host 'Stop all Auth/Town/Room and other DB-using services. Type Y or y to confirm'
+        Assert-Condition ($confirmation -ieq 'Y') 'Cancelled: DB-using services must be stopped; no database connection was opened.'
+    }
     Assert-Condition (-not $RecoverAccounts.IsPresent -or ($Direction -eq 'Up' -and -not $RecoverBootstrap.IsPresent -and
         -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverAccounts requires Up without other recovery, creation or inspection options.'
     Assert-Condition (-not $RecoverBootstrap.IsPresent -or ($Direction -eq 'Up' -and
@@ -811,6 +869,7 @@ try {
             $Database -cnotin @('mysql', 'information_schema', 'performance_schema', 'sys')) 'Database creation requires a lowercase ASCII application name: [a-z][a-z0-9_]{0,63}.'
     }
     Assert-Condition ([Environment]::Is64BitProcess) 'Use 64-bit Windows PowerShell and a matching 64-bit MySQL ODBC driver.'
+    $script:stage = 'local file validation'
     $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../ActionRPGServer/Database/Migrations/MySQL'))
     $script:bootstrap = Read-SqlFile (Join-Path $root 'Infrastructure/V000000__migration_history.sql')
     Assert-Condition ($script:bootstrap.Statements.Count -eq 2) 'Invalid bootstrap file.'
@@ -834,8 +893,8 @@ try {
         $script:catalog[5].Down.Statements.Count -eq 8 -and
         (Normalize-Sql $script:catalog[5].Down.Statements[0]) -ceq 'drop table character_operations , character_items , character_state' -and
         (Normalize-Sql $script:catalog[5].Down.Statements[7]) -ceq 'drop procedure get_inventory_schema_migration_history') 'Unsafe Down 000005 contract.'
-    $secret = [Environment]::GetEnvironmentVariable('ACTIONRPG_MIGRATION_CONNECTION_STRING')
-    Assert-Condition (-not [string]::IsNullOrWhiteSpace($secret)) 'Set ACTIONRPG_MIGRATION_CONNECTION_STRING using your protected local environment.'
+    $script:stage = 'connection input'
+    $secret = Get-MigrationConnectionString
     if ($CreateDatabase) {
         $builder = [System.Data.Odbc.OdbcConnectionStringBuilder]::new($secret)
         # Driver/DSN are built-in keys even when unset; inspect stored values.
@@ -938,6 +997,7 @@ try {
     [Console]::Error.WriteLine('Do not replay partial DDL or edit audit rows. Inspect actual schema and RUNNING/FAILED audit before an approved recovery.')
     exit 1
 } finally {
+    $secret = $null
     if ($null -ne $script:connection) {
         if ($script:ownsLock -and $script:connection.State -eq [System.Data.ConnectionState]::Open) {
             try { [void](Read-Scalar 'SELECT RELEASE_LOCK(?)' @($script:lockName)) } catch {}

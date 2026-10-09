@@ -98,6 +98,16 @@ int main()
         AuthServer::GoogleIdTokenVerifier google(clientId, ca);
         httplib::SSLServer server(certificate.c_str(), privateKey.c_str());
         if (!server.is_valid()) throw std::runtime_error("Invalid HTTPS certificate configuration.");
+        server.set_error_logger([](const httplib::Error& inError, const httplib::Request*)
+        {
+            // Capture Winsock before logging or socket cleanup changes the thread's last error.
+            const int socketError = WSAGetLastError();
+            const char* stage = inError == httplib::Error::BindIPAddress ? "bind"
+                : inError == httplib::Error::Listen ? "listen"
+                : inError == httplib::Error::Connection ? "accept" : nullptr;
+            if (stage) std::cerr << "Auth HTTPS transport failed. stage=" << stage
+                << "; http_error=" << static_cast<int>(inError) << "; WSA_error=" << socketError << '\n';
+        });
         server.new_task_queue = [] { return CreateHttpPool<httplib::ThreadPool>(); };
         server.set_payload_max_length(32768);
         server.set_read_timeout(5, 0);
@@ -190,8 +200,19 @@ int main()
             sessions.Release(serverId, body.at("connection").get<std::string>(), body.at("lease").get<std::string>());
             return Json::object();
         });
-        std::cout << "AuthServer HTTPS listening on port 8443.\n";
-        const bool listened = server.listen("0.0.0.0", 8443);
+        bool listened{};
+        if (server.bind_to_port("0.0.0.0", 8443))
+        {
+            std::cout << "AuthServer HTTPS listening on port 8443.\n" << std::flush;
+            listened = server.listen_after_bind();
+            if (!listened) std::cerr << "Auth HTTPS listener stopped unexpectedly. stage=accept_loop\n";
+        }
+        else
+        {
+            const int socketError = WSAGetLastError();
+            std::cerr << "Auth HTTPS startup failed. stage=bind/listen; port=8443; last_WSA_error="
+                << socketError << ". Check port ownership, excluded port ranges and local security policy.\n";
+        }
         database->Stop();
         guard.reset();
         io.stop();

@@ -80,6 +80,11 @@ BOM 없는 UTF-8 SHA256 소문자 hex64다. 미적용·진행 중·미복구 실
 
 Auth HTTPS 포트는 8443이다. 타운은 `ACTIONRPG_AUTH_HOST`의 인증서 호스트명을 검증하며,
 `ACTIONRPG_TOWN_ID`/`ACTIONRPG_TOWN_AUTH_KEY`를 Auth 등록값과 일치시킨다.
+
+서버의 listening 로그는 실제 포트 bind/listen 성공 뒤에만 출력한다. bind/listen 및 accept 실패에는
+고정 stage와 숫자 httplib 오류·Winsock 오류를 출력하며 요청·헤더·토큰·환경 값은 기록하지 않는다.
+`last_WSA_error`는 실패 반환 뒤의 보조 진단이며, 라이브러리 콜백의 `WSA_error`가 소켓 정리 전 값이다.
+8443의 점유·제외 포트 범위·로컬 보안 정책을 확인하고, 실패 시 임의 포트 변경이나 자동 재시도는 하지 않는다.
 타운 클라이언트에도 별도 TLS 인증서와 키가 필요하다. 인증서 발급·키 생성은 수행하지 않았다.
 내부 API는 HTTPS에서 서버별 키를 확인한다. 외부 클라이언트에 타운 키를 배포하지 않는다.
 배포 시 내부 API 접근을 타운 네트워크로 제한한다. 현재 RoomControl의 기존 로컬 연결

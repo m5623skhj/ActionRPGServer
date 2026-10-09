@@ -140,15 +140,24 @@ Room 기본 옵션은 실행 파일 옆 ServerOptionFile/CoreOption.txt와 Sessi
 Auth 내부 API는 공개 API와 같은 HTTPS listener에 있으므로 내부 경로의 네트워크 접근 제한은
 배포 환경에서 마련한다. 서버별 키 검증만으로 네트워크 분리가 구현된 것은 아니다.
 
-RunLocalTest.bat은 사전 검사 뒤 Auth → Town → Room → 클라이언트 두 개를 순서대로 시작한다.
+RunLocalTest.bat은 설정 검사 뒤 서버 솔루션과 클라이언트 게임 프로젝트를 Debug/x64로 증분 빌드하고,
+기존 프로젝트 복사 단계로 Data·Assets·DLL을 준비한 뒤 Auth → Town → Room → 클라이언트 두 개를 시작한다.
 Auth는 `ACTIONRPG_DB_CONNECTION_STRING`, Town은 `ACTIONRPG_TOWN_DB_CONNECTION_STRING`을 사용한다.
 로컬에서는 Town 설정이 없으면 기존 보호 DB 연결을 재사용하며, 명시한 Town 환경 변수가 우선한다.
 공유 로컬 계정에는 두 서비스의 EXECUTE 권한 합집합이 필요하다. 신규 계정 생성·비밀번호 재입력을 요구하지 않는다.
 기존 인증서·Google/DB 자격 증명을 교체하지 않는다. Room에는 DB 연결 문자열을 전달하지 않는다.
+Visual Studio Installer의 vswhere로 서버 v145와 클라이언트 v143을 지원하는 MSBuild를 각각 선택한다.
+빌드 도구에는 ACTIONRPG 인증·DB 환경을 전달하지 않으며, 빌드 실패 시 서버를 시작하지 않는다.
+빌드 후 공개 AuthClient 설정을 다시 공급한다. 환경 변수만 사용하는 경우 빌드 전 기존 runtime
+AuthClient.json을 검증해 메모리에 보관하고 복원하므로 원본의 빈 인증 설정으로 덮어쓰이지 않는다.
+이 경로의 기존 공개 설정에는 현재 Auth/타운 ID와 일치하는 접속 정보 및 유효한 절대 `townCaFile`이 필요하다.
+빌드가 일부 진행된 뒤 실패해도 실행 폴더가 있으면 보관한 공개 설정을 복원하며 secret은 JSON에 넣지 않는다.
 Debug x64 솔루션 빌드 기준 Auth/Town은 `ActionRPGServer/x64/Debug`, Room은
 `artifacts/bin/x64/Debug`, 클라이언트는 인접 저장소의
 `ActionRPGClient/ActionRPGClient/artifacts/bin/x64/Debug`를 사용한다.
 64비트 Windows PowerShell 5.1과 `curl.exe`가 필요하며, 서버별 콘솔에 실제 오류 출력을 남긴다.
+Auth의 listening 로그는 실제 bind/listen 성공 뒤 출력한다. 실패 시 서버 콘솔의 stage와 숫자 WSA_error를
+확인하며, 8443 점유·Windows 제외 포트·보안 정책을 검토한다. 임의로 포트를 변경하거나 프로세스를 종료하지 않는다.
 
 첫 실행에 저장된 설정과 전체 환경 설정이 없으면 실제 **Google Desktop OAuth client ID**,
 기존 MySQL 호스트·포트·계정 스키마·runtime 사용자·비밀번호·ODBC TLS/CA 옵션을 로컬에서

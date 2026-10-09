@@ -1,4 +1,6 @@
 @echo off
 setlocal
-powershell.exe -NoProfile -File "%~dp0Migrate.ps1" -Direction Up %*
-exit /b %ERRORLEVEL%
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "%~dp0Migrate.ps1" -Direction Up %*
+set "migrationExitCode=%ERRORLEVEL%"
+if "%~1"=="" pause
+exit /b %migrationExitCode%

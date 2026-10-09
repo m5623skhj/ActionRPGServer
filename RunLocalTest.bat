@@ -33,6 +33,48 @@ function Require-File([string] $path, [string] $name) {
 function Require-AbsolutePath([string] $path, [string] $name) {
     if ($path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)') { Fail "Absolute path required: $name" }
 }
+function Find-MSBuild($installations, [string] $toolset) {
+    foreach ($installation in $installations) {
+        $buildTool = Join-Path $installation.installationPath 'MSBuild\Current\Bin\MSBuild.exe'
+        $toolsetPattern = Join-Path $installation.installationPath ('MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets\' + $toolset + '\Toolset.props')
+        if ((Test-Path -LiteralPath $buildTool -PathType Leaf) -and @(Get-ChildItem -Path $toolsetPattern -File -ErrorAction SilentlyContinue).Count) { return $buildTool }
+    }
+    Fail ("Install Visual Studio C++ toolset $toolset, MSBuild and Windows SDK before running this launcher.")
+}
+function Build-LocalProjects {
+    $script:launchStage = 'Finding Visual Studio build tools'
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    Require-File $vswhere 'Visual Studio Installer/vswhere.exe; install Visual Studio C++ build tools'
+    $serverSolution = Join-Path $root 'ActionRPGServer\ActionRPGServer.slnx'
+    $clientProject = [IO.Path]::GetFullPath((Join-Path $root '..\ActionRPGClient\ActionRPGClient\ActionRPGClient\ActionRPGClient.vcxproj'))
+    Require-File $serverSolution 'server solution'
+    Require-File $clientProject 'sibling ActionRPGClient project'
+    # Build tools and their children do not need authentication or database credentials.
+    $savedEnvironment = @{}
+    try {
+        foreach ($entry in Get-ChildItem Env: | Where-Object { $_.Name.StartsWith('ACTIONRPG_', [StringComparison]::OrdinalIgnoreCase) }) {
+            $savedEnvironment[$entry.Name] = $entry.Value
+            [Environment]::SetEnvironmentVariable($entry.Name, $null, 'Process')
+        }
+        $metadata = & $vswhere -all -products '*' -requires Microsoft.Component.MSBuild -format json
+        if ($LASTEXITCODE -ne 0) { Fail 'Visual Studio build tool discovery failed.' }
+        $installed = ($metadata -join [Environment]::NewLine) | ConvertFrom-Json
+        $installations = @($installed | Where-Object { $_.isComplete -and $_.isLaunchable } | Sort-Object { [version]$_.installationVersion } -Descending)
+        $serverBuildTool = Find-MSBuild $installations 'v145'
+        $clientBuildTool = Find-MSBuild $installations 'v143'
+        $script:launchStage = 'Building servers Debug x64'
+        Write-Host 'Building servers Debug x64 (incremental; project targets prepare runtime data and DLLs)...'
+        & $serverBuildTool $serverSolution /t:Build /m /nologo /verbosity:minimal /p:Configuration=Debug /p:Platform=x64 /p:VcpkgEnableManifest=true
+        if ($LASTEXITCODE -ne 0) { Fail 'Server Debug x64 build failed. Resolve the build errors above; no server was started.' }
+        $script:launchStage = 'Building client Debug x64'
+        Write-Host 'Building client Debug x64 (incremental; project targets prepare runtime assets)...'
+        & $clientBuildTool $clientProject /t:Build /m /nologo /verbosity:minimal /p:Configuration=Debug /p:Platform=x64 /p:VcpkgEnableManifest=true
+        if ($LASTEXITCODE -ne 0) { Fail 'Client Debug x64 build failed. Resolve the build errors above; no server was started.' }
+    } finally {
+        foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
+        $savedEnvironment.Clear()
+    }
+}
 
 function New-RandomKey {
     $bytes = New-Object byte[] 32
@@ -464,11 +506,16 @@ function Initialize-LocalSettings {
     finally { $secrets = $null }
     $script:clientSettings = $settings.client
 }
-function Supply-ClientSettings {
+function Supply-ClientSettings([switch] $ValidateOnly) {
     $path = Join-Path $clientDirectory 'Assets\Data\AuthClient.json'
+    foreach ($target in @($clientDirectory,(Join-Path $clientDirectory 'Assets'),(Split-Path -Parent $path),$path)) {
+        if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail 'Client runtime settings must not use reparse points.' }
+    }
     if (!$script:clientSettings) {
         Require-File $path 'client runtime Assets/Data/AuthClient.json'
-        return
+        if ((Get-Item -LiteralPath $path).Length -gt 32768) { Fail 'Client runtime authentication settings are too large.' }
+        try { $script:clientSettings = [IO.File]::ReadAllText($path) | ConvertFrom-Json }
+        catch { Fail 'Client runtime authentication settings cannot be read. Supply the public settings locally before using the environment-only launch path.' }
     }
     $client = $script:clientSettings
     $servers = @($client.servers)
@@ -476,11 +523,10 @@ function Supply-ClientSettings {
     if ($client.authUrl -cne ('https://{0}:8443' -f $env:ACTIONRPG_AUTH_HOST) -or $client.googleClientId -cne $env:ACTIONRPG_GOOGLE_CLIENT_ID -or $servers.Count -ne 1 -or $servers[0].serverId -cne $env:ACTIONRPG_TOWN_ID -or $servers[0].hostname -cne 'localhost' -or $servers[0].port -ne 7777) { Fail 'Saved public client settings do not match this local server profile.' }
     if ($servers[0].name -isnot [string] -or !$servers[0].name -or $servers[0].name.Length -gt 80 -or ($servers[0].port -isnot [int] -and $servers[0].port -isnot [long])) { Fail 'Invalid saved client town entry.' }
     if ($client.playerName -isnot [string] -or [Text.Encoding]::UTF8.GetByteCount($client.playerName) -gt 32 -or ($client.characterId -isnot [int] -and $client.characterId -isnot [long]) -or $client.characterId -notin @(1,2,3)) { Fail 'Invalid saved client player name or character ID.' }
+    Require-AbsolutePath $client.townCaFile 'saved client townCaFile'
     Require-File $client.townCaFile 'saved client townCaFile'
+    if ($ValidateOnly) { return }
     if (!(Test-Path -LiteralPath (Split-Path -Parent $path) -PathType Container)) { Fail 'Client runtime Assets/Data directory is missing. Build/supply client assets first.' }
-    foreach ($target in @($clientDirectory,(Join-Path $clientDirectory 'Assets'),(Split-Path -Parent $path),$path)) {
-        if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail 'Client runtime settings must not use reparse points.' }
-    }
     # Only public client fields go to the client's existing runtime file; source assets stay untouched.
     $public = @{ authUrl=$client.authUrl; googleClientId=$client.googleClientId; townCaFile=$client.townCaFile; servers=$servers; playerName=$client.playerName; characterId=$client.characterId }
     [IO.File]::WriteAllText($path, ($public | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
@@ -612,19 +658,13 @@ function Wait-Server([string] $name, [int[]] $ports, [int] $seconds, [string] $a
 }
 
 try {
-    foreach ($name in @('AuthServer', 'TownServer')) { Require-File (Join-Path $serverDirectory ($name + '.exe')) ($name + ' Debug x64 executable') }
-    Require-File (Join-Path $roomDirectory 'GameRoomServer.exe') 'GameRoomServer Debug x64 executable'
-    foreach ($dependency in @('libssl-3-x64.dll','libcrypto-3-x64.dll')) {
-        Require-File (Join-Path $roomDirectory $dependency) ('GameRoomServer runtime ' + $dependency + '; rebuild GameRoomServer Debug x64')
-    }
-    Require-File (Join-Path $clientDirectory 'ActionRPGClient.exe') 'ActionRPGClient Debug x64 executable'
     $script:curl = (Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue).Source
     if (!$script:curl) { Fail 'curl.exe is required for the verified Auth HTTPS readiness check.' }
 
     $required = $script:required
     Assert-PortsFree @(8443,7777,7780)
-    foreach ($name in @('AuthServer','TownServer','GameRoomServer')) {
-        if (Get-Process -Name $name -ErrorAction SilentlyContinue) { Fail "$name is already running. Close it manually before setup or launch." }
+    foreach ($name in @('AuthServer','TownServer','GameRoomServer','ActionRPGClient')) {
+        if (Get-Process -Name $name -ErrorAction SilentlyContinue) { Fail "$name is already running. Close it manually before setup, build or launch." }
     }
     Initialize-LocalSettings
     $invalid = $false
@@ -677,6 +717,20 @@ try {
     if (!$addresses -or @($addresses | Where-Object { ![Net.IPAddress]::IsLoopback($_) }).Count -gt 0 -or !@($addresses | Where-Object { $_.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork }).Count) { Fail 'ACTIONRPG_AUTH_HOST must resolve to local loopback IPv4 for this launcher.' }
     $authUrl = 'https://{0}:8443/v1/challenges' -f $env:ACTIONRPG_AUTH_HOST
 
+    $script:launchStage = 'Preserving validated public client settings before build'
+    Supply-ClientSettings -ValidateOnly
+    try { Build-LocalProjects }
+    finally {
+        # A partially failed build can already have copied the source's empty AuthClient.json.
+        if (Test-Path -LiteralPath (Join-Path $clientDirectory 'Assets\Data') -PathType Container) { Supply-ClientSettings }
+    }
+    $script:launchStage = 'Checking executable/runtime files after build'
+    foreach ($name in @('AuthServer', 'TownServer')) { Require-File (Join-Path $serverDirectory ($name + '.exe')) ($name + ' Debug x64 executable') }
+    Require-File (Join-Path $roomDirectory 'GameRoomServer.exe') 'GameRoomServer Debug x64 executable'
+    foreach ($dependency in @('libssl-3-x64.dll','libcrypto-3-x64.dll')) {
+        Require-File (Join-Path $roomDirectory $dependency) ('GameRoomServer runtime ' + $dependency + '; rebuild GameRoomServer Debug x64')
+    }
+    Require-File (Join-Path $clientDirectory 'ActionRPGClient.exe') 'ActionRPGClient Debug x64 executable'
     Require-File (Join-Path $roomDirectory 'ServerOptionFile\CoreOption.txt') 'room runtime ServerOptionFile/CoreOption.txt'
     $brokerPath = Join-Path $roomDirectory 'ServerOptionFile\SessionBrokerOption.txt'
     Require-File $brokerPath 'room runtime ServerOptionFile/SessionBrokerOption.txt'

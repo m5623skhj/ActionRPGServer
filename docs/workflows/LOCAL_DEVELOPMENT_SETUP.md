@@ -110,72 +110,35 @@ ON actionrpg.* TO 'actionrpg_migrator'@'127.0.0.1';
 
 ## 4. 신규 DB 생성과 마이그레이션
 
-Auth·Town·Room과 해당 DB를 사용하는 서비스를 정지한다. `-ServicesStopped`는 운영자의
-정지 확인이며 프로세스를 자동으로 종료하지 않는다. 신규 DB는 `-CreateDatabase`로 만들 수 있다.
+Auth·Town·Room과 해당 DB를 사용하는 서비스를 정지한다. `-ServicesStopped`를 생략하면 콘솔에서
+`Y` 또는 `y`로 정지를 확인한다. 프로세스를 자동으로 종료하지 않는다. 신규 DB는 `-CreateDatabase`로 만들 수 있다.
 이미 데이터가 있는 DB를 초기화하거나 복제하는 명령이 아니다.
 
-다음 전체 예제는 **서버 저장소 루트의 64비트 Windows PowerShell 5.1**에서 실행한다.
-드라이버 번호는 해당 PC에서 조회된 목록을 기준으로 고른다. 암호 입력은 별도 자격 증명 창을 열지 않는다.
-로컬 예제의 `SSLMODE=REQUIRED`는 암호화 연결을 요구한다. 원격 DB의 CA·호스트 검증 정책은 별도로
-정하고 ODBC 옵션에 반영한다.
+`Tool\Database` 폴더에서 **UpMigration.bat을 실행**하면 된다. 콘솔에서 DB 이름(기본 `actionrpg`),
+서버 종료 확인(`Y` 또는 `y`), 호스트(기본 `127.0.0.1`), 포트(기본 `3306`), 마이그레이션 계정(기본
+`actionrpg_migrator`), 비밀번호를 입력한다. 기본값은 Enter로 선택한다. 설치된 64비트 MySQL Unicode
+ODBC 드라이버가 하나면 자동 선택하고 여러 개면 번호를 묻는다. 비밀번호는 숨김 입력으로 받고 저장하지 않는다.
+인자 없이 실행한 배치는 종료 전에 키 입력을 기다리므로 결과를 확인할 수 있다.
 
 ```powershell
-Add-Type -AssemblyName System.Data
-if (![Environment]::Is64BitProcess -or $PSVersionTable.PSEdition -ne 'Desktop') {
-    throw '64비트 Windows PowerShell 5.1에서 실행하세요.'
-}
-$drivers = @(Get-OdbcDriver -Platform '64-bit' |
-    Where-Object { $_.Name -match 'MySQL.*Unicode' })
-if (!$drivers.Count) { throw '64비트 MySQL Unicode ODBC 드라이버가 없습니다.' }
-for ($index = 0; $index -lt $drivers.Count; $index++) {
-    Write-Host ('[{0}] {1}' -f ($index + 1), $drivers[$index].Name)
-}
-$choice = Read-Host '드라이버 번호'
-$driverNumber = 0
-if (![int]::TryParse($choice, [ref]$driverNumber) -or
-    $driverNumber -lt 1 -or $driverNumber -gt $drivers.Count) {
-    throw '목록의 번호를 입력하세요.'
-}
-$connection = [System.Data.Odbc.OdbcConnectionStringBuilder]::new()
-$previousConnection = $env:ACTIONRPG_MIGRATION_CONNECTION_STRING
-$securePassword = $null
-$passwordPointer = [IntPtr]::Zero
-try {
-    $connection.set_Driver([string]$drivers[$driverNumber - 1].Name)
-    $connection['SERVER'] = '127.0.0.1'
-    $connection['PORT'] = '3306'
-    $connection['DATABASE'] = 'actionrpg'
-    $connection['UID'] = 'actionrpg_migrator'
-    $connection['SSLMODE'] = 'REQUIRED'
-    $securePassword = Read-Host '마이그레이션 계정 비밀번호' -AsSecureString
-    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-    $connection['PWD'] = [string][Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
-    $passwordPointer = [IntPtr]::Zero
-    $env:ACTIONRPG_MIGRATION_CONNECTION_STRING = $connection.ConnectionString
-    $migrationPath = Join-Path (Get-Location) 'Tool\Database\Migrate.ps1'
-    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-        -NoProfile -ExecutionPolicy RemoteSigned -File $migrationPath `
-        -Direction Up -Database actionrpg -CreateDatabase -ServicesStopped
-    $migrationExitCode = $LASTEXITCODE
-    Write-Host "마이그레이션 종료 코드: $migrationExitCode"
-    if ($migrationExitCode -ne 0) { throw '적용을 중단했습니다. 실패 이력과 실제 구조를 먼저 확인하세요.' }
-}
-finally {
-    $env:ACTIONRPG_MIGRATION_CONNECTION_STRING = $previousConnection
-    if ($passwordPointer -ne [IntPtr]::Zero) {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
-    }
-    if ($null -ne $securePassword) { $securePassword.Dispose() }
-    $connection.Clear()
-    $previousConnection = $null
-}
+# Tool\Database 폴더에서 기존 DB를 최신화
+.\UpMigration.bat
+
+# DB가 없는 새 PC에서만 명시적으로 생성
+.\UpMigration.bat -Database actionrpg -CreateDatabase
+
+# 최신 이력 하나만 롤백 (해당 버전의 데이터 보존 조건을 만족해야 함)
+.\DownMigration.bat
 ```
+
+`ACTIONRPG_MIGRATION_CONNECTION_STRING`이 이미 있으면 입력 대신 사용한다. 원격 DB의 CA·호스트
+검증 옵션도 이 연결 문자열로 지정한다. 대화형 연결은 `SSLMODE=REQUIRED`로 암호화를 요구한다.
+자동화에서는 연결 환경 변수와 `-Database actionrpg -ServicesStopped`를 함께 제공하면 추가 입력이 없다.
 
 기대 결과는 `Complete. Active version: V000005.`과 종료 코드 **0**이다. 기반 V000000 다음에
 V000001→V000002→V000003→V000004→V000005가 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
 실패 출력이 있으면 일반 Up을 반복하지 말고 아래 문제 해결 절차를 따른다.
-이 예제는 실행 정책을 자식 프로세스에만 지정한다. 조직의 상위 정책을 덮어쓰는 기능은 아니다.
+배치는 실행 정책 RemoteSigned를 자식 PowerShell에만 지정한다. 조직의 상위 정책을 덮어쓰는 기능은 아니다.
 [실행 정책 범위 설명](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy?view=powershell-5.1).
 
 마이그레이션 성공 후 관리자로 기존 EXECUTE를 유지하고 **새 V5 검사와 Town 공개 프로시저 EXECUTE**를 추가한다.
@@ -212,7 +175,10 @@ SHOW GRANTS FOR 'actionrpg_auth'@'127.0.0.1';
 
 ## 5. 서버와 클라이언트 빌드
 
-Visual Studio에서 두 솔루션을 각각 **Debug / x64로 다시 빌드**한다. 명령줄에서는 Visual Studio
+`RunLocalTest.bat`은 실행 시 서버 솔루션과 클라이언트 게임 프로젝트를 **Debug / x64로 증분 빌드**한다.
+vswhere로 서버 v145와 클라이언트 v143용 MSBuild를 각각 찾으며, 빌드 실패 시 서버를 시작하지 않는다.
+프로젝트의 기존 복사 단계가 실행 Data·Assets·DLL을 준비하고 실행기가 공개 인증 설정을 복원한다.
+직접 빌드하려면 Visual Studio에서 두 솔루션을 각각 **Debug / x64로 다시 빌드**한다. 명령줄에서는 Visual Studio
 개발자 셸의 MSBuild를 사용하며 서버 예시는 [대표 README](../../README.md#빌드-준비와-출력)에 있다.
 vcpkg manifest 복원과 app-local DLL 복사가 성공해야 한다. 최신 소스를 받는 것과 EXE가 갱신되는 것은 다르다.
 
@@ -269,12 +235,13 @@ Google secret은 ID와 짝지어 클라이언트 환경에만 전달되고 로�
 |---|---|
 | 드라이버 대입 시 `PSObject`를 `String`으로 변환할 수 없음 | 목록의 실제 Name을 문자열로 변환하고 `.set_Driver([string]...)` 사용. 빈 번호나 드라이버 버전 숫자만 입력하지 않음 |
 | 비밀번호 입력에서 멈춤·자격 증명 창이 안 보임 | 별도 `Get-Credential` 창 대신 위 예제와 실행기의 `Read-Host -AsSecureString` 사용. 콘솔에서 숨김 입력 후 Enter |
-| `Migrate.ps1` 실행 정책 오류 | 위 예제의 Windows PowerShell 자식 프로세스에 `-ExecutionPolicy RemoteSigned` 지정. 상위 조직 정책이면 해당 정책을 확인 |
+| `Migrate.ps1` 실행 정책 오류 | 배치는 자식 PowerShell에 `-ExecutionPolicy RemoteSigned`를 지정함. 상위 조직 정책 또는 다운로드 파일 차단 여부를 확인 |
 | `GRANT` 오류 1410: user 생성 불가 | 대상 `'사용자'@'호스트'` 계정을 먼저 생성. MySQL 8에서 GRANT를 계정 생성 대신 사용하지 않음 |
 | V0/V1 `Constraints mismatch` | 최신 실행기와 Auth 소스 사용. MySQL CHECK 메타데이터의 문자열 escape와 `OCTET_LENGTH`/`LENGTH` 표기 차이를 비교 단계에서만 정규화. 이미 FAILED가 남았다면 아래 진단·복구 절차로 이동 |
 | private settings directory에서 `PrivilegeNotHeldException` | 최신 실행기는 생성 시 ACL을 적용하고 검증함. 기존 디렉터리의 소유자·허용 주체를 확인하며 관리자 실행이나 전체 사용자 접근 허용으로 우회하지 않음 |
 | 64-bit MySQL Unicode ODBC driver not registered | `Get-OdbcDriver -Platform '64-bit'`로 실제 등록명 확인. 32비트/ANSI 드라이버와 혼동하지 않음. 최신 실행기는 연결 문자열 Driver의 중괄호 표기를 제거해 등록명과 대조 |
 | Auth TLS 오류, curl 60 `revocation status is unknown` | 현재 사용자 CA 신뢰·localhost SAN·CA 경로 확인. 최신 실행기의 로컬 검사에는 `--ssl-revoke-best-effort`가 적용됨. `--insecure`나 전체 인증서 검증 해제로 대체하지 않음 |
+| Auth listening 로그 뒤 종료 코드 1 | 이전 소스는 실제 bind 전에 listening을 출력했음. 최신 실행기로 빌드한 뒤 서버 콘솔의 bind/listen/accept stage와 숫자 WSA_error 확인. 8443 점유·Windows 제외 포트 범위·로컬 보안 정책을 검토하며 임의 포트 변경이나 관리자 실행으로 우회하지 않음 |
 | Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=5, 새 검사/로그인/상태 조회 EXECUTE 권한, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
 | `ODBC driver substituted the connection timeout` | 이전 공통 ODBC 코드의 MySQL 비지원 속성 검사. 최신 소스의 로그인 타임아웃 검사로 Auth와 Town을 모두 다시 빌드 |
 | Room 출력 없이 종료 | EXE 옆 해당 빌드의 OpenSSL DLL 두 개와 Debug C++ 런타임 확인. Room과 의존 프로젝트를 재빌드해 app-local 배포. 최신 프로젝트는 후속 빌드의 DLL 삭제도 방지 |
