@@ -796,3 +796,17 @@ DB의 이 확정은 새 소유자의 조회로 반영되며 효과를 새 룸에
 V6 SQL과 신규 공개 4프로시저/검사 권한, claim/save/release 재부여 절차는
 [DB 마이그레이션 문서](../../docs/workflows/DATABASE_MIGRATIONS.md)를 따른다.
 이번 구현은 소스·JSON/XML·프로토콜 정적 대조만 수행했으며 빌드·실행·DB 적용·전투 테스트는 수행하지 않았다.
+
+### HUD의 Town 자원 출처
+
+정식 원본은 GameRoomServer/Data/Combat.json이다. Town 프로젝트의 CopyTownData가 이 파일을
+런타임 Data/Combat.json로 복사하고, Shared PlayerResourceCatalog가 player.maxHp/maxMp와
+캐릭터별 선택 maxMp override를 읽는다. Town 저장소에 독립된 Combat 데이터 사본을 만들지 않는다.
+현재 최대 HP/MP는 정의상 100이며 Town 캐릭터 입장 때 current 값도 그 정의 최대에서 시작한다.
+별도 Town 귀환·맵 이동마다 회복하는 로직이나 Dungeon current 자원 이관은 추가하지 않았다.
+
+기존 SkillStateResponse JSON에 hp/maxHp/mp/maxMp를 추가한다. MP 정의가 없으면 두 MP 필드가
+null이고 임의 100 fallback은 없다. 잘못된 수치·없는 파일·중복/누락/모르는 캐릭터 정의는 기동 오류다.
+이 메시지의 자원은 Town HUD에만 사용하며 Dungeon 진입 후 늦은 응답이 Room HP/MP를 덮어쓰면 안 된다.
+MP 소모·회복·영속 저장·새 패킷·DB 변경은 포함하지 않는다. 기존 Use 권한·쿨타임·Pending 정책은 유지한다.
+배포 시 Town 런타임에도 같은 원본 Combat.json을 제공해야 한다. 이번 변경의 빌드·실행 확인은 수행하지 않았다.

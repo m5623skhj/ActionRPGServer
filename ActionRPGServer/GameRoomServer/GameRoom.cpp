@@ -37,6 +37,7 @@ namespace GameRoomServer
         dungeonWorld["skillTrees"] = combatDefinition->skillTrees.source;
         dungeonWorld["combatRules"] = {
             { "version", COMBAT_PROTOCOL_VERSION }, { "maxHp", combatDefinition->playerMaxHp },
+            { "maxMp", combatDefinition->playerMaxMp ? nlohmann::json(*combatDefinition->playerMaxMp) : nlohmann::json(nullptr) },
             { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
             { "walkSpeed", combatDefinition->walkSpeed }, { "runSpeed", combatDefinition->runSpeed },
             { "shotPrepareSeconds", combatDefinition->shotPrepareSeconds },
@@ -84,6 +85,9 @@ namespace GameRoomServer
                 monster["instanceId"] = instanceId;
                 monster["hp"] = monsterDefinition->maxHp;
                 monster["maxHp"] = monsterDefinition->maxHp;
+                monster["name"] = monsterDefinition->name;
+                monster["level"] = monsterDefinition->level ? nlohmann::json(*monsterDefinition->level) : nlohmann::json(nullptr);
+                monster["isBoss"] = monsterDefinition->isBoss;
             }
         for (const auto& room : definition->configuration.at("rooms"))
             if (room.at("kind") == "boss")
@@ -100,17 +104,26 @@ namespace GameRoomServer
             player.walkSpeed = combatDefinition->walkSpeed;
             player.runSpeed = combatDefinition->runSpeed;
             player.actor.hp = combatDefinition->playerMaxHp;
+            player.mp = player.maxMp = combatDefinition->playerMaxMp;
             players.emplace(id, std::move(player));
             dungeonWorld["players"][std::to_string(id)] = spawn;
+            dungeonWorld["players"][std::to_string(id)]["hp"] = combatDefinition->playerMaxHp;
+            dungeonWorld["players"][std::to_string(id)]["maxHp"] = combatDefinition->playerMaxHp;
+            dungeonWorld["players"][std::to_string(id)]["mp"] = combatDefinition->playerMaxMp
+                ? nlohmann::json(*combatDefinition->playerMaxMp) : nlohmann::json(nullptr);
+            dungeonWorld["players"][std::to_string(id)]["maxMp"] = dungeonWorld["combatRules"]["maxMp"];
+            dungeonWorld["players"][std::to_string(id)]["lastHitSequence"] = 0;
+            dungeonWorld["players"][std::to_string(id)]["lastHitMonsterId"] = 0;
         }
         const auto snapshot = std::make_shared<const std::string>(dungeonWorld.dump());
-        for (const PlayerId id : inExpectedPlayerIds) initialWorlds.emplace(id, snapshot);
+        for (const PlayerId id : inExpectedPlayerIds) initialWorlds.try_emplace(id, snapshot);
     }
 
     std::shared_ptr<const std::string> GameRoom::GetWorldFor(const PlayerId inPlayerId) const
     {
         const auto iterator = initialWorlds.find(inPlayerId);
-        return iterator == initialWorlds.end() ? nullptr : iterator->second;
+        return iterator == initialWorlds.end() ? nullptr
+            : iterator->second.load(std::memory_order_acquire);
     }
 
     void GameRoom::UpdateInput(const PlayerId inPlayerId,
@@ -309,6 +322,14 @@ namespace GameRoomServer
                 self->players.at(inPlayerId).characterId = inCharacterId;
                 self->players.at(inPlayerId).actor.hitRecovery = self->combatDefinition->characters.at(inCharacterId).hitRecovery;
                 auto& player = self->players.at(inPlayerId);
+                player.mp = player.maxMp = self->combatDefinition->characters.at(inCharacterId).maxMp;
+                auto& spawn = self->dungeonWorld["players"][std::to_string(inPlayerId)];
+                spawn["mp"] = player.mp ? nlohmann::json(*player.mp) : nlohmann::json(nullptr);
+                spawn["maxMp"] = spawn["mp"];
+                // The accepted character may override MP; its initial world must agree with snapshots.
+                const auto snapshot = std::make_shared<const std::string>(self->dungeonWorld.dump());
+                for (auto& [id, world] : self->initialWorlds)
+                    world.store(snapshot, std::memory_order_release);
                 player.progression = std::move(runtime.progression);
                 player.persistentCharacterId = runtime.characterId;
                 player.ownerGeneration = runtime.ownerGeneration;

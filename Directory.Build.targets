@@ -12,4 +12,31 @@
     <Error Condition="'$(Platform)' != 'x64'" Text="MultiSocketRUDP integration requires the x64 platform." />
     <Error Condition="!Exists('$(RudpRoot)external\CommonCode\Common\NetServerSerializeBuffer.h')" Text="Initialize dependencies: git submodule update --init --recursive" />
   </Target>
+  <!-- Auth and Town share an output directory; both must retain these DLLs during incremental cleanup. -->
+  <Target Name="PreserveServerOpenSslRuntime" BeforeTargets="_CleanGetCurrentAndPriorFileWrites"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(TargetDir)' != '' And ('$(MSBuildProjectName)' == 'AuthServer' Or '$(MSBuildProjectName)' == 'TownServer' Or '$(MSBuildProjectName)' == 'GameRoomServer')">
+    <ItemGroup>
+      <FileWrites Include="$(TargetDir)libssl-3-x64.dll;$(TargetDir)libcrypto-3-x64.dll" />
+    </ItemGroup>
+  </Target>
+  <!-- Use the linker's vcpkg tree/configuration, including builds that skip linking or have lost a DLL. -->
+  <Target Name="CopyServerOpenSslRuntime" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' And ('$(MSBuildProjectName)' == 'AuthServer' Or '$(MSBuildProjectName)' == 'TownServer' Or '$(MSBuildProjectName)' == 'GameRoomServer')">
+    <Error Condition="'$(_ZVcpkgCurrentInstalledDir)' == ''"
+           Text="Server OpenSSL runtime deployment requires the existing vcpkg MSBuild integration." />
+    <Error Condition="'$(_ZVcpkgNormalizedConfiguration)' != 'Debug' And '$(_ZVcpkgNormalizedConfiguration)' != 'Release'"
+           Text="Server OpenSSL runtime deployment requires a Debug or Release vcpkg configuration." />
+    <Error Condition="'$(TargetDir)' == ''"
+           Text="Server OpenSSL runtime deployment requires the actual executable output directory." />
+    <ItemGroup>
+      <ServerOpenSslRuntimeFiles Include="$(_ZVcpkgCurrentInstalledDir)$(_ZVcpkgConfigSubdir)bin\libssl-3-x64.dll" />
+      <ServerOpenSslRuntimeFiles Include="$(_ZVcpkgCurrentInstalledDir)$(_ZVcpkgConfigSubdir)bin\libcrypto-3-x64.dll" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(ServerOpenSslRuntimeFiles.Identity)')"
+           Text="Required server OpenSSL runtime DLL is missing: %(ServerOpenSslRuntimeFiles.Identity). Restore OpenSSL through the configured vcpkg installation." />
+    <Copy SourceFiles="@(ServerOpenSslRuntimeFiles)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <FileWrites Include="@(ServerOpenSslRuntimeFiles-&gt;'$(TargetDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
 </Project>

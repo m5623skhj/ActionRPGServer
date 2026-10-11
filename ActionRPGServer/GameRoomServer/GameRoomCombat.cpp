@@ -311,7 +311,7 @@ namespace GameRoomServer
             }
             if (!visible) continue;
             inPlayer.slide.hitIds.insert(id);
-            ApplyDamage(monster.actor, inPlayer.slide.damage, false, &inPlayer.actor, inPlayer.slide.hitstopSeconds);
+            ApplyMonsterDamage(id, inPlayer.slide.damage, false, &inPlayer, inPlayer.slide.hitstopSeconds);
             monster.actionStarted = monster.actionComplete = false;
         }
     }
@@ -439,6 +439,20 @@ namespace GameRoomServer
             std::chrono::steady_clock::now().time_since_epoch()).count());
         inActor.actionDeltaSeconds = TICK_SECONDS;
         hitstopChanged = true;
+    }
+
+    // Only actual HP loss selects a HUD target. The strand sequence orders multiple hits within a tick.
+    void GameRoom::ApplyMonsterDamage(std::uint64_t inMonsterId, std::uint32_t inDamage, bool inAirborne,
+        PlayerState* inAttacker, float inHitstopSeconds)
+    {
+        auto& victim = monsters.at(inMonsterId).actor;
+        const auto beforeHp = victim.hp;
+        ApplyDamage(victim, inDamage, inAirborne, inAttacker ? &inAttacker->actor : nullptr, inHitstopSeconds);
+        if (victim.hp < beforeHp && inAttacker)
+        {
+            inAttacker->lastHitSequence = ++monsterHitSequence;
+            inAttacker->lastHitMonsterId = inMonsterId;
+        }
     }
 
     // All callers pass the actual attacking actor, or resolve a player projectile's owner on the strand.
@@ -870,7 +884,7 @@ namespace GameRoomServer
                     if (nearestId != 0)
                     {
                         auto& victim = monsters.at(nearestId);
-                        ApplyDamage(victim.actor, spawned.damage, false, &inPlayer.actor, spawned.hitstopSeconds);
+                        ApplyMonsterDamage(nearestId, spawned.damage, false, &inPlayer, spawned.hitstopSeconds);
                         victim.actionStarted = victim.actionComplete = false;
                         spawned.remainingDistance = 0;
                     }
@@ -938,9 +952,9 @@ namespace GameRoomServer
                 {
                     auto& victim = monsters.at(nearestId);
                     const auto owner = players.find(projectile.ownerId);
-                    ActorState* attacker = owner != players.end() && enteredPlayers.contains(owner->first)
-                        && owner->second.mapId == projectile.mapId ? &owner->second.actor : nullptr;
-                    ApplyDamage(victim.actor, projectile.damage, false, attacker, projectile.hitstopSeconds);
+                    PlayerState* attacker = owner != players.end() && enteredPlayers.contains(owner->first)
+                        && owner->second.mapId == projectile.mapId ? &owner->second : nullptr;
+                    ApplyMonsterDamage(nearestId, projectile.damage, false, attacker, projectile.hitstopSeconds);
                     victim.actionStarted = victim.actionComplete = false;
                     projectile.remainingDistance = 0;
                 }
@@ -1063,6 +1077,10 @@ namespace GameRoomServer
                     { "jumpSeconds", player.jumpSeconds },
                     { "moveSequence", player.sequence } });
                 auto& record = snapshot["players"].back();
+                record["mp"] = player.mp ? nlohmann::json(*player.mp) : nlohmann::json(nullptr);
+                record["maxMp"] = player.maxMp ? nlohmann::json(*player.maxMp) : nlohmann::json(nullptr);
+                record["lastHitSequence"] = player.lastHitSequence;
+                record["lastHitMonsterId"] = player.lastHitMonsterId;
                 addActorTiming(record, player.actor);
                 record["characterId"] = player.characterId; record["skillSequence"] = player.skillSequence;
                 record["persistentCharacterId"] = std::to_string(player.persistentCharacterId);
@@ -1110,6 +1128,10 @@ namespace GameRoomServer
                     { "actionType", type }, { "actionStarted", monster.actionStarted }, { "actionComplete", monster.actionComplete },
                     { "actionSeconds", monster.actionSeconds }, { "animationId", animationId } });
                 addActorTiming(snapshot["monsters"].back(), monster.actor);
+                auto& record = snapshot["monsters"].back();
+                record["name"] = monster.definition->name;
+                record["level"] = monster.definition->level ? nlohmann::json(*monster.definition->level) : nlohmann::json(nullptr);
+                record["isBoss"] = monster.definition->isBoss;
             }
             for (const auto& projectile : self->projectiles)
                 if (projectile.mapId == mapId) snapshot["projectiles"].push_back({ { "id", projectile.id }, { "ownerId", projectile.ownerId },

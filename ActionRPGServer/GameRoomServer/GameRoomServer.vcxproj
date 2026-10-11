@@ -181,6 +181,7 @@
     <ClInclude Include="..\Shared\ItemUseIdentity.h" />
     <ClInclude Include="CombatDefinition.h" />
     <ClInclude Include="..\Shared\PlayerSkillCatalog.h" />
+    <ClInclude Include="..\Shared\PlayerResourceCatalog.h" />
     <ClInclude Include="MonsterDefinition.h" />
     <ClInclude Include="RoomManager.h" />
     <ClInclude Include="RudpPrerequisites.h" />

@@ -1,4 +1,5 @@
 #include "CombatDefinition.h"
+#include "../Shared/PlayerResourceCatalog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -57,8 +58,10 @@ namespace GameRoomServer
         Require(source.at("version") == 3, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
         const auto& player = source.at("player");
-        Keys(player, { "maxHp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });
-        result->playerMaxHp = Integer(player.at("maxHp"), 1, 1000000);
+        Keys(player, { "maxHp", "maxMp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });
+        const auto resources = ActionRPG::Combat::PlayerResourceCatalog::Parse(player);
+        result->playerMaxHp = resources.defaults.maxHp;
+        result->playerMaxMp = resources.defaults.maxMp;
         result->walkSpeed = Number(player.at("walkSpeed"), 1, 2000);
         result->runSpeed = Number(player.at("runSpeed"), player.at("walkSpeed").get<double>(), 2000);
         result->bodyHeight = Number(player.at("bodyHeight"), 1, 1000);
@@ -148,7 +151,7 @@ namespace GameRoomServer
             && !characters.empty() && characters.size() <= 256, "Every character needs one combat definition.");
         for (const auto& character : characters)
         {
-            Keys(character, { "characterId", "attackPower", "hitRecovery", "slide" });
+            Keys(character, { "characterId", "attackPower", "hitRecovery", "slide", "maxMp" });
             const auto characterId = Integer(character.at("characterId"), 1, 1000000);
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
@@ -160,6 +163,7 @@ namespace GameRoomServer
                     Number(slide.at("distancePerRunSpeedSeconds"), 0.05, 5), slide.at("motionId").get<std::string>(),
                     NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))) } };
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
+            definition.maxMp = resources.Get(characterId).maxMp;
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");
         }
         return result;

@@ -406,3 +406,43 @@ directionY·speed·radius·age는 이 기존 확장에서 읽으며 클라이언
 등록된 원래 roomServerId를 통한 조정은 gameplay 입장 mapping의 종료와 분리되어 있다.
 소유권·실패·쿨타임·재접속 계약은 [Town 문서](../TownServer/DEVELOPMENT.md#v6-아이템-사용-hp-회복과-직선-투척)를 따른다.
 서버와 클라이언트를 함께 갱신해야 하며 이번 변경의 빌드·전투 실행 검증은 수행하지 않았다.
+
+## HUD 자원과 마지막 명중 대상
+
+초기 월드의 맵별 몬스터와 전투 JSON 몬스터 행은 `name`, `level`(정수 또는 null), `isBoss`(bool)를 담는다.
+이름은 `.ai.json`, level/isBoss는 서버 MonsterCatalog 항목에서 읽는다. Dummy·갑옷병은 Lv1 일반,
+수호자는 Lv5 보스다. 기존 bosses 집합의 던전 클리어 조건은 유지하며 HUD 등급에는 사용하지 않는다.
+보스 방의 일반 몬스터도 카탈로그 isBoss=false이면 일반 표시를 사용한다. HP/maxHp는 기존 actor 필드다.
+
+Combat.json의 `player.maxMp`는 선택 정수(1~1000000)이고 현재 값은 100이다.
+`player.characters` 항목의 선택 `maxMp`가 기본값을 재정의하며, 양쪽 모두 없으면 MP는 미정이다.
+Shared PlayerResourceCatalog가 Town과 Room의 동일 자원 정의 해석을 담당한다. 룸 캐릭터 입장 때
+current MP를 그 캐릭터의 유효 maxMp로 초기화한다. 초기 world 플레이어는 hp/maxHp와 0/0의
+lastHitSequence/lastHitMonsterId도 명시한다. 초기 world 플레이어와 전투 JSON은 mp/maxMp를
+동시에 정수 또는 null로 전달한다. 초기 world는 캐릭터 확정 후 자원 값을 갱신하고, 다른 executor의
+읽기는 고정 캐시 슬롯의 공유 포인터 atomic load/store로 동기화한다. MP 소모·회복·DB 저장은 없다.
+
+실제 몬스터 HP가 감소할 때만 공격자에 `lastHitSequence`와 `lastHitMonsterId`(uint64)를 기록한다.
+일반 사격의 몸~총구 검사, 이동 투사체(기본/스킬/Stone), 직접 공격 스킬, 슬라이딩을 같은 함수로 처리한다.
+룸 strand의 단조증가 피해 적용 순번으로 같은 tick 안의 복수 명중도 구분한다. 배열 순서·반응 sequence·
+다른 플레이어 공격·헛공격에서 대상을 추정하지 않는다. 최초 값은 0/0이며 JSON 플레이어 행에도 포함한다.
+마지막 대상이 사망해도 이전 대상 ID로 돌아가지 않는다. 최신 대상 HP=0, 맵 이동, 대상/로컬 actor 부재에는
+클라이언트가 상단 창을 숨긴다. 맵 이동 뒤 같은 이전 sequence가 대상을 다시 선택하지 않아야 한다.
+
+실시간 기본 frame·SKL1·IUS1·ITP1 뒤에 `HUD1`을 추가한다. 기존 태그 내부 순서와 전투 version=3은 유지한다.
+
+| 순서 | 형식 |
+|---|---|
+| 플레이어 수 | uint16 |
+| 플레이어 반복 행 | playerId uint64, mpKnown uint8, mp uint32, maxMp uint32, lastHitSequence uint64, lastHitMonsterId uint64 |
+| 몬스터 수 | uint16 |
+| 몬스터 반복 행 | instanceId uint64, levelKnown uint8, level uint32, isBoss uint8, name text16 |
+
+모든 정수는 little endian이다. text16은 UTF-8 길이 uint16과 해당 바이트다. known 플래그는 0/1이며
+미정 MP·level의 숫자 자리는 0이다. known=0의 0을 실제 MP/level로 표시하지 않는다. known MP는
+0<=mp<=maxMp, maxMp>=1이며 known level>=1이다. JSON null과 같은 의미로 처리한다.
+HP는 기본 actor 레코드에서 읽는다. 서버의 기존 frame 48KiB 한도는 유지하고 초과 frame은 잘라 보내지 않는다.
+
+최신 RT를 적용한 뒤 늦은 JSON이 MP나 마지막 명중 sequence/대상을 되돌리지 않도록 한다.
+룸 교체 시 sequence 기준을 새로 시작한다. Town SkillState의 자원은 Town HUD 전용이며 Dungeon의
+Room 자원 상태를 덮어쓰지 않는다. 서버·클라이언트를 함께 갱신해야 하며 빌드/실제 HUD 실행은 확인하지 않았다.

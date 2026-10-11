@@ -178,7 +178,7 @@ namespace GameRoomServer
                         static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
                         * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
                         static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
-                    ApplyDamage(monster.actor, damage, false, &inPlayer.actor, execution.at("hitstopSeconds").get<float>());
+                    ApplyMonsterDamage(id, damage, false, &inPlayer, execution.at("hitstopSeconds").get<float>());
                     monster.actionStarted = monster.actionComplete = false;
                 }
             }

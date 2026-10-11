@@ -11,6 +11,7 @@
 #include "../Shared/CharacterRuntimeState.h"
 #include "Database/CharacterStoreProcedure.h"
 #include "ItemUseService.h"
+#include "../Shared/PlayerResourceCatalog.h"
 
 #include <asio.hpp>
 
@@ -153,6 +154,9 @@ namespace TownServer::Domain
             bool saving{};
             bool itemUsePending{}, cooldownsComplete{};
             ActionRPG::Items::Json itemCooldowns;
+            ActionRPG::Combat::PlayerResourceLimits resourceLimits;
+            std::uint32_t hp{};
+            std::optional<std::uint32_t> mp;
         };
 
         struct Admission
@@ -234,6 +238,7 @@ namespace TownServer::Domain
         const ActionRPG::PlayerSkills::Catalog playerSkills;
         const ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
         const ActionRPG::Items::Catalog itemsCatalog;
+        const ActionRPG::Combat::PlayerResourceCatalog resourceCatalog;
         std::unordered_map<std::uint64_t, std::size_t> characterWork;
         std::unordered_set<std::uint64_t> deferredAdmissionReleases;
         std::unordered_map<std::uint64_t, Persistence::Request> characterReleases;

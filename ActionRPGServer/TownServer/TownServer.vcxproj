@@ -199,6 +199,7 @@
     <ClInclude Include="Database\ItemUseResult.h" />
     <ClInclude Include="Database\ItemUseStoreProcedure.h" />
     <ClInclude Include="ItemUseService.h" />
+    <ClInclude Include="..\Shared\PlayerResourceCatalog.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />
@@ -209,6 +210,9 @@
     <None Include="Data\TownMapHillside.json" />
     <None Include="Data\TownMapMarket.json" />
     <None Include="DEVELOPMENT.md" />
+    <None Include="..\GameRoomServer\Data\Combat.json">
+      <Link>Data\Combat.json</Link>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyTownData" AfterTargets="Build">
@@ -218,6 +222,8 @@
     <Copy SourceFiles="@(TownDataFiles)"
           DestinationFiles="@(TownDataFiles-&gt;'$(OutDir)Data\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)..\GameRoomServer\Data\Combat.json"
+          DestinationFiles="$(OutDir)Data\Combat.json" SkipUnchangedFiles="true" />
   </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,6 +22,8 @@ namespace GameRoomServer
         std::string id;
         std::string name;
         std::uint32_t maxHp{};
+        std::optional<std::uint32_t> level;
+        bool isBoss{};
 
         [[nodiscard]] const nlohmann::json& GetAi() const;
         [[nodiscard]] const nlohmann::json& GetSkills() const;

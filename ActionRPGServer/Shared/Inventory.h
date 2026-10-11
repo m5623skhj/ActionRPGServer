@@ -126,7 +126,7 @@ namespace ActionRPG::Items
                             Rules::Require(item.contains("useRequiredLevel") && item.contains("useCooldownSeconds"),
                                 "Missing item use restrictions.");
                             definition.use.requiredLevel = Rules::Integer(item.at("useRequiredLevel"), 1, 1000000);
-                            definition.use.cooldownSeconds = Rules::Number(item.at("useCooldownSeconds"), 0.001, 3600);
+                            definition.use.cooldownSeconds = static_cast<float>(Rules::Number(item.at("useCooldownSeconds"), 0.001, 3600));
                             if (effect.at("type") == "RestoreHp")
                             {
                                 Rules::Keys(effect, { "type", "amount" });
@@ -140,15 +140,15 @@ namespace ActionRPG::Items
                                 Rules::Require(effect.at("type") == "Throw", "Unsupported consumable effect.");
                                 definition.use.type = Definition::Use::Type::Throw;
                                 definition.use.damage = Rules::Integer(effect.at("damage"), 1, 1000000);
-                                definition.use.speed = Rules::Number(effect.at("speed"), 1, 4000);
-                                definition.use.range = Rules::Number(effect.at("range"), 1, 10000);
-                                definition.use.radius = Rules::Number(effect.at("radius"), 0.1, 100);
-                                definition.use.spawnForward = Rules::Number(effect.at("spawnForward"), 0, 500);
-                                definition.use.spawnHeight = Rules::Number(effect.at("spawnHeight"), 0, 1000);
-                                definition.use.hitstopSeconds = Rules::Number(effect.at("hitstopSeconds"), 0, 10);
+                                definition.use.speed = static_cast<float>(Rules::Number(effect.at("speed"), 1, 4000));
+                                definition.use.range = static_cast<float>(Rules::Number(effect.at("range"), 1, 10000));
+                                definition.use.radius = static_cast<float>(Rules::Number(effect.at("radius"), 0.1, 100));
+                                definition.use.spawnForward = static_cast<float>(Rules::Number(effect.at("spawnForward"), 0, 500));
+                                definition.use.spawnHeight = static_cast<float>(Rules::Number(effect.at("spawnHeight"), 0, 1000));
+                                definition.use.hitstopSeconds = static_cast<float>(Rules::Number(effect.at("hitstopSeconds"), 0, 10));
                                 definition.use.motionId = effect.at("motionId").get<std::string>();
                                 Rules::Require(definition.use.motionId == "AttackFire", "Unsupported item use motion.");
-                                definition.use.motionDurationSeconds = Rules::Number(effect.at("motionDurationSeconds"), 0.05, 2);
+                                definition.use.motionDurationSeconds = static_cast<float>(Rules::Number(effect.at("motionDurationSeconds"), 0.05, 2));
                             }
                         }
                     }
@@ -196,7 +196,7 @@ namespace ActionRPG::Items
                 "Invalid inventory item count.");
             Inventory result;
             std::unordered_set<std::string> ids;
-            std::unordered_set<std::uint32_t> locations;
+            std::unordered_set<std::size_t> locations;
             for (const auto& row : inValue.at("items"))
             {
                 Rules::Keys(row, { "instanceId", "definitionId", "count", "container", "slot" });

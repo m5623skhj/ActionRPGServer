@@ -175,6 +175,23 @@ namespace GameRoomServer
             if (projectile.mapId != inMapId) continue;
             writer.Integer(projectile.id, 8); writer.Text(projectile.itemDefinitionId); writer.Text(projectile.visual);
         }
+        writer.value.append("HUD1", 4); writer.Integer(playerCount, 2);
+        for (const auto& [id, player] : players)
+        {
+            if (player.mapId != inMapId || !enteredPlayers.contains(id) || !player.worldReady) continue;
+            writer.Integer(id, 8); writer.Byte(player.mp.has_value());
+            writer.Integer(player.mp.value_or(0), 4); writer.Integer(player.maxMp.value_or(0), 4);
+            writer.Integer(player.lastHitSequence, 8); writer.Integer(player.lastHitMonsterId, 8);
+        }
+        writer.Integer(monsterCount, 2);
+        if (mapMonsters != monsterIdsByMap.end()) for (const auto id : mapMonsters->second)
+        {
+            const auto& monster = monsters.at(id);
+            writer.Integer(id, 8); writer.Byte(monster.definition->level.has_value());
+            writer.Integer(monster.definition->level.value_or(0), 4); writer.Byte(monster.definition->isBoss);
+            writer.Text(monster.definition->name);
+            if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
+        }
         if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         auto frame = std::make_shared<RealtimeFrame>();
         frame->mapId = inMapId; frame->payload = std::move(writer.value);

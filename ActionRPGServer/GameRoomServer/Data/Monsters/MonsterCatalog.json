@@ -4,17 +4,23 @@
     {
       "dataId": 1,
       "definitionFile": "Dummy.ai.json",
-      "monsterId": "Dummy"
+      "monsterId": "Dummy",
+      "level": 1,
+      "isBoss": false
     },
     {
       "dataId": 2,
       "definitionFile": "rusted_armor_soldier.ai.json",
-      "monsterId": "rusted_armor_soldier"
+      "monsterId": "rusted_armor_soldier",
+      "level": 1,
+      "isBoss": false
     },
     {
       "dataId": 3,
       "definitionFile": "fallen_citadel_warden.ai.json",
-      "monsterId": "fallen_citadel_warden"
+      "monsterId": "fallen_citadel_warden",
+      "level": 5,
+      "isBoss": true
     }
   ]
 }

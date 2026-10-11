@@ -10,6 +10,7 @@
 #include <asio.hpp>
 
 #include <chrono>
+#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -152,6 +153,8 @@ namespace GameRoomServer
             std::chrono::steady_clock::time_point lastInput{};
             ActorState actor;
             bool facingLeft{}, airAttack{}, worldReady{}, jumpPreparing{};
+            std::optional<std::uint32_t> mp, maxMp;
+            std::uint64_t lastHitSequence{}, lastHitMonsterId{};
             std::uint32_t actionSequence{}, shotCount{}, pendingShots{}, airShotCount{};
             std::uint32_t shotSequence{}, jumpSequence{};
             ShotPhase shotPhase{ ShotPhase::None };
@@ -218,6 +221,8 @@ namespace GameRoomServer
         void UpdateActor(ActorState& inActor, float inDeltaSeconds);
         void ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
             ActorState* inAttacker, float inHitstopSeconds);
+        void ApplyMonsterDamage(std::uint64_t inMonsterId, std::uint32_t inDamage, bool inAirborne,
+            PlayerState* inAttacker, float inHitstopSeconds);
         void UpdateMonster(MonsterState& inMonster, float inDeltaSeconds, float inWorldDeltaSeconds);
         void InitializeMonsterBehavior(MonsterState& inMonster, std::uint64_t inInstanceId);
         void SeparateMonsters(float inDeltaSeconds);
@@ -256,7 +261,7 @@ namespace GameRoomServer
         std::unordered_map<std::uint64_t, MonsterState> monsters;
         std::unordered_map<std::string, std::vector<std::uint64_t>> monsterIdsByMap;
         std::unordered_map<PlayerId, PlayerState> players;
-        std::unordered_map<PlayerId, std::shared_ptr<const std::string>> initialWorlds;
+        std::unordered_map<PlayerId, std::atomic<std::shared_ptr<const std::string>>> initialWorlds;
         std::unordered_set<PlayerId> expectedPlayers;
         std::unordered_set<PlayerId> enteredPlayers;
         std::chrono::milliseconds enterTimeout;
@@ -266,6 +271,7 @@ namespace GameRoomServer
         std::vector<ProjectileState> projectiles;
         std::unordered_set<std::uint64_t> bosses;
         std::uint64_t nextProjectileId{ 1 };
+        std::uint64_t monsterHitSequence{};
         bool clearRequested{};
         bool hitstopChanged{};
         State state = State::WaitingForPlayers;

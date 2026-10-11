@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -45,11 +46,13 @@ namespace GameRoomServer
         std::uint32_t attackPower{};
         float hitRecovery{};
         SlideDefinition slide;
+        std::optional<std::uint32_t> maxMp;
     };
 
     struct CombatDefinition
     {
         std::uint32_t playerMaxHp{};
+        std::optional<std::uint32_t> playerMaxMp;
         std::uint32_t shotDamage{};
         float walkSpeed{}, runSpeed{}, bodyHeight{}, hitRadius{};
         float shotPrepareSeconds{}, shotIntervalSeconds{}, shotRecoverSeconds{};

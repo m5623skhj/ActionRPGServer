@@ -283,7 +283,7 @@ namespace GameRoomServer
             std::uintmax_t totalBytes = 0;
             for (const auto& entry : entries)
             {
-                Keys(entry, { "dataId", "definitionFile", "monsterId" });
+                Keys(entry, { "dataId", "definitionFile", "monsterId", "level", "isBoss" });
                 const auto dataId = static_cast<std::uint32_t>(Integer(entry.at("dataId"), 1000000));
                 Require(dataId != 0 && !definitions.contains(dataId), "Duplicate or invalid monster Data ID: " + std::to_string(dataId));
                 const std::string file = Text(entry.at("definitionFile"));
@@ -309,6 +309,17 @@ namespace GameRoomServer
                 definition->dataId = dataId; definition->id = monsterId;
                 definition->name = source->at("name").get<std::string>();
                 definition->maxHp = source->at("maxHp").get<std::uint32_t>();
+                if (entry.contains("level"))
+                {
+                    const auto level = static_cast<std::uint32_t>(Integer(entry.at("level"), 1000000));
+                    Require(level > 0, "Monster level must be positive.");
+                    definition->level = level;
+                }
+                if (entry.contains("isBoss"))
+                {
+                    Require(entry.at("isBoss").is_boolean(), "Monster isBoss must be boolean.");
+                    definition->isBoss = entry.at("isBoss").get<bool>();
+                }
                 definition->document = document;
                 definition->monsterIndex = static_cast<std::size_t>(std::distance(monsters.begin(), source));
                 for (const auto& node : definition->GetAi().at("nodes"))

@@ -56,7 +56,8 @@ namespace TownServer::Domain
           progressionPolicy(ActionRPG::PlayerSkills::ProgressionPolicy::Load(inDataDirectory / "CharacterProgression.json")),
           playerSkills(ActionRPG::PlayerSkills::Catalog::Load(inDataDirectory / "PlayerSkills.json")),
           skillTrees(ActionRPG::PlayerSkills::SkillTreeCatalog::Load(inDataDirectory / "SkillTrees.json", playerSkills)),
-          itemsCatalog(ActionRPG::Items::Catalog::Load(inDataDirectory / "Items.json"))
+          itemsCatalog(ActionRPG::Items::Catalog::Load(inDataDirectory / "Items.json")),
+          resourceCatalog(ActionRPG::Combat::PlayerResourceCatalog::Load(inDataDirectory / "Combat.json"))
     {
         if (!database)
             throw std::invalid_argument("TownInstance requires a DB execution service, even when disabled.");
@@ -64,6 +65,11 @@ namespace TownServer::Domain
         {
             throw std::invalid_argument("TownInstance requires at least one map.");
         }
+        if (resourceCatalog.characters.size() != playerSkills.characterIds.size())
+            throw std::invalid_argument("Every town character needs one resource definition.");
+        for (const auto& [id, limits] : resourceCatalog.characters)
+            if (!playerSkills.characterIds.contains("Character" + std::to_string(id)))
+                throw std::invalid_argument("Resource definition references an unknown town character.");
         const ActionRPG::PlayerSkills::Catalog::Json skillPayload{
             { "characterId", 1 }, { "progression", progressionPolicy.Create().ToJson() },
             { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", "State" } };
@@ -115,7 +121,10 @@ namespace TownServer::Domain
     {
         const ActionRPG::PlayerSkills::Catalog::Json payload{
             { "characterId", inEntry.player.GetCharacterId() }, { "progression", inEntry.progression.ToJson() },
-            { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", inResult } };
+            { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", inResult },
+            { "hp", inEntry.hp }, { "maxHp", inEntry.resourceLimits.maxHp },
+            { "mp", inEntry.mp ? nlohmann::json(*inEntry.mp) : nlohmann::json(nullptr) },
+            { "maxMp", inEntry.resourceLimits.maxMp ? nlohmann::json(*inEntry.resourceLimits.maxMp) : nlohmann::json(nullptr) } };
         inEntry.session->Send(TownProtocol::Encode(TownProtocol::SkillStateResponse{ payload.dump() }));
     }
 
@@ -1104,6 +1113,8 @@ namespace TownServer::Domain
         entry.persistentCharacterId = inState.characterId;
         entry.ownerGeneration = inState.generation;
         entry.ownerToken = std::move(inOwnerToken);
+        entry.resourceLimits = resourceCatalog.Get(inState.definitionId);
+        entry.hp = entry.resourceLimits.maxHp; entry.mp = entry.resourceLimits.maxMp;
         if (!ApplyCharacterState(entry, inState)) { entry.session->Stop(); return; }
         players.emplace(playerId, std::move(entry));
         sessionToPlayer.emplace(sessionId, playerId);

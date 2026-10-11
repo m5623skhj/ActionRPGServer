@@ -23,6 +23,9 @@ GameRoomServer는 시작할 때 실행 파일 옆 `Data/Monsters/MonsterCatalog.
    실행 폴더를 직접 수정했다면 서버를 재시작하여 적용합니다.
 
 - Data ID는 1~1,000,000이며 중복할 수 없습니다. 카탈로그는 최대 256개입니다.
+- 카탈로그 항목의 선택 필드 `level`은 1~1,000,000, `isBoss`는 bool입니다. 누락된 level은 미정,
+  isBoss는 일반 몬스터(false)로 처리합니다. HUD 등급은 보스 방 여부로 추정하지 않습니다.
+  현재 Dummy·갑옷병은 level 1/isBoss false, 수호자는 level 5/isBoss true로 명시했습니다.
 - 파일명은 영문자로 시작하고 영문·숫자·밑줄·점·하이픈과 `.json` 확장자를 사용합니다.
   경로와 하위 폴더는 허용하지 않습니다.
 - 문자열 ID는 대소문자를 구분합니다. 서버 기본 파일은 `Dummy`를 숫자 ID 1에 연결합니다.

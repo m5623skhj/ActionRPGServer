@@ -15,6 +15,7 @@ $serverDirectory = Join-Path $root 'ActionRPGServer\x64\Debug'
 $roomDirectory = Join-Path $root 'artifacts\bin\x64\Debug'
 $clientDirectory = [IO.Path]::GetFullPath((Join-Path $root '..\ActionRPGClient\ActionRPGClient\artifacts\bin\x64\Debug'))
 $script:startedServers = @()
+$script:startedClients = @()
 $script:failureMessage = ''
 $script:launchStage = 'Checking executable/runtime prerequisites'
 $script:googleDesktopClientId = $env:ACTIONRPG_GOOGLE_CLIENT_ID
@@ -531,8 +532,9 @@ function Supply-ClientSettings([switch] $ValidateOnly) {
     $public = @{ authUrl=$client.authUrl; googleClientId=$client.googleClientId; townCaFile=$client.townCaFile; servers=$servers; playerName=$client.playerName; characterId=$client.characterId }
     [IO.File]::WriteAllText($path, ($public | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
 }
-function Start-Client {
+function Start-Client([int] $number) {
     $process = [Diagnostics.Process]::new()
+    $tracked = $false
     $process.StartInfo.FileName = Join-Path $clientDirectory 'ActionRPGClient.exe'
     $process.StartInfo.WorkingDirectory = $clientDirectory
     $process.StartInfo.UseShellExecute = $false
@@ -544,11 +546,38 @@ function Start-Client {
             $process.StartInfo.EnvironmentVariables['ACTIONRPG_GOOGLE_CLIENT_ID'] = [string]$script:googleDesktopClientId
             $process.StartInfo.EnvironmentVariables['ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET'] = [string]$script:googleDesktopClientSecret
         }
-        [void]$process.Start()
+        if (!$process.Start()) { Fail ('Client ' + $number + ' could not start.') }
+        # Keep the native handle so an early exit still has a readable exit code.
+        [void]$process.Handle
+        $script:startedClients += @{ Number = $number; Id = $process.Id; Process = $process }
+        $tracked = $true
     } finally {
         $process.StartInfo.EnvironmentVariables.Remove('ACTIONRPG_GOOGLE_DESKTOP_CLIENT_SECRET')
-        $process.Dispose()
+        if (!$tracked) { $process.Dispose() }
     }
+}
+function Assert-ClientsAlive {
+    $exited = $false
+    foreach ($client in $script:startedClients) {
+        $client.Process.Refresh()
+        if ($client.Process.HasExited) {
+            $exitCode = [int]$client.Process.ExitCode
+            Write-Host ('[ERROR] Client {0} exited during startup; PID={1}; exit code={2} ({3}).' -f
+                $client.Number, $client.Id, $exitCode, ('0x{0:X8}' -f $exitCode))
+            $exited = $true
+        }
+    }
+    if ($exited) { Fail 'One or more clients exited during startup. Check the client runtime dependencies and startup diagnostics.' }
+}
+function Wait-Clients {
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        Assert-ClientsAlive
+        Assert-ServersAlive
+        Start-Sleep -Milliseconds 200
+    }
+    Assert-ClientsAlive
+    Assert-ServersAlive
 }
 function Assert-ServersAlive {
     foreach ($server in $script:startedServers) {
@@ -769,10 +798,13 @@ try {
         $script:launchStage = 'Starting client ' + $number
         Assert-ServersAlive
         Write-Host ('[' + ($number + 3) + '/5] Starting client ' + $number + '...')
-        Start-Client
+        Start-Client $number
+        Assert-ClientsAlive
     }
-    Assert-ServersAlive
-    Write-Host 'Servers and two clients started. Log in manually with two different Google accounts.'
+    $script:launchStage = 'Observing both client processes for early exit'
+    Wait-Clients
+    Write-Host 'Servers are running; both client processes remained alive during the 5-second startup observation.'
+    Write-Host 'Check the client windows and log in manually with two different Google accounts.'
     Write-Host 'Close each server/client window manually when finished.'
     exit 0
 } catch {
@@ -786,8 +818,9 @@ try {
         Write-Host ('[ERROR] Underlying exception type: ' + $cause.GetType().FullName + '; HRESULT: ' + ('0x{0:X8}' -f $cause.HResult))
         Write-Host '[ERROR] Check settings, executable/runtime files and server console windows.'
     }
-    Write-Host 'Any servers already started are left running. Close their windows manually before retrying.'
+    Write-Host 'Any servers or clients already started are left running. Close their windows manually before retrying.'
     exit 1
 } finally {
     $script:googleDesktopClientSecret = $null
+    foreach ($client in $script:startedClients) { $client.Process.Dispose() }
 }

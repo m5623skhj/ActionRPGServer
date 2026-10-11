@@ -1,6 +1,7 @@
 #include "TownInstance.h"
 #include "PlayerSession.h"
 #include <openssl/rand.h>
+#include <iostream>
 
 namespace TownServer::Domain
 {
@@ -92,6 +93,26 @@ namespace TownServer::Domain
                 const auto session = weakSession.lock();
                 const bool current = town.running && session && session->GetAccountId() == accountId
                     && session->GetPlayerId() == 0;
+                if (request.operation == Persistence::Operation::Claim)
+                {
+                    if (result.error)
+                    {
+                        const auto& error = *result.error;
+                        // The ODBC adapter discards driver text; context contains fixed messages only.
+                        // Never log account/character IDs, owner tokens, parameters or returned state.
+                        std::cerr << "Town character selection failed. procedure=claim_character"
+                            << "; database_error=" << static_cast<int>(error.code)
+                            << "; SQLSTATE=" << (error.sqlState.empty() ? "unavailable" : error.sqlState)
+                            << "; native_code=" << error.nativeCode
+                            << "; execution_may_have_occurred=" << error.executionMayHaveOccurred
+                            << "; context=" << error.message << '\n';
+                    }
+                    else if (!result.response)
+                        std::cerr << "Town character selection failed. procedure=claim_character; context=Missing response.\n";
+                    else if (result.response->states.front().result != 0 && result.response->states.front().result != 7)
+                        std::cerr << "Town character selection rejected. procedure=claim_character; result_code="
+                            << result.response->states.front().result << '\n';
+                }
                 if (request.operation == Persistence::Operation::Claim && !result.error && result.response
                     && (result.response->states.front().result == 0 || result.response->states.front().result == 7))
                 {
