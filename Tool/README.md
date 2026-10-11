@@ -30,7 +30,7 @@ Tool\PacketGenerate.bat --check
 DB 개요와 버전 SQL 구성은 [계정 DB README](../ActionRPGServer/Database/README.md)를 참조한다.
 
 현재 구현은 MySQL 8.0.46 / InnoDB, 64비트 Windows PowerShell 5.1 / System.Data.Odbc의
-수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000005이며 실제 DB
+수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000006이며 실제 DB
 직전 확인 결과는 2026-10-08 로컬 V000004 적용 성공과 새 검사 EXECUTE 확인이다.
 V5 적용 결과와 새 PC의 상태는 해당 대상에서 별도로 확인한다. 처음 구성하는 경우 [새 PC 설정·트러블슈팅](../docs/workflows/LOCAL_DEVELOPMENT_SETUP.md)의
 계정 생성·권한·대화형 마이그레이션 안내부터 따른다.
@@ -60,7 +60,7 @@ Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
 ```
 
 실패 이력의 구조 비교에는 Up 배치에 `-InspectOnly -InspectVersion 0`을 함께 전달한다.
-`InspectVersion`은 비교할 구조 버전(0~4)이며 실제 적용 버전을 확정하거나 이력을 승인하지 않는다.
+`InspectVersion`은 비교할 구조 버전(0~6)이며 실제 적용 버전을 확정하거나 이력을 승인하지 않는다.
 이 경로는 기존 DB·이력 테이블·검사 프로시저가 있어야 하며 `-CreateDatabase`와 함께 쓸 수 없다.
 같은 전용 연결·서비스 정지 확인·잠금을 사용해 감사 행과 CHECK 원문/정규화 실제 값/기대값을 출력한다.
 DB 생성, 버전 SQL, 감사 행 INSERT/UPDATE/DELETE는 수행하지 않으며 실패 이력을 그대로 유지한다.
@@ -81,10 +81,10 @@ Tool\Database\UpMigration.bat -Database actionrpg -RecoverBootstrap -ServicesSto
 ```
 
 `Recovery complete. Active version: V000000.`과 종료 코드 0을 확인한 뒤 별도의 일반 Up으로
-000001~000005를 적용한다. 이미 복구된 상태에는 다시 확인 행을 추가하지 않고 중단한다.
+000001~000006을 적용한다. 이미 복구된 상태에는 다시 확인 행을 추가하지 않고 중단한다.
 복구 확인 INSERT 후 통신/검사 오류가 발생하면 행이 남았을 수 있으므로 진단으로 실제 이력을
 확인한다. 실패 행과 확인 행의 즉시 연속 조합을 도구와 수정된 Auth만 인정한다. Auth는 해당 소스를
-반영해 다시 빌드해야 하며, 여전히 실제 head=5과 전체 구조 검증을 통과해야 로그인할 수 있다.
+반영해 다시 빌드해야 하며, 여전히 실제 head=6과 전체 구조 검증을 통과해야 로그인할 수 있다.
 
 V0 이력은 정상이고 첫 V1 UP 실패 1건만 마지막에 남았다면 `-RecoverAccounts`를 사용한다.
 V1 전체 구조·양방향 체크섬·계정 테이블 2개의 비어 있음·테이블 3개/검사 루틴 1개/이벤트·트리거
@@ -107,16 +107,22 @@ V000000→000004를 수행한다. 새 DB는 utf8mb4 / utf8mb4_0900_ai_ci이며 �
 DB 생성은 버전 이력 기록 전 단계이고 암묵적으로 커밋되므로 후속 실패에도 DB가 남는다.
 자동 삭제·계정 생성·GRANT는 수행하지 않으며 Auth 계정에는 생성 권한을 주지 않는다.
 
-새 Auth는 head=5를 요구한다. 서비스 정지 후 수동 Up4→5, 새 검사 및 Town 공개
+V5의 캐릭터/인벤토리 배포는 서비스 정지 후 수동 Up4→5, 새 검사 및 Town 공개
 프로시저 EXECUTE 부여, 동일 SQL 11개·새 Auth/Town 배포를 함께 진행한다. V0~V4 SQL과
 체크섬은 보존한다. V5 Down은 character_operations/character_items/character_state가
 모두 비어 있을 때만 허용하며, 공동 DROP 직후 테이블 잠금을 해제한 다음 루틴을 삭제한다.
 
+현재 신규 배포 계약은 head6다. V6 원장·4개 사용 절차·검사와 교체 claim/save/release를 적용하고
+새 EXECUTE 및 교체 3개 EXECUTE를 관리자로 부여한 뒤 새 Auth/Town/Room을 배포한다.
+검사는 24결과셋/17루틴/68 IN이며 V6 Down은 terminal을 포함해 원장이 비어 있을 때만 허용한다.
+V0~V5 SQL/해시는 변경하지 않는다. 실제 DB 적용은 사용자 수동 절차다.
+
 | 현재 상태/명령 | 실제 동작 |
 |---|---|
-| DB 없음 + Up -CreateDatabase | DB 생성 → 000000 이력 기반 → 000001~000005 적용 |
-| 빈 스키마 + Up | 000000 이력 기반 생성 → 000001 계정 테이블 → 000002 Google 로그인 → 000003 상태 조회 → 000004 캐릭터/스킬 → 000005 인벤토리·저장/복원 |
-| 정상 관리 DB + Up | 현재 head 다음부터 000004까지 적용; 이미 4이면 검사만 수행 |
+| DB 없음 + Up -CreateDatabase | DB 생성 → 000000 이력 기반 → 000001~000006 적용 |
+| 빈 스키마 + Up | 000000 이력 기반 → 000001~000005 계정·캐릭터·인벤토리 → 000006 사용 원장·쿨타임 |
+| 정상 관리 DB + Up | 현재 head 다음부터 000006까지 적용; 이미 6이면 검사만 수행 |
+| head=6 + Down | 사용 원장이 전부 비어 있을 때만 삭제하고 V5 claim/save/release 복원; 인벤토리 보존 |
 | head=5 + Down | 신규 상태·아이템·요청 테이블이 모두 비어 있을 때만 V5 테이블/루틴 삭제; V4 캐릭터/스킬 유지 |
 | head=4 + Down | 캐릭터/스킬 테이블이 모두 비어 있을 때만 두 테이블·확장 검사 삭제; 계정 유지 |
 | head=3/2 + Down | 각각 상태 조회/로그인 프로시저 하나 삭제; 계정 데이터 유지 |
@@ -127,7 +133,7 @@ DB 생성은 버전 이력 기록 전 단계이고 암묵적으로 커밋되므�
 | 비어 있지 않은 무관리 DB, 미복구 FAILED/RUNNING, 이름/체크섬/구조 불일치 | 중단; 자동 기준 버전 등록·repair·부분 SQL 재실행 없음 |
 
 출력의 host:port/DB, 적용 계획, 마지막 Active version과 종료 코드를 확인한다. 계획을 표시한 뒤
-바로 실행하며 추가 확인 프롬프트는 없다. 성공은 종료 코드 0, 오류는 1이다. 현재는 000001~000005
+바로 실행하며 추가 확인 프롬프트는 없다. 성공은 종료 코드 0, 오류는 1이다. 현재는 000001~000006
 계약만 지원한다. 진단은 별도의 Inspection 결과를 출력하며 임의 목표 버전 적용, 자동 Status 판정,
 dry-run, force 데이터 삭제 옵션은 없다.
 새 버전은 실행기·Auth 실제 구조 검증 계약도 함께 갱신해야 한다.
@@ -137,7 +143,7 @@ dry-run, force 데이터 삭제 옵션은 없다.
 다른 MySQL 버전·다른 DBMS 및 자동 데이터 이관은 지원하지 않는다.
 
 성공 후 같은 Up/Down/Infrastructure SQL을 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`의 절대
-경로에 배포하고, Auth의 기대 스키마 `ACTIONRPG_DB_SCHEMA`를 맞춘다. Auth 실제 head=5 검증
+경로에 배포하고, Auth의 기대 스키마 `ACTIONRPG_DB_SCHEMA`를 맞춘다. Auth 실제 head=6 검증
 성공 후 타운/룸을 연결한다. 서버 상세는 [Auth 개발 계약](../ActionRPGServer/AuthServer/DEVELOPMENT.md),
 스키마·현재 버전 조회·권한·실패 복구는
 [DB 마이그레이션 사용 및 규칙](../docs/workflows/DATABASE_MIGRATIONS.md#9-수동-updown-실행-계약)을 따른다.

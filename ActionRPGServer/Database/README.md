@@ -24,10 +24,11 @@ Google 토큰이나 이메일은 현재 계정 스키마에 저장하지 않는�
 | 000003 | [V000003__create_auth_account_status_procedure.sql](Migrations/MySQL/V000003__create_auth_account_status_procedure.sql) | 계정 상태 재확인 |
 | 000004 | [V000004__create_characters_and_skills.sql](Migrations/MySQL/V000004__create_characters_and_skills.sql) | 캐릭터·습득 스킬과 확장 검사 프로시저 |
 | 000005 | [V000005__create_character_inventory_persistence.sql](Migrations/MySQL/V000005__create_character_inventory_persistence.sql) | 캐릭터 소유권·인벤토리·중복 요청과 저장/복원 프로시저 |
+| 000006 | [V000006__create_item_use_ledger.sql](Migrations/MySQL/V000006__create_item_use_ledger.sql) | 사용 예약·확정·취소·영속 쿨타임·Pending 복구 |
 
 역변환 SQL은 [Migrations/MySQL/Down](Migrations/MySQL/Down)에 있다. 파일 최신 버전은
-000005이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 요구 head는
-**5**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
+000006이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 신규 요구 head는
+**6**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
 준비 여부를 결정한다. 2026-10-08 로컬 DB는 V4 적용 성공과 런타임 검사 권한을 조회로 확인했다.
 V5의 실제 적용 결과는 적용 단계에서 별도로 확인하며, 다른 대상 DB의 버전을 추정하지 않는다.
 
@@ -53,6 +54,16 @@ SQL 안에서 COMMIT하지 않으며 ODBC가 결과 검증 후 커밋한다.
 프로시저 EXECUTE 부여 → 같은 SQL 11개와 새 Auth/Town 배포 → head=5 검증 순서다.
 내부 emit_character_state에는 런타임 EXECUTE를 부여하지 않는다. V5 Down은 세 신규 테이블이
 모두 비어 있을 때만 허용한다. Down 후 감사 이력이 남으므로 과거 바이너리로 즉시 복귀할 수 없다.
+
+V6의 새 사용 원장은 지정 스택 1개를 예약 소비하고 Pending/Applied/Cancelled/ConsumedUnknown으로
+실행 결과를 조정한다. claim은 새 소유자를 허용하고 Pending을 함께 반환하며 신규 save/release는
+Pending 중 Busy다. 확인된 미실행 취소만 같은 instance/slot에 반환한다. 실제 Room 소실에서는
+소비를 유지하며 새 Room에 효과를 재생하지 않는다. 쿨타임 deadline은 DB 최종변경 SQL의 UTC
+시각을 기준으로 영속화한다. Room과 DB 사이의 완전한 원자성이나 손실 없는 보상은 보장하지 않는다.
+[V6 입출력·장애·배포 계약](../../docs/workflows/DATABASE_MIGRATIONS.md#아이템-사용-예약확정-v000006)을 따른다.
+V6 Up/Down은 각 13 statements, 검사 24sets/17루틴/68IN이며 Down은 원장이 전부 비어 있어야 한다.
+새 4개 공개 사용 절차와 V6 검사 EXECUTE를 추가하고 교체 claim/save/release의 EXECUTE를 재부여한다.
+내부 emit_item_use에는 직접 EXECUTE를 주지 않는다. V6 파일 작성은 실제 DB 적용을 뜻하지 않는다.
 
 ## 수동 적용
 

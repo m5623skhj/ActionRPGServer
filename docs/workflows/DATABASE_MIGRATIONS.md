@@ -1,10 +1,10 @@
 # DB 구현·마이그레이션 사용 및 작업 규칙
 
-문서 버전: 1.4.0
+문서 버전: 1.5.0
 
 작성일: 2026-10-05
 
-수정일: 2026-10-08 — V000005 캐릭터·인벤토리 저장/복원·소유권·중복 요청 계약 추가.
+수정일: 2026-10-09 — V000006 사용 예약·확정·쿨타임과 Pending 복구 계약 추가.
 
 적용 범위: ActionRPG 총괄·DB 담당, DB 연계가 필요한 서버 및 다른 담당
 
@@ -22,12 +22,12 @@ DB 담당은 데이터 모델, 스키마·인덱스·제약·프로시저, 영�
 |---|---|---|
 | DBMS | MySQL 8.0.46 / InnoDB에 한정한 SQL·검증 | 사용자 로컬 조회 결과 8.0.46; 에이전트 직접 접속·엔진 검증 미수행 |
 | 런타임 접근 | `Shared/Database`의 ODBC 풀·작업 큐·`IStoreProcedure<Req, Res>` | 2026-10-07 사용자가 로컬 Google 로그인 후 정상 입장 확인; 에이전트 직접 왕복 검증 미수행 |
-| 영속 구조 | 계정/외부 식별자 V000001, 로그인 V000002, 상태 조회 V000003, 캐릭터/습득 스킬 V000004, 저장/복원 V000005 | 로컬 V4 이력·검사 권한 확인; V5 적용 별도 |
+| 영속 구조 | 계정/로그인 V1~V3, 캐릭터 V4, 인벤토리 V5, 사용 원장·쿨타임 V6 | 로컬 V4 조회 이후 V5/V6 적용 상태는 해당 DB에서 별도 확인 |
 | 마이그레이션 | PowerShell 5.1 / System.Data.Odbc 수동 Up/Down, V000000 이력 기반 | 사용자 제공 V0/V1 복구·V2/V3 Up 완료 로그, 종료 코드 0 |
-| 서버 검증 | Auth 기동 시 DB 이력·실제 구조와 배포 SQL을 대조, 요구 head=5 | 이전 V3 로컬 입장 확인; 로컬 V4 적용·검사 EXECUTE 조회 확인; V5 신규 구현·Auth 왕복은 미검증 |
+| 서버 검증 | Auth 기동 시 DB 이력·실제 구조와 배포 SQL을 대조, 신규 계약 요구 head=6 | V6 서버 adapter/검사 연동은 서버 담당 범위이며 실제 왕복 미검증 |
 
 에이전트는 이 문서 작업에서 실제 DB에 접속하거나 적용하지 않았다. 위 로컬 결과는 사용자 로그와
-확인에 근거하며 다른 DB의 상태를 보장하지 않는다. 파일 최신 버전 000005, 새 Auth 요구 버전 5,
+확인에 근거하며 다른 DB의 상태를 보장하지 않는다. 파일 최신 버전 000006, 새 Auth 요구 버전 6,
 실제 대상 DB의 현재 버전은 구분한다. 직전 로컬 V4 조회 확인은 이번 V5 적용을 증명하지 않는다. 새 PC 절차와 실제 오류 사례는
 [로컬 설정·트러블슈팅](LOCAL_DEVELOPMENT_SETUP.md), 사용 계약은 9절, 테이블·프로시저 계약은 8절을 따른다.
 
@@ -141,11 +141,12 @@ DB 작업에 따른 서버 연계가 필요하면 DB 담당은 스키마/쿼리 
 | 000003 | 000002 | [V000003__create_auth_account_status_procedure.sql](../../ActionRPGServer/Database/Migrations/MySQL/V000003__create_auth_account_status_procedure.sql) | 티켓 발급·입장 승인 전 계정 상태 재확인 |
 | 000004 | 000003 | [V000004__create_characters_and_skills.sql](../../ActionRPGServer/Database/Migrations/MySQL/V000004__create_characters_and_skills.sql) | 캐릭터·습득 스킬 테이블과 확장 검사 |
 | 000005 | 000004 | [V000005__create_character_inventory_persistence.sql](../../ActionRPGServer/Database/Migrations/MySQL/V000005__create_character_inventory_persistence.sql) | 영속 캐릭터·인벤토리 저장/복원·소유권·중복 요청 |
+| 000006 | 000005 | [V000006__create_item_use_ledger.sql](../../ActionRPGServer/Database/Migrations/MySQL/V000006__create_item_use_ledger.sql) | 사용 예약·확정·취소·영속 쿨타임·Pending 복구 |
 
 기존 Infrastructure와 000001~000003 Up/Down SQL은 변경하지 않는다. `login_google_account(subject)`의 결과는 기존대로
 `result_code(int32), account_id(uint64), account_status(int32), was_created(int32)` 한 행이다.
 0 정상/1 정지, was_created 0/1, 모든 값 NOT NULL, 정지에서는 was_created=0 계약을 유지한다.
-새 AuthServer가 요구하는 논리 버전은 000005다. 향후 상위 버전 호환성은 별도로
+새 AuthServer가 요구하는 논리 버전은 000006이다. 향후 상위 버전 호환성은 별도로
 선언하며 단순히 `MAX(version) >= 4`이라는 이유로 허용하지 않는다.
 
 적용 도구와 이력 계약은 9절처럼 구현했으며 실제 대상 DB와 적용 상태는 이 문서 작업에서 미확인이다.
@@ -208,7 +209,7 @@ DB 조회의 잠금은 커밋 후 해제된다. 따라서 조회 직후의 계�
 * 실제 실행 순서와 성공·실패 상태, 성공 적용 시각, 실행 파일의 체크섬과 알고리즘/정규화 규칙.
 * 실패·누락·알 수 없는 버전을 숨기지 않은 전체 관련 이력. 단순 성공 행의 MAX 조회는 불충분하다.
 
-AuthServer는 승인된 배포 SQL 목록을 기준으로 000001 → 000002 → 000003 → 000004 → 000005가 누락 없이 성공했고,
+AuthServer는 승인된 배포 SQL 목록을 기준으로 000001 → 000002 → 000003 → 000004 → 000005 → 000006이 누락 없이 성공했고,
 이름·순서·실행 파일 체크섬이 해당 도구의 규칙과 일치하는지 확인한다. 원본 SHA-256과 도구의
 다른 알고리즘 체크섬을 같은 값으로 비교하지 않는다. 도구가 선행 관계를 저장하지 않으면 승인된
 버전 파일 순서와 실제 이력을 대조한다. 이후 실패 이력·미지원 버전·체크섬 불일치도 거절한다.
@@ -221,7 +222,7 @@ AuthServer는 승인된 배포 SQL 목록을 기준으로 000001 → 000002 → 
 
 남은 배포 결정은 실제 대상 DB/스키마·환경, ODBC 드라이버와 접속 보안, 실행 주체의 최소 권한,
 서비스 정지·코드 배포 순서다. 000003은 계정 상태 조회이며 V0 이력 조회는 Infrastructure,
-캐릭터 구조까지 포함한 새 Auth 이력 조회는 V000005의 확장 검사다.
+사용 원장까지 포함한 새 Auth 이력 조회는 V000006의 확장 검사다. V5 계약은 아래에 보존한다.
 
 ### 계정 스키마와 Google 매핑
 
@@ -493,6 +494,171 @@ V5 Down은 세 신규 테이블이 모두 비어 있을 때만 허용한다. WRI
 DDL 부분 실패에는 자동 재실행/감사 삭제/체크섬 변경을 하지 않는다. 별도 상태 확인이 필요하다.
 
 
+### 아이템 사용 예약·확정: V000006
+
+V6는 캐릭터당 미확정 사용 한 건과 정의별 쿨타임을 영속화한다. Town/DB는 아이템을,
+Room은 휘발성 HP·투사체를 소유한다. V0~V5 파일과 해시는 그대로 두고 V6에서
+claim_character/save_character_state/release_character를 교체한다. 실제 DB 적용과 GRANT는 사용자가 수행한다.
+
+**원장과 상태**
+
+character_item_uses는 (account_id, request_id BINARY32) PK, character FK, 공유
+character_operations 영수증 FK를 가진다. 예약 시 같은 트랜잭션에서 ITEM_USE 종류의 영수증을
+만들며 CREATE/SAVE와 요청 ID 공간을 공유한다. 이 영수증은 효과 완료가 아닌 예약 수락을 의미한다.
+원장에는 최초 owner 세대·revision, 차감 후 revision, 원래 instance/definition/가방/slot,
+Room ID·CSPRNG128bit incarnation, 정규화 원본 명령·불변 서버 실행 JSON·SHA256 실행 해시,
+쿨타임 ms, 상태·deadline·사유·UTC 시각을 저장한다. owner token은 원장에 복제하거나 반환하지 않는다.
+active_character_id는 Pending일 때 character_id, 나머지 상태에서는 NULL이며 CHECK와 UNIQUE로
+캐릭터당 Pending 한 건을 보장한다. 정의별 쿨타임은 원장의 최대 deadline으로 읽고 이력을 임의 삭제하지 않는다.
+
+| use_state | 이름 | 전이와 아이템 처리 |
+|---|---|---|
+| 0 | None | 조회 sentinel이며 저장 상태가 아님 |
+| 1 | Pending | 지정 소모품 가방 스택 1개 차감·revision 증가·예약 영수증을 원자적으로 커밋 |
+| 2 | Applied | 같은 Room의 실행 확인 후 소비 유지·쿨타임 확정 |
+| 3 | Cancelled | 같은 Room의 취소 tombstone으로 미실행을 확정한 경우 원래 instance/slot에 1개 반환·revision 증가 |
+| 4 | ConsumedUnknown | 원래 incarnation의 실제 소실과 fencing을 확인한 경우 소비 유지·쿨타임 확정; 사용자에게 결과 불명 별도 안내 |
+
+허용 전이는 Pending에서 세 terminal 상태로 가는 경우뿐이다. 같은 terminal 중복은 상태·아이템·deadline을
+변경하지 않는다. 다른 terminal 결과는 OutcomeConflict이며 성공으로 숨기지 않는다.
+슬롯/스택 반환이 안전하지 않으면 SQL 오류로 해당 CALL 전체를 롤백하고 원장도 Pending을 유지한다.
+
+**공개 IN 계약**
+
+모든 숫자 ID·세대·revision은 BIGINT UNSIGNED, ownerToken/requestId/executionHash는
+VARCHAR(64) ascii/ascii_bin의 64자리 소문자 hex다. instanceId와 roomIncarnation은
+VARCHAR(32) ascii/ascii_bin의 32자리 소문자 hex다. JSON은 TEXT utf8mb4/utf8mb4_bin,
+원본·실행 문서는 입력과 DB canonical 출력 모두 각각 UTF-8 2048바이트 이내 OBJECT다. cooldownMs는 INT UNSIGNED,
+1~3600000ms 구조 범위이며 master 값은 서버가 결정한다(초기 딸기 5000ms/돌 1000ms).
+이 DB 범위는 아이템 밸런스가 아니다. 입력 순서는 아래와 같다.
+
+| 프로시저 | IN 개수 | 순서 |
+|---|---|---|
+| reserve_item_use | 12 | accountId, characterId, ownerToken, ownerGeneration, requestId, expectedRevision, instanceId, roomId, roomIncarnation, operationJson, executionJson, cooldownMs |
+| get_item_use | 5 | accountId, characterId, ownerToken, ownerGeneration, requestId |
+| complete_item_use | 8 | accountId, characterId, ownerToken, ownerGeneration, requestId, roomId, roomIncarnation, executionHash |
+| cancel_item_use | 10 | complete와 같은 8개, disposition INT UNSIGNED, reason VARCHAR(64) ascii/ascii_bin |
+| claim_character | 기존 4 | accountId, characterId, ownerToken, expectedOwnerGeneration; V6부터 아래 3결과셋 반환 |
+
+get_item_use의 requestId만 NULL을 허용한다. NULL은 현재 유일한 Pending과 전체 현재 쿨타임
+snapshot 조회이며 없으면 None sentinel이다. ID 지정 후 없는 기록은 UseNotFound다.
+신규 owner는 현재 token/generation으로 옛 원장을 조회·조정할 수 있다. 원장의 origin 세대와
+원래 Room incarnation은 변경하지 않는다. 구 owner의 지연 DB 변경은 StaleOwner다.
+요청 해시는 ITEM_USE 종류·account/character·최초 revision·instance·원래 Room·정규화 원본
+operationJson으로 계산한다. 재시도에 새 owner나 재계산한 effect snapshot을 덧씌우지 않는다.
+중복 예약은 원래 원장만 반환하고 다시 차감하거나 효과 문서를 교체하지 않는다.
+executionHash는 DB가 저장한 canonical executionJson의 SHA256이며 Room 왕복에 그대로 사용한다.
+
+disposition=0은 ConfirmedNotExecuted, 1은 FencedIncarnationLost다.
+reason은 1~64 ASCII 영문·숫자·밑줄의 서버 사유 코드다.
+완료/취소 판단은 인증된 Town→Room 제어 채널과 서버의 incarnation fencing 책임이다.
+DB는 실제 Room 효과를 관찰할 수 없으며 클라이언트가 보낸 완료·취소 boolean을 근거로 삼지 않는다.
+
+**공통 3결과셋**
+
+새 공개 4개와 V6 claim은 모든 결과 분기에 데이터 결과셋을 정확히 3개 반환한다.
+첫 결과셋은 기존 CharacterState 8열·한 행이며 성장·인벤토리의 현재 DB 상태다.
+접근 거부는 character_id=0, name/JSON 빈 문자열의 기존 sentinel이다.
+기존 list/create/save/release는 8열 계약을 유지한다(list만 복수 행).
+
+두 번째는 아래 19열·한 행이다. 선택 기록이 없거나 접근 거부이면 request_id='', use_state=0,
+숫자 0·본문 빈 문자열의 sentinel이며 server_now_ms는 항상 존재한다.
+pending_request_id는 선택한 과거 terminal과 별개로 현재 Pending도 알려준다.
+source ownerToken은 결과에 없다.
+
+| 순번 | 열 | ODBC 값 |
+|---|---|---|
+| 1 | request_id | string |
+| 2 | use_state | int32 |
+| 3 | origin_owner_generation | uint64 |
+| 4 | original_expected_revision | uint64 |
+| 5 | reserve_revision | uint64 |
+| 6 | instance_id | string |
+| 7 | definition_id | string |
+| 8 | container | uint32 |
+| 9 | slot | uint32 |
+| 10 | room_id | uint64 |
+| 11 | room_incarnation | string |
+| 12 | operation_json | UTF-8 string |
+| 13 | execution_json | UTF-8 string |
+| 14 | execution_hash | string |
+| 15 | cooldown_ms | uint32 |
+| 16 | cooldown_until_ms | UTC epoch millisecond 10진 string; 미정/취소는 빈 문자열 |
+| 17 | reason | string |
+| 18 | server_now_ms | UTC epoch millisecond 10진 string |
+| 19 | pending_request_id | string; 없으면 빈 문자열 |
+
+세 번째는 definition_id STRING, cooldown_state STRING, ready_utc_ms STRING,
+remaining_ms nullable UINT32, server_now_ms STRING의 5열·한 행 이상이다.
+현재 Pending 및 Active 정의만 정의 ID별로 반환한다. Pending은 ready='', remaining=NULL,
+Active는 ready epochms·남은 정수 ms다. 해당 정의의 active 기록이 없고 snapshot이 성공적으로
+전부 수신되었다면 None으로 처리한다. 전체가 비었거나 접근 거부이면 definition_id='',
+cooldown_state='None', ready='', remaining=0의 한 행 sentinel이다. 결과셋 자체 누락·파싱 실패를
+쿨타임 0으로 해석하지 않는다. deadline 필드만으로 Pending 종료를 추정하지 않는다.
+
+result_code 0~6은 기존 의미를 유지하며 7 Busy(Pending), 8 ItemNotFound(지정 소모품 스택 없음),
+9 Cooldown, 10 UseNotFound, 11 OutcomeConflict를 추가한다.
+형식·범위 오류는 SQL SIGNAL로 거절한다. 통신/커밋 오류는 결과 불명일 수 있으므로 조회로 조정한다.
+
+**쿨타임 시각과 처리 순서**
+
+Room Prepare → Reserve commit 확인 → 같은 Room Execute 재검사 → Applied 확인 →
+Complete commit 확인 순서다. Room은 효과 실행 시 steady clock 쿨타임/사용 잠금을 즉시 시작하며
+DB Pending 조정이 끝나기 전에 그 잠금을 임의 해제하지 않는다. 레벨·HP·목표 상태 재검사에서
+미실행 취소된 작업은 쿨타임을 시작하지 않는다. 투척 Applied는 명중이 아니라 투사체 생성 완료다.
+
+최초 Applied/ConsumedUnknown 최종변경 SQL의 UTC_TIMESTAMP(3) 한 표본에 duration을 더해
+DATETIME(6) deadline을 저장한다. 이는 미래의 물리적 COMMIT 시각이 아니며 결과는 ODBC commit
+확인 후 노출한다. DB 확정 지연만큼 실제 대기가 길어질 수 있고 커밋 자체가 지연되면 성공 응답 뒤
+남은 시간이 설정 duration보다 짧을 수 있다. 중복 complete/cancel은 deadline을 재연장하지 않는다.
+ConsumedUnknown은 실제 효과 확인이 불가능하므로 동일한 보수적 deadline을 시작한다.
+방 이동/재접속 후에도 DB의 정의별 deadline을 재조회하여 유지한다.
+epochms는 UTC DATETIME과 1970-01-01 00:00:00의 TIMESTAMPDIFF(MICROSECOND) DIV 1000으로
+계산하고 UNIX_TIMESTAMP(DATETIME)이나 클라이언트 시각·로컬 time zone을 사용하지 않는다.
+
+Pending 중 신규 Save/Release는 현재 owner 검증 후 7 Busy다. Save의 과거 성공 receipt 조회는
+허용하며 신규 전체 스냅샷만 차단한다. 정상 종료는 조정 후 release한다.
+새 fenced claim은 허용하고 원래 Pending을 함께 반환한다. 서버는 원래 Room admission을 fence하고
+조정이 끝날 때까지 새 게임 입장·추가 사용·신규 인벤토리/성장 저장을 열지 않는다.
+Town crash 뒤에도 새 owner가 조회/조정할 수 있어 claim을 영구 차단하지 않는다.
+
+**경쟁·장애 한계**
+
+Room strand에서 효과·결과 기록·취소 tombstone을 직렬화한다. 동일 incarnation의 중복 Execute는
+같은 결과를 반환한다. Query NotFound는 늦은 Execute를 차단하지 못하므로 반환 근거가 아니다.
+Cancel이 먼저 tombstone을 만들었을 때만 NotExecuted, Execute가 먼저 이겼으면 Applied다.
+terminal/tombstone은 incarnation 수명 동안 유지하고 상한 도달 시 새 사용만 거절한다.
+ACK timeout/연결 단절/DB 오류에는 Pending을 조회하고 확인 전에 반환하지 않는다.
+단순 process 연결 단절을 실제 Room 소실로 추정하지 않는다. 소실과 fencing을 확인할 수 없으면
+Pending을 유지하며 조회는 가능하다. 소실 확정은 ConsumedUnknown으로 소비를 유지하고
+새 Room에 동일 효과를 재생하지 않는다. 네트워크 대기 동안 DB 트랜잭션이나 전투를 정지하지 않는다.
+
+DB는 1회 예약/확정 반환, 살아 있는 동일 Room 세대는 효과 at-most-once를 제공한다.
+효과 전 crash에서는 사용 없이 소비가 남고, 효과 후 ACK 전 crash에서는 실행 사실을 영구
+확인하지 못할 수 있다. 휘발성 Room과 DB 사이의 완전한 원자성/exactly-once나 손실 없는 자동
+보상을 신규 ledger만으로 보장하지 않는다.
+
+**배포·검사·권한**
+
+V6는 새 테이블 22열, PK 2행·UNIQUE 1행·FK 3행·CHECK 8행을 추가한다.
+head6의 전체 열/제약/index 행 수는 67/51/24다. Up/Down은 각각 13 SQL statements다.
+V6 Down은 WRITE LOCKS에서 terminal까지 포함한 원장 전체가 비어 있는 경우만 허용하며
+원장을 삭제한 직후 테이블 잠금을 풀고 V5 claim/save/release 본문을 정확히 복원한다.
+데이터나 이력을 비우는 기능은 없으며 부분 실패에는 일반 Down을 사용하지 않는다.
+
+신규 get_item_use_schema_migration_history는 history_format=4, 24결과셋이다.
+첫 7개 metadata 열수는 5/9/9/11/6/4/7이며 기존 11개 SHOW CREATE 순서 뒤에
+emit_item_use/reserve_item_use/get_item_use/complete_item_use/cancel_item_use/
+get_item_use_schema_migration_history의 6개를 붙인다(각 SHOW 6열).
+총 17루틴·68 IN 파라미터며 V6의 교체 3루틴과 신규 6루틴 본문을 V6 Up에서 검증한다.
+Auth 요구 head6/24sets와 adapter는 서버 담당이 같은 계약으로 변경한다.
+
+기존 권한을 유지하고 Town에는 reserve_item_use/get_item_use/complete_item_use/cancel_item_use,
+Auth에는 get_item_use_schema_migration_history의 EXECUTE를 추가한다.
+교체한 claim_character/save_character_state/release_character의 EXECUTE를 관리자 계정으로 재부여한다.
+내부 emit_item_use/emit_character_state에는 runtime 직접 EXECUTE를 주지 않는다.
+이 저장소의 V6 파일 존재는 실제 DB 적용을 증명하지 않는다.
+
 ## 9. 수동 Up/Down 실행 계약
 
 ### 로컬 최초 설정의 DB 준비 계약
@@ -531,13 +697,13 @@ MySQL Server/Workbench 설치나 32비트 드라이버만으로 준비됐다고 
 접속한 것은 아니다. 실제 접속이 승인되고 입력이 준비된 실행 단계에서 DATABASE()·@@version·
 @@version_comment 및 기존 이력/구조 검증으로 대상과 현재 상태를 확인한다.
 접속·조회 실패 시 버전/head는 미확인으로 남긴다. 현재 MySQL 8.0.46과
-head=5 검증 계약은 유지하며 버전 문자열을 설정값으로 대신하거나 허용 범위를 자동 확장하지 않는다.
+head=6 검증 계약을 사용하며 버전 문자열을 설정값으로 대신하거나 허용 범위를 자동 확장하지 않는다.
 
 진단은 설정/파일 미준비, ODBC 미준비, 접속/DB 검증 실패를 구분하되 드라이버 원문 예외·연결
 문자열·비밀 값은 출력하지 않는다. Auth의 현재 HTTP 503과 일반 검증 실패만으로 서버 버전
 불일치·권한 부족·미적용을 특정하지 않는다. 추가 대상 조회는 별도로 승인된 실행 범위에서만 한다.
 이력 없음·낮은 head·FAILED/RUNNING·구조/체크섬 불일치에는 자동 생성·Up·repair를 수행하지
-않는다. 별도로 승인된 수동 Up/Down 절차로 준비한 뒤 Auth가 동일 배포 SQL과 실제 head=5를
+않는다. 별도로 승인된 수동 Up/Down 절차로 준비한 뒤 Auth가 동일 배포 SQL과 실제 head=6을
 검증해야 로그인·입장을 활성화한다. 로컬 최초 설정이 이 검증을 우회하지 않는다.
 
 ### 파일과 실행
@@ -565,7 +731,7 @@ Up의 `-CreateDatabase` 옵션은 대상 DB 생성·선택부터 수행하며 �
 | UpMigration.bat / DownMigration.bat | 공통 실행기에 각각 -Direction Up/Down을 전달 |
 | -Database 이름 | 1~64자; 생략하면 입력 요청(기본 actionrpg); 연결에서 선택된 DATABASE()와 정확히 대조 |
 | -CreateDatabase | Up 전용; DB가 없으면 생성하고 선택한 뒤 기존 이력·구조 검사와 적용 수행 |
-| -InspectOnly -InspectVersion 0..5 | Up 배치의 읽기 전용 진단; 지정 구조와 비교하며 실제 head/복구 성공을 확정하지 않음 |
+| -InspectOnly -InspectVersion 0..6 | Up 배치의 읽기 전용 진단; 지정 구조와 비교하며 실제 head/복구 성공을 확정하지 않음 |
 | -RecoverBootstrap | Up 전용; 완전한 V0와 초기 실패 1건을 재검증해 원본 보존 및 복구 확인 행 추가, V0에서 종료 |
 | -RecoverAccounts | Up 전용; 정상 V0 이력과 완전한 빈 V1의 첫 실패를 재검증해 복구 확인 행 추가, V1에서 종료 |
 | -ServicesStopped | 운영자 정지 확인; 생략하면 DB 접속 전에 Y 또는 y 입력을 요청하고 다른 응답은 중단 |
@@ -608,7 +774,7 @@ Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
 ### 적용과 역변환
 
 * Up: 실제 성공 이력을 재생해 현재 상태를 계산한 뒤 모든 미적용 버전을 오름차순 적용한다.
-  현재 배포 계약은 000001~000005이며 최신 상태에서는 새 실행 이력을 만들지 않는다.
+  현재 배포 계약은 000001~000006이며 최신 상태에서는 새 실행 이력을 만들지 않는다.
 * Down: 현재 적용된 가장 높은 버전 하나만 역변환하고 DOWN 성공 이력을 추가한다.
   과거 UP 기록은 삭제하지 않는다. 이후 Up은 되돌린 버전부터 다시 적용한다.
 * 000000: 이력 관리 기반이다. 빈 스키마에 최초 Up할 때만 생성하며 Down 대상에서 제외한다.
@@ -621,6 +787,7 @@ Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
 |---|---|---|
 | [000004 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000004__create_characters_and_skills.sql) | characters/character_skills·확장 검사 삭제 | 두 테이블이 비어 있을 때만 허용; 계정·기존 검사 유지 |
 | [000005 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000005__create_character_inventory_persistence.sql) | 상태·아이템·성공 요청/신규 루틴 삭제 | 세 신규 테이블이 모두 비어 있을 때만 공동 DROP; V4 캐릭터/스킬 유지 |
+| [000006 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000006__create_item_use_ledger.sql) | 사용 원장·신규 6루틴 삭제, V5 claim/save/release 복원 | terminal을 포함한 원장 전체가 비어 있을 때만; 영수증·인벤토리 보존 |
 | [000003 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000003__create_auth_account_status_procedure.sql) | `get_auth_account_status` 삭제 | 계정 데이터 유지; 최신 Auth 코드와 호환되지 않음 |
 | [000002 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000002__create_google_login_procedure.sql) | `login_google_account` 삭제 | 계정 데이터 유지 |
 | [000001 Down](../../ActionRPGServer/Database/Migrations/MySQL/Down/V000001__create_login_accounts.sql) | `account_identities`, `accounts` 삭제 | 두 테이블이 모두 비어 있을 때만 허용 |
@@ -693,16 +860,16 @@ MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초
 2. Auth·Town·Room의 기존 접속을 종료하고 정지 상태를 확인한다. Auth 메모리 소유권이 사라지는
    재시작 전에 타운/룸의 이전 연결까지 종료하는 조건은 Auth 개발 계약을 따른다.
 3. 빈 신규 스키마에는 이력 테이블·기존 테이블/뷰·프로시저/함수·이벤트·트리거가 없어야 한다.
-   Up은 V000000 이력 기반을 생성한 후 000001→000002→000003→000004→000005를 순서대로 적용한다.
-4. 기존 관리 DB는 아래 조회 절차로 전체 이력과 구조를 먼저 확인한다. 정상 head=1이면 2→3→4,
-   head=2이면 3→4→5, head=3이면 4→5, head=4이면 5, head=5이면 새 감사 행 없이 검사만 끝낸다. Down 성공으로 낮아진 head에도
+   Up은 V000000 이력 기반을 생성한 후 000001→000002→000003→000004→000005→000006을 순서대로 적용한다.
+4. 기존 관리 DB는 아래 조회 절차로 전체 이력과 구조를 먼저 확인한다. 정상 head=1이면 2~6,
+   head=2이면 3~6, head=3이면 4~6, head=4이면 5~6, head=5이면 6, head=6이면 새 감사 행 없이 검사만 끝낸다. Down 성공으로 낮아진 head에도
    같은 규칙을 사용한다. 이력이 없는 비어 있지 않은 DB를 자동으로 기준 버전 등록하지 않는다.
 5. Up 배치를 실행한다. `-Database`가 없으면 대상 이름을, `-ServicesStopped`가 없으면 서버 종료
    확인 `Y` 또는 `y`를 입력받는다. `ACTIONRPG_MIGRATION_CONNECTION_STRING`이 없으면 설치된
    64비트 MySQL Unicode 드라이버와 호스트·포트·마이그레이션 계정·숨김 비밀번호로 TLS 연결을
    구성한다. 입력은 파일이나 환경 변수에 저장하지 않는다. 환경 변수와 두 인자를 모두 제공하면
    기존처럼 추가 질문 없이 실행한다. 대상 host:port,
-   DB 이름, 계획, 각 버전의 성공, 마지막 `Complete. Active version: V000005.`을 확인한다.
+   DB 이름, 계획, 각 버전의 성공, 마지막 `Complete. Active version: V000006.`을 확인한다.
    연결 전 확인을 마치고 표시한 계획 뒤에는 바로 SQL을 실행하며 dry-run 단계는 없다.
 6. 종료 코드 0과 최종 상태를 확인하고 동일 Up/Down/Infrastructure 파일을 Auth 배포 디렉터리에
    둔다. 종료 코드 1·중간 중단·불명확한 완료에서는 후속 서비스 배포를 진행하지 않는다.
@@ -710,7 +877,7 @@ MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초
    Auth는 마이그레이션을 실행하지 않는다. 실제 환경에서 로그인·상태 조회·연계 동작 확인은
    별도로 승인받은 검증 범위에서 진행한다.
 
-현재 Up의 목표는 준비된 계약의 최신 000005로 고정된다. `-TargetVersion`, 특정 버전만 실행,
+현재 Up의 목표는 준비된 계약의 최신 000006으로 고정된다. `-TargetVersion`, 특정 버전만 실행,
 기준 버전 등록, `-Status`/`-WhatIf`/별도 조회 배치는 구현하지 않았다. `-InspectOnly`는 지정한 구조와
 비교하는 진단이며 실제 적용 버전이나 복구 성공 판정이 아니다. DB 생성은 위의 명시적
 Up -CreateDatabase로만 수행한다. 임의 버전의 SQL을 골라 관리 도구에서 실행하는 방식으로
@@ -719,14 +886,14 @@ Up -CreateDatabase로만 수행한다. 임의 버전의 SQL을 골라 관리 도
 
 ### 현재 버전의 조회와 확인
 
-이 문서에 기재한 000005는 배포 파일 버전이다. 실제 버전을 확인하려면 승인된 관리 환경에서
-선택 DB와 V5의 `get_inventory_schema_migration_history()` 결과를 조회해야 한다.
+이 문서에 기재한 000006은 배포 파일 버전이다. 실제 버전을 확인하려면 승인된 관리 환경에서
+선택 DB와 V6의 `get_item_use_schema_migration_history()` 결과를 조회해야 한다.
 V0~V3은 기존 `get_schema_migration_history()`, V4는 `get_character_schema_migration_history()`를 사용하며 V5 전체 구조 검사의 대체는 아니다. 아래 SQL은 조회 예시이며
 문서 작성 중 실행하지 않았다. 호출은 검사 잠금을 잠시 획득하지만 감사 행이나 스키마를 바꾸지 않는다.
 
 ```sql
 SELECT DATABASE(), @@version, @@version_comment;
-CALL get_inventory_schema_migration_history();
+CALL get_item_use_schema_migration_history();
 ```
 
 1. 첫 SELECT의 대상이 의도한 스키마·엔진인지 확인한다. CALL의 첫 결과셋(아래 계약의 번호 0)에서도
@@ -739,7 +906,7 @@ CALL get_inventory_schema_migration_history();
    입력·SHOW 원문도 해당 head의 계약과 비교한다. 표/프로시저가 존재하는 것만으로 완료를 판단하지 않는다.
 4. 실행기의 Get-Head/Get-Snapshot/Assert-Structure와 Auth의 ValidateHistory/ValidateStructure가
    위 검증을 구현한다. 수동 CALL이나 눈으로 읽은 최대 번호는 이 검증의 대체가 아니다.
-   Auth 준비를 위해서는 현재 DB에서 검증에 성공한 head=5 증명이 필요하다.
+   Auth 준비를 위해서는 현재 DB에서 검증에 성공한 head=6 증명이 필요하다.
 
 조회 불가·원문 NULL·잠금 획득 실패라면 현재 버전 확인에 실패한 것이다. 0 또는 3으로 가정하지
 않는다. Up을 단순 조회용으로 실행하면 미적용 SQL을 적용할 수 있으므로 상태 확인에 사용하지 않는다.
@@ -787,11 +954,11 @@ Tool\Database\UpMigration.bat -Database actionrpg -RecoverBootstrap -ServicesSto
   중복/단독 확인 행, RUNNING, 누락·잘못된 순서는 계속 차단한다. 확인 행은 구조 재검증의 완료
   기록으로 V0 적용 SQL을 다시 실행했다는 뜻이 아니다.
 * 쓰기 후 원래 실패 행 불변·전체 이력·V0 구조/객체 수를 재확인하고
-  `Recovery complete. Active version: V000000.`에서 종료한다. 000001~000005는 별도 일반 Up으로
+  `Recovery complete. Active version: V000000.`에서 종료한다. 000001~000006은 별도 일반 Up으로
   적용한다. 복구 재실행은 다른 감사 행이 있으므로 추가 기록 없이 거절한다. INSERT 후 통신/검사
   실패에는 확인 행이 이미 커밋됐을 수 있으므로 자동 재시도하지 말고 읽기 전용 진단으로 조사한다.
 * 수정된 Auth 소스를 다시 빌드해야 복구 이력을 인정한다. 구버전 Auth는 FAILED를 계속 거절한다.
-  새 Auth도 실제 head=5 및 전체 구조/배포 체크섬 검증 전에는 로그인·입장을 열지 않는다.
+  새 Auth도 실제 head=6 및 전체 구조/배포 체크섬 검증 전에는 로그인·입장을 열지 않는다.
 
 자기 테이블을 SELECT 원본으로 사용하는 INSERT는
 [MySQL INSERT ... SELECT 계약](https://dev.mysql.com/doc/refman/8.0/en/insert-select.html)을 따른다.
@@ -845,7 +1012,7 @@ Down도 관련 서비스를 정지하고 같은 대상·파일·이력·구조 �
 실행기는 ODBC 명령에 30초 타임아웃을 요청하고 조회 전체 4096행·값 32768문자, SQL 파일
 1MiB 한도를 사용한다. 실제 드라이버의 타임아웃 동작은 운영 환경에서 확인해야 한다.
 Auth runtime ODBC는 기본 2연결/대기 128건, 연결 5초·쿼리 10초·큐 대기 30초, 결과 전체
-4096행/16개 데이터 결과셋/4MiB 한도를 사용한다. Auth HTTP의 15초 대기가 먼저 끝나도 이미
+4096행/24개 데이터 결과셋/4MiB 한도를 사용한다. Auth HTTP의 15초 대기가 먼저 끝나도 이미
 시작된 DB 실행을 취소했다는 뜻은 아니다. 누적 감사 이력/메타데이터가 한도를 넘으면 검증이 차단되며
 이력을 임의로 잘라 해결하지 않는다. 조회 페이지화·승인된 감사 보존/한도 확장은 별도 구현 대상이다.
 
@@ -853,14 +1020,14 @@ Auth runtime ODBC는 기본 2연결/대기 128건, 연결 5초·쿼리 10초·�
 
 V0의 `get_schema_migration_history()`, V4의 `get_character_schema_migration_history()`, V5의 `get_inventory_schema_migration_history()`는
 같은 이름 기반 잠금을 획득해 조회하고 해제한다. 실행기는 프로시저 존재 여부로 검사 경로를
-선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V5 검사만 사용한다. 잠금 획득
+선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V6의 get_item_use_schema_migration_history를 사용한다. 잠금 획득
 실패 시 SQL 오류이며 성공 플래그를 반환하지 않는다. 실행기 연결이 이미 잠금을 가진 경우 MySQL의
-재귀 잠금 횟수 중 조회가 추가한 횟수만 해제한다. V0 데이터 결과셋은 10개, V4는 11개, V5는 18개이며 첫 7개는
+재귀 잠금 횟수 중 조회가 추가한 횟수만 해제한다. V0 데이터 결과셋은 10개, V4는 11개, V5는 18개, V6는 24개이며 첫 7개는
 문자열로 캐스팅한다. 나머지는 원본 SHOW CREATE 결과다. 각 결과셋은 SQL 파일의 순서를 따른다.
 
 | 결과셋 | 컬럼 순서 |
 |---|---|
-| 0 (5) | history_format=V0 `1`/V4 `2`/V5 `3`, checksum_format, database_name, engine_version, engine_comment |
+| 0 (5) | history_format=V0 `1`/V4 `2`/V5 `3`/V6 `4`, checksum_format, database_name, engine_version, engine_comment |
 | 1 (9) | execution_id, version, name, direction, up_checksum, down_checksum, state, started_at, finished_at |
 | 2 (9) | table_name, column_name, column_type, is_nullable, collation_name, extra, engine, column_default, character_set_name |
 | 3 (11) | table_name, constraint_name, constraint_type, column_name, referenced_table_name, referenced_column_name, check_clause, enforced, referenced_table_schema, update_rule, delete_rule |
@@ -872,11 +1039,12 @@ V0의 `get_schema_migration_history()`, V4의 `get_character_schema_migration_hi
 | 9 (6) | get_auth_account_status의 동일 SHOW CREATE 컬럼 |
 | 10 (6), V4 이상 | get_character_schema_migration_history의 동일 SHOW CREATE 컬럼 |
 | 11~17 (6), V5 | emit_character_state, list_characters, create_character, claim_character, save_character_state, release_character, get_inventory_schema_migration_history 순서의 SHOW CREATE |
+| 18~23 (6), V6 | emit_item_use, reserve_item_use, get_item_use, complete_item_use, cancel_item_use, get_item_use_schema_migration_history 순서의 SHOW CREATE |
 
 NULL은 원본 NULL과 동일하며 임의로 빈 문자열과 합치지 않는다. 대상 테이블은 schema_migrations,
 accounts, account_identities, 대상 루틴은 get_schema_migration_history, login_google_account,
 get_auth_account_status다. V4는 characters/character_skills와 get_character_schema_migration_history도
-포함한다. V5는 신규 세 테이블과 공개/내부/검사 7루틴을 추가해 총 11루틴·29입력 계약을 검사한다. 실제 기본값·InnoDB·CHECK 활성화·PK/인덱스·현재 스키마를 가리키는
+포함한다. V5는 총 11루틴·29입력이며 V6는 사용 원장과 신규 6루틴을 더해 총 17루틴·68입력이다. 실제 기본값·InnoDB·CHECK 활성화·PK/인덱스·현재 스키마를 가리키는
 FK RESTRICT·프로시저 본문/입력 문자셋을 대조한다. 정보 조회 권한 부족이나 본문 NULL도 거절한다.
 
 로컬 MySQL 8.0.46의 사용자 진단 결과에서 CHECK 문자열 경계가 `_utf8mb4\'UP\'`처럼
@@ -892,7 +1060,7 @@ CHECK의 `OCTET_LENGTH(subject)`는 로컬 메타데이터에서 `LENGTH(subject
 
 ROUTINE_DEFINITION은 내부 definition_utf8에서 가져오며 `_binary` 같은 문자셋 introducer가
 제거되므로 배포 원문과 직접 본문을 비교하지 않는다. 결과셋 5의 이름·보안·접근 특성을 확인하고,
-실제 본문은 결과셋 7~17(V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
+실제 본문은 결과셋 7~23(V5는 7~17, V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
 사용한다. 문자열 내용과 `_binary`를 보존하고 일반 주석·공백·식별자 표기 차이를 토큰으로 정규화한다.
 SHOW는 프로시저 안에서 결과셋을 반환할 수 있다.
 근거: [MySQL SHOW CREATE](https://dev.mysql.com/doc/refman/8.0/en/show-create-procedure.html),
@@ -908,23 +1076,23 @@ NO_BACKSLASH_ESCAPES·ANSI_QUOTES·PIPES_AS_CONCAT은 허용하지 않는다. �
 
 AuthServer는 서비스 접속 변수와 함께 기대 DB 이름 `ACTIONRPG_DB_SCHEMA`, 배포 SQL 절대
 경로 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`를 사용한다. 새 Auth Runtime에는 login_google_account/get_auth_account_status/
-get_inventory_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
+get_item_use_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
 하며 테이블 접근과 루틴 정의 조회에 필요한 범위를 실제 환경에서 검토한다. SHOW 원문은 해당
 루틴의 DEFINER이거나 SHOW_ROUTINE 등의 전체 조회 권한이 있어야 보인다. EXECUTE만 가진
-주체는 Create Procedure가 NULL일 수 있다. 열한 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
+주체는 Create Procedure가 NULL일 수 있다. 열일곱 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
 런타임에 광범위 조회 권한을 추가하지 않고 조회 프로시저의 DEFINER 문맥에서 확인할 수 있다.
 권한 부족을 성공으로 처리하지 않는다. 도구용 주체와 런타임 주체를 분리하며 GRANT는 포함하지 않는다.
 
-마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000005와
+마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000006과
 구조를 검증한 뒤 DB 연계 기능을 활성화한다. 요구 버전은
 [LoginSchemaVerifier.h](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.h)의
-`REQUIRED_SCHEMA_VERSION=5`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
+`REQUIRED_SCHEMA_VERSION=6`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
 전체 이력과 구조 검증에 성공해야 검사한 OdbcDatabase 인스턴스에 연결된 증명을 만든다.
 다른 DB 객체나 설정 파일의 버전 플래그로 이 증명을 대체하지 않는다.
 
-Auth main은 기동 검증을 최대 15초 기다린다. 실패·시간 초과·조회 불가·head<5·미지원 상위 버전에는
+Auth main은 기동 검증을 최대 15초 기다린다. 실패·시간 초과·조회 불가·head<6·미지원 상위 버전에는
 challenge/로그인/티켓 발급·소비·갱신 기능이 HTTP 503으로 차단된다. HTTPS 프로세스가 반드시
-종료되는 것은 아니며, 로그아웃과 기존 소유권 release는 이 게이트 밖에 있다. 000005 Down 후에는
+종료되는 것은 아니며, 로그아웃과 기존 소유권 release는 이 게이트 밖에 있다. 000006 Down 후에는
 최신 Auth의 로그인·입장을 활성화할 수 없다. DB가 복구돼도 기동 시 확정한 준비 상태는 자동으로
 바뀌지 않으므로 서비스를 정지하고 재기동해 다시 검증해야 한다. Google 인증 실패나 이후 runtime
 DB 요청 오류는 별도의 거절 경로이며 성공한 기동 증명이 계속된 요청 성공을 보장하지 않는다.

@@ -135,17 +135,18 @@ ODBC 드라이버가 하나면 자동 선택하고 여러 개면 번호를 묻�
 검증 옵션도 이 연결 문자열로 지정한다. 대화형 연결은 `SSLMODE=REQUIRED`로 암호화를 요구한다.
 자동화에서는 연결 환경 변수와 `-Database actionrpg -ServicesStopped`를 함께 제공하면 추가 입력이 없다.
 
-기대 결과는 `Complete. Active version: V000005.`과 종료 코드 **0**이다. 기반 V000000 다음에
-V000001→V000002→V000003→V000004→V000005가 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
+기대 결과는 `Complete. Active version: V000006.`과 종료 코드 **0**이다. 기반 V000000 다음에
+V000001→V000002→V000003→V000004→V000005→V000006이 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
 실패 출력이 있으면 일반 Up을 반복하지 말고 아래 문제 해결 절차를 따른다.
 배치는 실행 정책 RemoteSigned를 자식 PowerShell에만 지정한다. 조직의 상위 정책을 덮어쓰는 기능은 아니다.
 [실행 정책 범위 설명](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy?view=powershell-5.1).
 
-마이그레이션 성공 후 관리자로 기존 EXECUTE를 유지하고 **새 V5 검사와 Town 공개 프로시저 EXECUTE**를 추가한다.
-새 Auth의 필수 호출은 login_google_account/get_auth_account_status/get_inventory_schema_migration_history다.
-Town은 list_characters/create_character/claim_character/save_character_state/release_character를 호출한다.
+마이그레이션 성공 후 관리자로 기존 EXECUTE를 유지하고 **V6 검사와 Town 사용 공개 프로시저 EXECUTE**를 추가한다.
+새 Auth의 필수 호출은 login_google_account/get_auth_account_status/get_item_use_schema_migration_history다.
+Town은 기존 5개 캐릭터 절차와 reserve_item_use/get_item_use/complete_item_use/cancel_item_use를 호출한다.
+V6에서 교체한 claim_character/save_character_state/release_character의 EXECUTE도 아래와 같이 재부여한다.
 아래는 로컬에서 Auth/Town이 actionrpg_auth를 공유하는 예제다. 별도 계정이면 해당 역할의 호출만 부여한다.
-내부 emit_character_state에는 EXECUTE를 부여하지 않는다.
+내부 emit_character_state/emit_item_use에는 EXECUTE를 부여하지 않는다.
 기존 V0/V4 검사 EXECUTE는 새 검사 권한을 대신하지 않는다.
 계정과 프로시저가 모두 존재하는지 먼저 확인한다.
 
@@ -169,6 +170,16 @@ TO 'actionrpg_auth'@'127.0.0.1';
 GRANT EXECUTE ON PROCEDURE actionrpg.save_character_state
 TO 'actionrpg_auth'@'127.0.0.1';
 GRANT EXECUTE ON PROCEDURE actionrpg.release_character
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.get_item_use_schema_migration_history
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.reserve_item_use
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.get_item_use
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.complete_item_use
+TO 'actionrpg_auth'@'127.0.0.1';
+GRANT EXECUTE ON PROCEDURE actionrpg.cancel_item_use
 TO 'actionrpg_auth'@'127.0.0.1';
 SHOW GRANTS FOR 'actionrpg_auth'@'127.0.0.1';
 ```
@@ -242,7 +253,7 @@ Google secret은 ID와 짝지어 클라이언트 환경에만 전달되고 로�
 | 64-bit MySQL Unicode ODBC driver not registered | `Get-OdbcDriver -Platform '64-bit'`로 실제 등록명 확인. 32비트/ANSI 드라이버와 혼동하지 않음. 최신 실행기는 연결 문자열 Driver의 중괄호 표기를 제거해 등록명과 대조 |
 | Auth TLS 오류, curl 60 `revocation status is unknown` | 현재 사용자 CA 신뢰·localhost SAN·CA 경로 확인. 최신 실행기의 로컬 검사에는 `--ssl-revoke-best-effort`가 적용됨. `--insecure`나 전체 인증서 검증 해제로 대체하지 않음 |
 | Auth listening 로그 뒤 종료 코드 1 | 이전 소스는 실제 bind 전에 listening을 출력했음. 최신 실행기로 빌드한 뒤 서버 콘솔의 bind/listen/accept stage와 숫자 WSA_error 확인. 8443 점유·Windows 제외 포트 범위·로컬 보안 정책을 검토하며 임의 포트 변경이나 관리자 실행으로 우회하지 않음 |
-| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=5, 새 검사/로그인/상태 조회 EXECUTE 권한, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
+| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=6, V6 검사/로그인/상태 조회 EXECUTE 권한, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
 | `ODBC driver substituted the connection timeout` | 이전 공통 ODBC 코드의 MySQL 비지원 속성 검사. 최신 소스의 로그인 타임아웃 검사로 Auth와 Town을 모두 다시 빌드 |
 | Room 출력 없이 종료 | EXE 옆 해당 빌드의 OpenSSL DLL 두 개와 Debug C++ 런타임 확인. Room과 의존 프로젝트를 재빌드해 app-local 배포. 최신 프로젝트는 후속 빌드의 DLL 삭제도 방지 |
 | Room 종료 코드가 빈칸 | 최신 실행기는 네이티브 프로세스 핸들을 보유해 종료 코드를 읽음. 빈 코드 자체를 원인으로 보지 말고 위 런타임 파일 검사 |
