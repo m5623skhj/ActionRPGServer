@@ -119,6 +119,37 @@ namespace TownServer::Network
         });
     }
 
+    void RoomControlTcpServer::ItemUse(Protocol::RoomId inRoomId, Protocol::PlayerId inPlayerId,
+        std::string inJson, std::function<void(std::string)> inHandler)
+    {
+        asio::dispatch(GetExecutor(), [this, inRoomId, inPlayerId, json = std::move(inJson),
+            handler = std::move(inHandler)]() mutable
+        {
+            auto server = roomServers.end();
+            const auto route = roomToServerSession.find(inRoomId);
+            if (route != roomToServerSession.end()) server = roomServers.find(route->second);
+            // Recovery still routes after normal room-end mapping removal. The Room verifies both incarnations.
+            if (server == roomServers.end())
+                server = std::find_if(roomServers.begin(), roomServers.end(), [inRoomId](const auto& row)
+                    { return row.second.registered && row.second.roomServerId == (inRoomId >> 32); });
+            if (server == roomServers.end() || !server->second.registered || pendingItemUses.size() >= 4096
+                || json.empty() || json.size() > 8192)
+            { handler(R"({"status":"Unknown"})"); return; }
+            const auto id = nextRequestId++;
+            auto timer = std::make_shared<asio::steady_timer>(GetExecutor());
+            timer->expires_after(std::chrono::seconds(5));
+            pendingItemUses.emplace(id, PendingItemUse{server->first, inRoomId, inPlayerId, timer, std::move(handler)});
+            timer->async_wait([this, id](const asio::error_code& error)
+            {
+                if (error) return;
+                const auto found = pendingItemUses.find(id); if (found == pendingItemUses.end()) return;
+                auto handler = std::move(found->second.handler); pendingItemUses.erase(found);
+                handler(R"({"status":"Unknown"})");
+            });
+            server->second.session->Send(Protocol::Encode(Protocol::ItemUseRequest{id, inRoomId, inPlayerId, json}));
+        });
+    }
+
     void RoomControlTcpServer::HandleAcceptedSession(
         std::shared_ptr<ActionRPG::Network::TcpSession> inSession)
     {
@@ -151,6 +182,12 @@ namespace TownServer::Network
 
     void RoomControlTcpServer::HandleClosedSession(const std::uint64_t inSessionId)
     {
+        for (auto iterator = pendingItemUses.begin(); iterator != pendingItemUses.end();)
+        {
+            if (iterator->second.serverSessionId != inSessionId) { ++iterator; continue; }
+            iterator->second.timer->cancel(); auto handler = std::move(iterator->second.handler);
+            iterator = pendingItemUses.erase(iterator); handler(R"({"status":"Unknown"})");
+        }
         for (auto iterator = roomToServerSession.begin(); iterator != roomToServerSession.end();)
         {
             if (iterator->second == inSessionId)
@@ -228,6 +265,17 @@ namespace TownServer::Network
 
         switch (*type)
         {
+        case Protocol::PacketType::ItemUseResult:
+        {
+            const auto packet = Protocol::DecodeItemUseResult(inPacket);
+            if (!packet) { CloseInvalidSession(state); return; }
+            const auto found = pendingItemUses.find(packet->requestId);
+            if (found == pendingItemUses.end()) return; // A valid late reply may follow a timeout.
+            if (found->second.serverSessionId != inSessionId || found->second.roomId != packet->roomId
+                || found->second.playerId != packet->playerId) { CloseInvalidSession(state); return; }
+            found->second.timer->cancel(); auto handler = std::move(found->second.handler);
+            pendingItemUses.erase(found); handler(packet->json); return;
+        }
         case Protocol::PacketType::RegisterRoomServer:
         {
             const std::optional<Protocol::RegisterRoomServer> packet =

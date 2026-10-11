@@ -162,6 +162,7 @@
     <ClCompile Include="GameRoomCombat.cpp" />
     <ClCompile Include="GameRoomSkills.cpp" />
     <ClCompile Include="GameRoomRealtime.cpp" />
+    <ClCompile Include="GameRoomItemUse.cpp" />
     <ClCompile Include="CombatDefinition.cpp" />
     <ClCompile Include="MonsterDefinition.cpp" />
     <ClCompile Include="main.cpp" />
@@ -176,6 +177,8 @@
     <ClInclude Include="DungeonSession.h" />
     <ClInclude Include="DungeonDefinition.h" />
     <ClInclude Include="GameRoom.h" />
+    <ClInclude Include="ItemUseAction.h" />
+    <ClInclude Include="..\Shared\ItemUseIdentity.h" />
     <ClInclude Include="CombatDefinition.h" />
     <ClInclude Include="..\Shared\PlayerSkillCatalog.h" />
     <ClInclude Include="MonsterDefinition.h" />

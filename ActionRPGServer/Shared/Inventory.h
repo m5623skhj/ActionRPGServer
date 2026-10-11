@@ -28,6 +28,15 @@ namespace ActionRPG::Items
 
     struct Definition
     {
+        struct Use
+        {
+            enum class Type { None, Recovery, Throw };
+            Type type{ Type::None };
+            std::uint32_t requiredLevel{ 1 }, amount{}, damage{};
+            float cooldownSeconds{}, speed{}, range{}, radius{}, spawnForward{}, spawnHeight{}, hitstopSeconds{};
+            std::string motionId;
+            float motionDurationSeconds{};
+        } use;
         std::string id;
         std::uint32_t category{}, maxStack{}, equipmentSlot{}, requiredLevel{};
         std::uint32_t restoreHp{};
@@ -49,6 +58,12 @@ namespace ActionRPG::Items
             std::ifstream input(inPath, std::ios::binary);
             Rules::Require(input.good(), "Cannot read item catalog.");
             auto value = Json::parse(input);
+            return Parse(std::move(value));
+        }
+
+        [[nodiscard]] static Catalog Parse(Json value)
+        {
+            using Rules = PlayerSkills::Catalog;
             Rules::Keys(value, { "format", "schemaVersion", "items" });
             Rules::Require(value.at("format") == "Items" && value.at("schemaVersion") == 1
                 && value.at("items").is_array(), "Invalid item catalog.");
@@ -57,7 +72,8 @@ namespace ActionRPG::Items
             {
                 Rules::Require(item.dump().size() <= 8192, "Item definition exceeds transmission limit.");
                 Rules::Keys(item, { "id", "name", "description", "icon", "category", "maxStack" },
-                    { "equipmentSlot", "requiredLevel", "characterDefinitionIds", "stats", "effects" });
+                    { "equipmentSlot", "requiredLevel", "characterDefinitionIds", "stats", "effects",
+                        "useRequiredLevel", "useCooldownSeconds" });
                 Definition definition;
                 definition.id = item.at("id").get<std::string>();
                 Rules::Require(Rules::IsId(definition.id), "Invalid item definition ID.");
@@ -107,12 +123,39 @@ namespace ActionRPG::Items
                             && item.at("effects").size() <= 1, "Invalid consumable effects.");
                         for (const auto& effect : item.at("effects"))
                         {
-                            Rules::Keys(effect, { "type", "amount" });
-                            Rules::Require(effect.at("type") == "RestoreHp", "Unsupported consumable effect.");
-                            definition.restoreHp = Rules::Integer(effect.at("amount"), 1, 1000000);
+                            Rules::Require(item.contains("useRequiredLevel") && item.contains("useCooldownSeconds"),
+                                "Missing item use restrictions.");
+                            definition.use.requiredLevel = Rules::Integer(item.at("useRequiredLevel"), 1, 1000000);
+                            definition.use.cooldownSeconds = Rules::Number(item.at("useCooldownSeconds"), 0.001, 3600);
+                            if (effect.at("type") == "RestoreHp")
+                            {
+                                Rules::Keys(effect, { "type", "amount" });
+                                definition.use.type = Definition::Use::Type::Recovery;
+                                definition.restoreHp = definition.use.amount = Rules::Integer(effect.at("amount"), 1, 1000000);
+                            }
+                            else
+                            {
+                                Rules::Keys(effect, { "type", "damage", "speed", "range", "radius", "spawnForward",
+                                    "spawnHeight", "hitstopSeconds", "motionId", "motionDurationSeconds" });
+                                Rules::Require(effect.at("type") == "Throw", "Unsupported consumable effect.");
+                                definition.use.type = Definition::Use::Type::Throw;
+                                definition.use.damage = Rules::Integer(effect.at("damage"), 1, 1000000);
+                                definition.use.speed = Rules::Number(effect.at("speed"), 1, 4000);
+                                definition.use.range = Rules::Number(effect.at("range"), 1, 10000);
+                                definition.use.radius = Rules::Number(effect.at("radius"), 0.1, 100);
+                                definition.use.spawnForward = Rules::Number(effect.at("spawnForward"), 0, 500);
+                                definition.use.spawnHeight = Rules::Number(effect.at("spawnHeight"), 0, 1000);
+                                definition.use.hitstopSeconds = Rules::Number(effect.at("hitstopSeconds"), 0, 10);
+                                definition.use.motionId = effect.at("motionId").get<std::string>();
+                                Rules::Require(definition.use.motionId == "AttackFire", "Unsupported item use motion.");
+                                definition.use.motionDurationSeconds = Rules::Number(effect.at("motionDurationSeconds"), 0.05, 2);
+                            }
                         }
                     }
                 }
+                Rules::Require(definition.use.type != Definition::Use::Type::None
+                    || (!item.contains("useRequiredLevel") && !item.contains("useCooldownSeconds")),
+                    "Use restrictions on an unusable item.");
                 result.presentations.emplace(definition.id, item);
                 const auto id = definition.id;
                 Rules::Require(result.definitions.emplace(id, std::move(definition)).second,

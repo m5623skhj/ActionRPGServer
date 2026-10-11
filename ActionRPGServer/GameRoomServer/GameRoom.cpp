@@ -247,6 +247,7 @@ namespace GameRoomServer
             {
                 auto runtime = ActionRPG::Items::CharacterRuntimeState::Parse(nlohmann::json::parse(data));
                 if (runtime.characterId != found->second.persistentCharacterId
+                    || runtime.ownerGeneration != found->second.ownerGeneration
                     || runtime.revision <= found->second.inventoryRevision) return;
                 self->combatDefinition->skillTrees.ValidateProgression(self->combatDefinition->playerSkills,
                     runtime.progression, found->second.characterId);
@@ -310,6 +311,7 @@ namespace GameRoomServer
                 auto& player = self->players.at(inPlayerId);
                 player.progression = std::move(runtime.progression);
                 player.persistentCharacterId = runtime.characterId;
+                player.ownerGeneration = runtime.ownerGeneration;
                 player.inventoryRevision = runtime.revision;
                 player.equipment = std::move(runtime.equipment);
             }

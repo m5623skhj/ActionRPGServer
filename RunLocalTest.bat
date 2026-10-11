@@ -424,7 +424,7 @@ function Create-LocalSettings([string] $directory, [string] $settingsPath, [stri
     Write-Host 'Local settings saved for this Windows user. DB readiness is checked by Auth and Town; no migration was applied.'
 }
 function Assert-SqlFiles([string] $directory) {
-    foreach ($file in @('Infrastructure\V000000__migration_history.sql','V000001__create_login_accounts.sql','V000002__create_google_login_procedure.sql','V000003__create_auth_account_status_procedure.sql','V000004__create_characters_and_skills.sql','V000005__create_character_inventory_persistence.sql','Down\V000001__create_login_accounts.sql','Down\V000002__create_google_login_procedure.sql','Down\V000003__create_auth_account_status_procedure.sql','Down\V000004__create_characters_and_skills.sql','Down\V000005__create_character_inventory_persistence.sql')) {
+    foreach ($file in @('Infrastructure\V000000__migration_history.sql','V000001__create_login_accounts.sql','V000002__create_google_login_procedure.sql','V000003__create_auth_account_status_procedure.sql','V000004__create_characters_and_skills.sql','V000005__create_character_inventory_persistence.sql','V000006__create_item_use_ledger.sql','Down\V000001__create_login_accounts.sql','Down\V000002__create_google_login_procedure.sql','Down\V000003__create_auth_account_status_procedure.sql','Down\V000004__create_characters_and_skills.sql','Down\V000005__create_character_inventory_persistence.sql','Down\V000006__create_item_use_ledger.sql')) {
         Require-File (Join-Path $directory $file) ('ACTIONRPG_DB_MIGRATIONS_DIRECTORY/' + $file)
     }
 }

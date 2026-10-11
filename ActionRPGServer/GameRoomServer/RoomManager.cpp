@@ -27,7 +27,8 @@ namespace GameRoomServer
           sessionBrokerPort(inSessionBrokerPort),
           enterTimeout(inEnterTimeout),
           randomState(static_cast<std::uint64_t>(
-              std::chrono::steady_clock::now().time_since_epoch().count()))
+              std::chrono::steady_clock::now().time_since_epoch().count())),
+          processIncarnation(ActionRPG::Items::NewIncarnation())
     {
         rooms.reserve(maxRoomCount);
     }
@@ -331,7 +332,7 @@ namespace GameRoomServer
             {
                 room->Stop();
             }
-            self->rooms.clear();
+            // Keep receipts while the process lives; a channel loss is not proof of an effect's absence.
             self->endedRooms.clear();
             for (const auto& [challenge, pending] : self->pendingSessions)
                 pending.session->RejectAuthentication(challenge, pending.generation);
@@ -391,7 +392,12 @@ namespace GameRoomServer
                 return;
             }
             iterator->second->Stop();
-            self->rooms.erase(iterator);
+            self->retiringRooms.insert(inRoomId);
+            iterator->second->CanRetire([self, inRoomId](bool ready)
+            {
+                asio::dispatch(self->strand, [self, inRoomId, ready]()
+                { if (ready) { self->rooms.erase(inRoomId); self->retiringRooms.erase(inRoomId); } });
+            });
             const bool wasEnded = self->endedRooms.erase(inRoomId) > 0;
             if (inAborted && !wasEnded)
             {
@@ -399,6 +405,42 @@ namespace GameRoomServer
                     inRoomId, Protocol::RoomEndReason::Aborted, {}
                 }));
             }
+        });
+    }
+
+    void RoomManager::ItemUse(Protocol::ItemUseRequest inRequest, std::function<void(Protocol::ItemUseResult)> inHandler)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(strand, [self, request = std::move(inRequest), handler = std::move(inHandler)]() mutable
+        {
+            nlohmann::json body;
+            try { body = nlohmann::json::parse(request.json); }
+            catch (...) { handler(Protocol::ItemUseResult{{request.requestId, request.roomId, request.playerId,
+                R"({"status":"Unknown"})"}}); return; }
+            const auto found = self->rooms.find(request.roomId);
+            if (found == self->rooms.end() || (body.value("kind", "") != "Prepare"
+                && body.value("processIncarnation", "") != self->processIncarnation))
+            {
+                // The new process must never assert that an old process did not apply the effect.
+                handler(Protocol::ItemUseResult{{request.requestId, request.roomId, request.playerId,
+                    R"({"status":"Unknown"})"}}); return;
+            }
+            found->second->ItemUse(request.playerId, std::move(body),
+                [self, request, handler = std::move(handler)](nlohmann::json result) mutable
+                {
+                    result["processIncarnation"] = self->processIncarnation;
+                    handler(Protocol::ItemUseResult{{request.requestId, request.roomId, request.playerId, result.dump()}});
+                    asio::post(self->strand, [self, roomId = request.roomId]()
+                    {
+                        const auto found = self->rooms.find(roomId);
+                        if (!self->retiringRooms.contains(roomId) || found == self->rooms.end()) return;
+                        found->second->CanRetire([self, roomId](bool ready)
+                        {
+                            asio::post(self->strand, [self, roomId, ready]()
+                            { if (ready) { self->rooms.erase(roomId); self->retiringRooms.erase(roomId); } });
+                        });
+                    });
+                });
         });
     }
 

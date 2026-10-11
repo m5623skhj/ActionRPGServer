@@ -130,6 +130,12 @@ int main(const int inArgumentCount, char* inArguments[])
             if (const auto control = weakControl.lock())
                 control->UpdatePlayerProgress(inRoomId, inPlayerId, std::move(inProgression));
         });
+        townInstance->SetRoomItemUseHandler([weakControl = std::weak_ptr<RoomControlTcpServer>(roomControlServer)](
+            std::uint64_t roomId, TownServer::Domain::PlayerId playerId, std::string json, std::function<void(std::string)> handler)
+        {
+            if (const auto control = weakControl.lock()) control->ItemUse(roomId, playerId, std::move(json), std::move(handler));
+            else handler(R"({"status":"Unknown"})");
+        });
         auto tls = std::make_shared<asio::ssl::context>(asio::ssl::context::tls_server);
         if (SSL_CTX_set_min_proto_version(tls->native_handle(), TLS1_2_VERSION) != 1)
             throw std::runtime_error("Unable to configure Town TLS minimum version.");

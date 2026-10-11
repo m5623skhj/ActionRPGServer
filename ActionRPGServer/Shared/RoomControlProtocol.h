@@ -24,7 +24,9 @@ namespace ActionRPG::RoomControlProtocol
         FinishRoom = 8,
         FinishRoomResult = 9,
         RoomStarted = 10,
-        UpdatePlayerProgress = 11
+        UpdatePlayerProgress = 11,
+        ItemUseRequest = 12,
+        ItemUseResult = 13
     };
 
     enum class RoomEndReason : std::uint8_t
@@ -91,6 +93,19 @@ namespace ActionRPG::RoomControlProtocol
         PlayerId playerId{};
         std::string progression;
     };
+
+    struct ItemUseRequest
+    {
+        RequestId requestId{};
+        RoomId roomId{};
+        PlayerId playerId{};
+        std::string json;
+    };
+    struct ItemUseResult : ItemUseRequest {};
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const ItemUseRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const ItemUseResult& inPacket);
+    [[nodiscard]] std::optional<ItemUseRequest> DecodeItemUseRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<ItemUseResult> DecodeItemUseResult(const std::vector<std::uint8_t>& inPacket);
 
     struct EnterRoom
     {

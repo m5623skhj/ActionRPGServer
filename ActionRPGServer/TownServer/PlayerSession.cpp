@@ -154,7 +154,8 @@ namespace TownServer::Network
             { const auto request = TownProtocol::DecodeInventoryStateRequest(inPacket); if (request) json = request->json; }
             else
             { const auto request = TownProtocol::DecodeInventoryOperationRequest(inPacket); if (request) json = request->json; }
-            if (json.empty() || !enterRequested.load() || GetPlayerId() == 0) { Stop(); return; }
+            // Before entry, Town accepts only UseStatus for an ownership claim blocked by a pending use.
+            if (json.empty()) { Stop(); return; }
             town->InventoryRequest(shared_from_this(), *type, std::move(json));
             return;
         }

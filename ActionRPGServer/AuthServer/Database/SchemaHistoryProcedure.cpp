@@ -13,7 +13,8 @@ namespace ActionRPG::Database
     void SchemaHistoryProcedure::ReadRow(ProcedureRow& inRow, std::size_t inResultIndex,
         Response& outResponse) const
     {
-        constexpr std::array<std::size_t, 18> COLUMN_COUNTS{5, 9, 9, 11, 6, 4, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+        constexpr std::array<std::size_t, 24> COLUMN_COUNTS{5, 9, 9, 11, 6, 4, 7,
+            6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
         if (inResultIndex >= COLUMN_COUNTS.size())
             InvalidResult("Unexpected schema result set; result_set=" + std::to_string(inResultIndex));
         if (inRow.GetColumnCount() != COLUMN_COUNTS[inResultIndex])
@@ -43,10 +44,10 @@ namespace ActionRPG::Database
     void SchemaHistoryProcedure::ValidateResults(std::size_t inResultSetCount,
         std::size_t inRowCount, const Response& inResponse) const
     {
-        bool invalidShape = inResultSetCount != 18 || inResponse.resultSets[0].size() != 1
+        bool invalidShape = inResultSetCount != 24 || inResponse.resultSets[0].size() != 1
             || inResponse.resultSets[1].empty() || inResponse.resultSets[2].empty()
             || inResponse.resultSets[3].empty() || inResponse.resultSets[4].empty()
-            || inResponse.resultSets[5].size() != 11 || inResponse.resultSets[6].size() != 29;
+            || inResponse.resultSets[5].size() != 17 || inResponse.resultSets[6].size() != 68;
         for (std::size_t index = 7; index < inResponse.resultSets.size(); ++index)
             invalidShape = invalidShape || inResponse.resultSets[index].size() != 1;
         if (invalidShape)

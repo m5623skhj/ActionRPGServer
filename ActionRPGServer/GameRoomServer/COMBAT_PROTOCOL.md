@@ -376,3 +376,33 @@ ACTIONRPG_ROOM_CONTROL_KEY 환경 변수를 사용하며 제어 연결은 loopba
 이번 리뷰 수정은 RoomControl 내부 패킷을 변경하므로 TownServer·GameRoomServer를 함께
 빌드/갱신해야 한다. Town·Dungeon 클라이언트 패킷 형식은 이번 수정에서 변경하지 않았다.
 이번 변경의 빌드·실행·실제 클리어/복귀/재도전 검증은 수행하지 않았다.
+
+## 아이템 사용 표시 확장
+
+HP 회복과 Stone 직선 투척은 Town의 46 Use/UseStatus와 DB V6 사용 원장을 거쳐 룸 strand에서 확정한다.
+일반 사격 shotPhase/shotSequence/탄환 생성에는 투척 표시 동작을 연결하지 않는다.
+Stone은 기존 직선 projectile 충돌 계산을 사용하며 visual은 Stone, itemDefinitionId는 Stone이다.
+신규 이미지 자산 없이 클라이언트의 기존 표시/fallback을 사용한다.
+투척 모션은 기존 AttackFire 아트를 재사용하므로 전용 투척 애니메이션은 포함하지 않는다.
+
+JSON 플레이어 행에 itemUseSequence(uint32), itemUseDefinitionId, itemUseMotionId(AttackFire 또는 빈 문자열),
+itemUseElapsedSeconds(float), itemUseDurationSeconds(float)를 추가한다. 투척 표시 시간은 0.15초다.
+HP 회복은 동작 문자열과 시간을 빈 값/0으로 두고 실제 HP를 갱신한다.
+투사체 JSON에는 itemDefinitionId와 visual을 추가하며 일반 탄환의 두 필드는 빈 문자열이다.
+
+기존 기본 frame과 SKL1 내부 순서는 유지하며 그 뒤에 다음 확장을 추가한다. 정수/float는 little endian,
+text16은 UTF-8 바이트 길이 uint16과 해당 문자열이다. 클라이언트는 tail 끝까지 태그를 반복해서 읽는다.
+스킬 카탈로그가 비어 있어도 해당 맵에 투사체가 있으면 SKL1을 전송한다. 아이템 투사체의
+directionY·speed·radius·age는 이 기존 확장에서 읽으며 클라이언트 기본값으로 대체하지 않는다.
+
+| 태그 | 헤더 | 반복 행 |
+|---|---|---|
+| IUS1 | 플레이어 수 uint16 | playerId uint64, itemUseSequence uint32, definitionId text16, motionId text16, elapsed float32, duration float32 |
+| ITP1 | 투사체 수 uint16 | projectileId uint64, itemDefinitionId text16, visual text16 |
+
+유효한 최신 실시간 프레임이 있으면 이전 JSON이 itemUseSequence와 동작 시각을 되돌리지 않는다.
+같은 sequence의 elapsed만 새 서버 상태에 맞춰 보간하며 클라이언트가 예측 투사체를 만들지 않는다.
+같은 룸에서 중복 요청은 보존된 영수증으로 답하고, 종료 룸의 미확정 사용은 Settle 완료까지 유지한다.
+등록된 원래 roomServerId를 통한 조정은 gameplay 입장 mapping의 종료와 분리되어 있다.
+소유권·실패·쿨타임·재접속 계약은 [Town 문서](../TownServer/DEVELOPMENT.md#v6-아이템-사용-hp-회복과-직선-투척)를 따른다.
+서버와 클라이언트를 함께 갱신해야 하며 이번 변경의 빌드·전투 실행 검증은 수행하지 않았다.

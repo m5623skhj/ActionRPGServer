@@ -9,14 +9,14 @@ namespace ActionRPG::Database
     struct SchemaHistoryRequest {};
     struct SchemaHistoryResponse
     {
-        std::array<std::vector<SchemaHistoryRow>, 18> resultSets;
+        std::array<std::vector<SchemaHistoryRow>, 24> resultSets;
     };
 
     /// Reads the complete audit trail and live information_schema contract under the migration lock.
     class SchemaHistoryProcedure final : public IStoreProcedure<SchemaHistoryRequest, SchemaHistoryResponse>
     {
     public:
-        [[nodiscard]] std::wstring_view GetName() const noexcept override { return L"get_inventory_schema_migration_history"; }
+        [[nodiscard]] std::wstring_view GetName() const noexcept override { return L"get_item_use_schema_migration_history"; }
         void BindParameters(ProcedureParameters&, Response&) const override {}
         void ReadRow(ProcedureRow& inRow, std::size_t inResultIndex, Response& outResponse) const override;
         void ValidateResults(std::size_t inResultSetCount, std::size_t inRowCount,

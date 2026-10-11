@@ -14,6 +14,7 @@ namespace TownServer::Domain
         for (const auto& row : inventory.at("items"))
             if (row.at("container") == ActionRPG::Items::EQUIPPED_CONTAINER) equipment.push_back(row);
         return {{"characterId", std::to_string(inEntry.persistentCharacterId)},
+            {"ownerGeneration", std::to_string(inEntry.ownerGeneration)},
             {"revision", std::to_string(inEntry.revision)}, {"progression", inEntry.progression.ToJson()},
             {"equipment", std::move(equipment)}};
     }
@@ -35,6 +36,8 @@ namespace TownServer::Domain
             {"characterId", std::to_string(inEntry.persistentCharacterId)},
             {"revision", std::to_string(inEntry.revision)}};
         auto state = key; state["inventory"] = inEntry.inventory.ToJson();
+        state["cooldownsComplete"] = inEntry.cooldownsComplete;
+        state["cooldowns"] = inEntry.cooldownsComplete ? inEntry.itemCooldowns : Json(nullptr);
         state["definitionBatchCount"] = batches.size();
         inEntry.session->Send(TownProtocol::Encode(TownProtocol::InventoryStateResponse{state.dump()}));
         for (std::size_t index = 0; index < batches.size(); ++index)
@@ -55,7 +58,7 @@ namespace TownServer::Domain
         if (found == players.end() || found->second.session->GetAccountId() != found->second.accountId)
         { inHandler("Disconnected"); return; }
         auto& entry = found->second;
-        if (entry.saving) { inHandler("Busy"); return; }
+        if (entry.saving || entry.itemUsePending) { inHandler("Busy"); return; }
         Persistence::Request request;
         request.operation = Persistence::Operation::Save; request.accountId = entry.accountId;
         request.characterId = entry.persistentCharacterId; request.ownerToken = entry.ownerToken;
@@ -122,6 +125,20 @@ namespace TownServer::Domain
         {
             const auto playerId = session->GetPlayerId();
             const auto found = self->players.find(playerId);
+            if (found == self->players.end() && session->GetAccountId() != 0
+                && inType == TownProtocol::PacketType::InventoryOperationRequest
+                && self->itemUseServices.contains(session->GetSessionId()))
+            {
+                try
+                {
+                    const auto body = Json::parse(data);
+                    Rules::Keys(body, {"action", "requestId"});
+                    const auto id = body.at("requestId").get<std::string>();
+                    Rules::Require(body.at("action") == "UseStatus" && ActionRPG::Items::IsHexId(id, 64), "Invalid pending query.");
+                    self->itemUseServices.at(session->GetSessionId())->Query(id); return;
+                }
+                catch (...) { session->Stop(); return; }
+            }
             if (!self->running || found == self->players.end() || found->second.session != session
                 || session->GetAccountId() != found->second.accountId) { session->Stop(); return; }
             auto& entry = found->second;
@@ -134,9 +151,14 @@ namespace TownServer::Domain
                 Rules::Require(ActionRPG::Items::IsHexId(requestId, 64), "Invalid inventory request ID.");
                 if (inType == TownProtocol::PacketType::InventoryStateRequest)
                 {
-                    Rules::Keys(operation, {"requestId"}); self->SendInventoryState(entry, requestId); return;
+                    Rules::Keys(operation, {"requestId"}); self->GetItemUseService(entry)->Query(requestId, true); return;
                 }
-                Rules::Keys(operation, {"requestId", "revision", "action", "instanceId", "count"});
+                if (operation.at("action") == "UseStatus")
+                {
+                    Rules::Keys(operation, {"requestId", "action"});
+                    self->GetItemUseService(entry)->Query(requestId); return;
+                }
+                Rules::Keys(operation, {"requestId", "revision", "action", "instanceId", "count"}, {"facingLeft"});
                 revision = ActionRPG::Items::DecimalId(operation.at("revision"), true);
                 Rules::Require(ActionRPG::Items::IsHexId(operation.at("instanceId").get<std::string>(), 32),
                     "Invalid inventory instance ID.");
@@ -146,6 +168,13 @@ namespace TownServer::Domain
                     || action == "Use" || action == "Sell", "Invalid inventory action.");
                 if (action == "Equip" || action == "Unequip")
                     Rules::Require(operation.at("count") == 1, "Equipment quantity must be one.");
+                if (operation.contains("facingLeft")) Rules::Require(action == "Use" && operation.at("facingLeft").is_boolean(),
+                    "Invalid throw facing.");
+                if (action == "Use")
+                {
+                    Rules::Require(operation.at("count") == 1, "Item use quantity must be one.");
+                    self->GetItemUseService(entry)->Use(operation); return;
+                }
             }
             catch (...) { session->Stop(); return; }
             const auto reply = [weakTown = self->weak_from_this(), weakSession = std::weak_ptr<Network::PlayerSession>(session),
@@ -164,9 +193,9 @@ namespace TownServer::Domain
                 session->Send(TownProtocol::Encode(TownProtocol::InventoryOperationResponse{body.dump()}));
                 if (status == "Succeeded" || status == "RevisionConflict") town->SendInventoryState(entry, requestId);
             };
-            if (entry.saving) { reply("Busy"); return; }
+            if (entry.saving || entry.itemUsePending) { reply("Busy"); return; }
             const auto action = operation.at("action").get<std::string>();
-            if (action == "Use" || action == "Sell") { reply("NotImplemented"); return; }
+            if (action == "Sell") { reply("NotImplemented"); return; }
             auto proposed = entry.inventory;
             std::string status = "Succeeded";
             // A stale revision goes to the persistent receipt check before any domain calculation.
@@ -194,7 +223,7 @@ namespace TownServer::Domain
             const auto found = self->players.find(inPlayerId);
             if (found == self->players.end()) { handler("Disconnected"); return; }
             auto& entry = found->second; auto inventory = entry.inventory;
-            if (entry.saving) { handler("Busy"); return; }
+            if (entry.saving || entry.itemUsePending) { handler("Busy"); return; }
             std::string status = "Succeeded";
             try
             {

@@ -2,6 +2,7 @@
 
 #include "../../Shared/Database/StoreProcedure.h"
 #include "../../Shared/Inventory.h"
+#include "ItemUseResult.h"
 #include <Windows.h>
 #include <openssl/rand.h>
 
@@ -21,8 +22,9 @@ namespace TownServer::Persistence
     }
     inline const char* ResultName(std::int32_t inCode)
     {
-        static constexpr std::array<const char*, 7> NAMES{ "Succeeded", "AccountUnavailable", "CharacterNotFound",
-            "RevisionConflict", "NameTaken", "StaleOwner", "RequestConflict" };
+        static constexpr std::array<const char*, 12> NAMES{ "Succeeded", "AccountUnavailable", "CharacterNotFound",
+            "RevisionConflict", "NameTaken", "StaleOwner", "RequestConflict", "Busy", "ItemNotFound", "Cooldown",
+            "UseNotFound", "OutcomeConflict" };
         return inCode >= 0 && inCode < static_cast<std::int32_t>(NAMES.size()) ? NAMES[inCode] : "DatabaseUnavailable";
     }
     inline std::wstring Wide(const std::string& inValue)
@@ -67,7 +69,7 @@ namespace TownServer::Persistence
         std::uint32_t definitionId{};
         std::string progression, inventory;
     };
-    struct Response { std::vector<CharacterState> states; };
+    struct Response : ItemUseResult { std::vector<CharacterState> states; };
 
     /// One CALL owns one transaction. The DB worker commits only after the full result is validated.
     class CharacterStoreProcedure final : public ActionRPG::Database::IStoreProcedure<Request, Response>
@@ -114,6 +116,8 @@ namespace TownServer::Persistence
         void ReadRow(ActionRPG::Database::ProcedureRow& inRow, std::size_t inResultIndex,
             Response& outResponse) const override
         {
+            if (req.operation == Operation::Claim && inResultIndex != 0)
+            { ReadItemUseResult(inRow, inResultIndex, outResponse, Utf8); return; }
             if (inResultIndex != 0 || inRow.GetColumnCount() != 8
                 || (req.operation != Operation::List && !outResponse.states.empty())) Invalid();
             const auto result = inRow.Read<std::int32_t>(1);
@@ -124,7 +128,7 @@ namespace TownServer::Persistence
             const auto definition = inRow.Read<std::uint32_t>(6);
             const auto progression = inRow.Read<std::wstring>(7);
             const auto inventory = inRow.Read<std::wstring>(8);
-            if (!result || *result < 0 || *result > 6 || !id || !revision || !generation
+            if (!result || *result < 0 || *result > 11 || !id || !revision || !generation
                 || !name || !definition || !progression || !inventory) Invalid();
             CharacterState state{ *result, *id, *revision, *generation, Utf8(*name), *definition,
                 Utf8(*progression), Utf8(*inventory) };
@@ -136,14 +140,18 @@ namespace TownServer::Persistence
         void ValidateResults(std::size_t inResultSetCount, std::size_t inRowCount,
             const Response& inResponse) const override
         {
-            if (inResultSetCount != 1 || inRowCount == 0 || inRowCount != inResponse.states.size()
-                || (req.operation != Operation::List && inRowCount != 1)) Invalid();
+            const bool claim = req.operation == Operation::Claim;
+            const auto expectedRows = inResponse.states.size() + (claim ? 1 + inResponse.cooldowns.size() : 0);
+            if (inResultSetCount != (claim ? 3 : 1) || inRowCount == 0 || inRowCount != expectedRows
+                || (req.operation != Operation::List && inResponse.states.size() != 1)
+                || (claim && (!inResponse.use || inResponse.cooldowns.empty()))) Invalid();
+            if (claim) ValidateItemUseResult(inResponse);
             std::unordered_set<std::uint64_t> ids;
             for (const auto& state : inResponse.states)
             {
                 if (req.operation != Operation::List && state.result == 0 && state.characterId == 0) Invalid();
                 if (state.characterId == 0)
-                { if (inRowCount != 1) Invalid(); }
+                { if (inResponse.states.size() != 1) Invalid(); }
                 else if (!ids.emplace(state.characterId).second || (req.characterId != 0
                     && state.characterId != req.characterId)) Invalid();
             }

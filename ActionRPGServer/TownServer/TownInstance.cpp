@@ -154,7 +154,7 @@ namespace TownServer::Domain
             const auto found = self->players.find(inPlayerId);
             if (found == self->players.end()) return;
             auto& entry = found->second;
-            if (entry.saving) { self->SendSkillState(entry, "Busy"); return; }
+            if (entry.saving || entry.itemUsePending) { self->SendSkillState(entry, "Busy"); return; }
             // Include reserved rooms so delayed entry confirmation cannot permit a skill purchase.
             if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != 0)
             {
@@ -190,7 +190,7 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self, inPlayerId, inLevel, handler = std::move(inHandler)]()
         {
             const auto found = self->players.find(inPlayerId);
-            if (found != self->players.end() && !found->second.saving)
+            if (found != self->players.end() && !found->second.saving && !found->second.itemUsePending)
             {
                 auto& entry = found->second;
                 auto proposed = entry.progression;
@@ -267,6 +267,7 @@ namespace TownServer::Domain
                 }
             }
             self->LeaveOnStrand(inSessionId);
+            if (self->itemUseServices.contains(inSessionId)) self->itemUseServices.at(inSessionId)->ClientDisconnected();
             if (!awaitingRoom) self->ReleaseAdmission(inSessionId);
             if (previousRoomId != 0) self->RefreshDungeonLeader(previousRoomId);
         });
@@ -318,6 +319,7 @@ namespace TownServer::Domain
                 const auto playerIterator = self->players.find(requestingPlayerId);
                 if (playerIterator != self->players.end() && playerIterator->second.dungeonRoomId == 0
                     && playerIterator->second.reservedDungeonRoomId == 0
+                    && !playerIterator->second.itemUsePending
                     && !self->pendingDungeonPlayers.contains(requestingPlayerId))
                 {
                     const PlayerEntry& entry = playerIterator->second;
@@ -340,7 +342,7 @@ namespace TownServer::Domain
                             {
                                 const auto memberIterator = self->players.find(member.playerId);
                                 if (memberIterator == self->players.end()
-                                    || memberIterator->second.dungeonRoomId != 0)
+                                    || memberIterator->second.dungeonRoomId != 0 || memberIterator->second.itemUsePending)
                                 {
                                     valid = false;
                                     participantPlayerIds.clear();
@@ -418,6 +420,7 @@ namespace TownServer::Domain
                 {
                     const auto found = self->players.find(playerId);
                     return found != self->players.end() && found->second.dungeonRoomId == inRoomId
+                        && !found->second.itemUsePending
                         && !self->pendingDungeonPlayers.contains(playerId);
                 });
             if (valid) self->pendingDungeonPlayers.insert(participants.begin(), participants.end());
@@ -433,6 +436,7 @@ namespace TownServer::Domain
         {
             const auto player = self->players.find(inPlayerId);
             handler(inRoomId != 0 && player != self->players.end()
+                && !player->second.itemUsePending
                 && player->second.dungeonRoomId == 0 && player->second.reservedDungeonRoomId == inRoomId);
         });
     }
@@ -877,7 +881,7 @@ namespace TownServer::Domain
         if (inRoomId == 0 || iterator == players.end()) return false;
         auto& entry = iterator->second;
         if (entry.dungeonRoomId == inRoomId) return true;
-        if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != inRoomId) return false;
+        if (entry.itemUsePending || entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != inRoomId) return false;
 
         HideFromTown(inPlayerId, entry);
         partyDirectorySubscribers.erase(inPlayerId);

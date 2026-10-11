@@ -157,6 +157,7 @@
     <ClCompile Include="TownAuthentication.cpp" />
     <ClCompile Include="TownCharacters.cpp" />
     <ClCompile Include="TownInventory.cpp" />
+    <ClCompile Include="TownItemUse.cpp" />
     <ClCompile Include="..\AuthServer\Database\LoginSchemaVerifier.cpp" />
     <ClCompile Include="..\AuthServer\Database\SchemaHistoryProcedure.cpp" />
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
@@ -195,6 +196,9 @@
     <ClInclude Include="..\Shared\Inventory.h" />
     <ClInclude Include="..\Shared\CharacterRuntimeState.h" />
     <ClInclude Include="Database\CharacterStoreProcedure.h" />
+    <ClInclude Include="Database\ItemUseResult.h" />
+    <ClInclude Include="Database\ItemUseStoreProcedure.h" />
+    <ClInclude Include="ItemUseService.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />

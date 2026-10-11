@@ -10,6 +10,7 @@
 #include "Authentication/AuthControlClient.h"
 #include "../Shared/CharacterRuntimeState.h"
 #include "Database/CharacterStoreProcedure.h"
+#include "ItemUseService.h"
 
 #include <asio.hpp>
 
@@ -69,6 +70,8 @@ namespace TownServer::Domain
         using ProgressionChangedHandler = std::function<void(ActionRPG::RoomControlProtocol::RoomId,
             PlayerId, std::string)>;
         void SetProgressionChangedHandler(ProgressionChangedHandler inHandler);
+        using RoomItemUseHandler = std::function<void(std::uint64_t, PlayerId, std::string, std::function<void(std::string)>)>;
+        void SetRoomItemUseHandler(RoomItemUseHandler inHandler);
         void RequestSkillState(PlayerId inPlayerId);
         void LearnSkill(PlayerId inPlayerId, std::string inSkillId, std::uint32_t inExpectedSkillLevel);
         void GetProgression(PlayerId inPlayerId, std::function<void(std::string)> inHandler);
@@ -110,6 +113,11 @@ namespace TownServer::Domain
         void HandleRoomControlLost(ActionRPG::RoomControlProtocol::RoomId inRoomId);
 
     private:
+        friend class ItemUseService;
+        struct PlayerEntry;
+        std::unordered_map<std::uint64_t, std::shared_ptr<ItemUseService>> itemUseServices;
+        std::shared_ptr<ItemUseService> GetItemUseService(PlayerEntry& inEntry);
+        RoomItemUseHandler roomItemUseHandler;
         struct SectorCoordinate
         {
             std::string mapId;
@@ -143,6 +151,8 @@ namespace TownServer::Domain
             std::string ownerToken;
             ActionRPG::Items::Inventory inventory;
             bool saving{};
+            bool itemUsePending{}, cooldownsComplete{};
+            ActionRPG::Items::Json itemCooldowns;
         };
 
         struct Admission

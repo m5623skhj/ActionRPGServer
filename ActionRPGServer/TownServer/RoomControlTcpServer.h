@@ -38,6 +38,9 @@ namespace TownServer::Network
             std::string inProgression);
         void UpdatePlayerProgress(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::string inProgression);
+        void ItemUse(ActionRPG::RoomControlProtocol::RoomId inRoomId,
+            ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::string inJson,
+            std::function<void(std::string)> inHandler);
         void LeaveRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::function<void()> inReleased = {});
 
@@ -47,6 +50,13 @@ namespace TownServer::Network
             std::uint64_t serverSessionId{};
             std::function<void()> released;
         };
+        struct PendingItemUse
+        {
+            std::uint64_t serverSessionId{}, roomId{}, playerId{};
+            std::shared_ptr<asio::steady_timer> timer;
+            std::function<void(std::string)> handler;
+        };
+        std::unordered_map<std::uint64_t, PendingItemUse> pendingItemUses;
         std::map<std::pair<std::uint64_t, std::uint64_t>, PendingRelease> pendingReleases;
         struct RoomServerState
         {

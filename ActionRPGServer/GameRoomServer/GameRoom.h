@@ -5,6 +5,7 @@
 #include "DungeonProtocol.h"
 #include "CombatDefinition.h"
 #include "../Shared/CharacterRuntimeState.h"
+#include "../Shared/ItemUseIdentity.h"
 
 #include <asio.hpp>
 
@@ -55,6 +56,8 @@ namespace GameRoomServer
         void Stop();
         void TryEnter(PlayerId inPlayerId, std::uint32_t inCharacterId, std::string inProgression, EnterResultHandler inResultHandler);
         void UpdatePlayerProgress(PlayerId inPlayerId, std::string inProgression);
+        void ItemUse(PlayerId inPlayerId, nlohmann::json inRequest, std::function<void(nlohmann::json)> inHandler);
+        void CanRetire(std::function<void(bool)> inHandler);
         void Leave(PlayerId inPlayerId, LeaveResultHandler inResultHandler);
         void RemoveUnannouncedPlayer(PlayerId inPlayerId, std::function<void(bool)> inResultHandler);
         void ValidateCompletion(std::vector<PlayerId> inParticipants, std::function<void(bool)> inHandler);
@@ -164,7 +167,11 @@ namespace GameRoomServer
             std::vector<ActiveBuff> buffs;
             SlideState slide;
             ActionRPG::PlayerSkills::CharacterProgression progression;
-            std::uint64_t persistentCharacterId{}, inventoryRevision{};
+            std::uint64_t persistentCharacterId{}, inventoryRevision{}, ownerGeneration{};
+            std::uint32_t itemUseSequence{};
+            std::string itemUseDefinitionId, itemUseMotionId;
+            float itemUseElapsedSeconds{}, itemUseDurationSeconds{};
+            std::unordered_map<std::string, std::chrono::steady_clock::time_point> itemCooldowns;
             nlohmann::json equipment = nlohmann::json::array();
         };
 
@@ -199,6 +206,7 @@ namespace GameRoomServer
             DungeonPoint position;
             float height{}, direction{}, heightDirection{}, remainingDistance{};
             std::string skillId;
+            std::string itemDefinitionId, visual;
             float directionY{}, speed{}, radius{}, ageSeconds{};
             std::uint32_t damage{};
             float hitstopSeconds{};
@@ -261,6 +269,19 @@ namespace GameRoomServer
         bool clearRequested{};
         bool hitstopChanged{};
         State state = State::WaitingForPlayers;
+        const std::string itemUseIncarnation{ActionRPG::Items::NewIncarnation()};
+        struct ItemUseRecord
+        {
+            PlayerId playerId{};
+            std::uint64_t characterId{}, generation{};
+            std::string operation, executionHash, definitionId;
+            ActionRPG::Items::Definition::Use use;
+            bool facingLeft{}, settled{};
+            std::string state{"Prepared"}, reason;
+        };
+        std::unordered_map<std::string, ItemUseRecord> itemUses;
+        std::unordered_map<std::uint64_t, std::size_t> itemUseCounts;
+        std::unordered_map<std::uint64_t, std::uint64_t> itemUseFences;
         std::uint64_t serverTick{};
         struct RealtimeSubscriber
         {

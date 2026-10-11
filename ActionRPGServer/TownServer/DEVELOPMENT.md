@@ -683,7 +683,7 @@ ID는 CSPRNG 128비트이며 장착/해제에도 유지한다. 장비 maxStack�
 획득은 기존 스택의 여유를 슬롯 순서로 채우고 빈칸에 나눈다. 전량을 넣을 수 없으면 아무것도 바꾸지 않는다.
 자동 소비는 수량 오름차순, 동률이면 instanceId 오름차순이다. 지정 차감은 해당 스택에서만 수행한다.
 장착 조건을 통과한 교체는 새 장비의 원래 칸으로 이전 장비를 반환하며 해제에는 빈 장비칸이 필요하다.
-던전에서도 장착/교체/해제를 허용한다. Use/Sell은 NotImplemented로 거절하고 수량을 유지한다.
+던전에서도 장착/교체/해제를 허용한다. Use는 아래 V6 사용 계약으로 처리하며 Sell은 NotImplemented로 거절한다.
 Discard는 지정 수량을 영구 삭제하며 월드 드랍을 만들지 않는다. 클라이언트는 삭제 확인창을 제공해야 한다.
 
 ### 패킷과 크기
@@ -726,11 +726,73 @@ DB는 account/character/ownerToken/generation을 잠근 뒤 영속 요청 ID·�
 타임아웃 시 클라이언트 자동 재전송 대신 상태를 조회한다. DB 저장 결과가 불명확하면 서버는 세션을 종료한다.
 
 `AcquireItem/ConsumeItem`은 서버 콘텐츠 전용 API다. 호출자는 64자리 requestId와 원래 expectedRevision을 유지해야 한다.
-클라이언트용 획득/자동 소비 패킷, 몬스터 보상·드랍, 상점·사용 효과·장비 능력치 적용은 이번 범위에 없다.
+클라이언트용 획득/자동 소비 패킷, 몬스터 보상·드랍, 상점·장비 능력치 적용은 이번 범위에 없다.
 레벨/SP/습득 스킬도 같은 저장 트랜잭션으로 확정한다.
 
 Town→Room의 ConfirmJoin/UpdatePlayerProgress는 기존 progression 문자열에
-`{characterId,revision,progression,equipment}` 문서를 전달한다. equipment는 장착된 items 행만 담는다.
+`{characterId,revision,ownerGeneration,progression,equipment}` 문서를 전달한다. equipment는 장착된 items 행만 담는다.
 룸은 다른 영속 캐릭터 또는 이전/equal revision 갱신을 무시하며 DB 자격 증명을 가지지 않는다.
 월드 JSON에 persistentCharacterId/inventoryRevision/equipment를 덧붙이고 realtime 바이너리 레이아웃은 유지한다.
 신규 Town/Room과 패킷 38~48을 사용하는 클라이언트를 함께 배포해야 한다.
+
+### V6 아이템 사용: HP 회복과 직선 투척
+
+`ItemUseService`는 Town strand에서 보유 스택·revision·레벨·요청 ID와 DB 확정을 조정한다.
+룸 strand의 `ItemUseAction::Validate/DoAction`, `RecoveryItemAction`, `ThrowItemAction`이 전투 상태를 검사하고 효과를 적용한다.
+Town 또는 DB 작업이 진행되는 동안 룸 전투를 중단하거나 네트워크 왕복을 DB 트랜잭션 안에서 기다리지 않는다.
+
+| 정의 | 효과 | 레벨 | 같은 정의의 쿨타임 |
+|---|---|---|---|
+| UnripeStrawberry | HP 30 회복, 최대 HP까지 제한 | 1 | 5초 |
+| Stone | 직선 투사체 1개, 피해 10, 속도 600, 거리 480, 반경 6 | 1 | 1초 |
+
+던전 Running 상태에서만 사용하며 사망 시 거절한다. HP가 가득 찼으면 회복 아이템을 차감하지 않는다.
+투척은 지상에서 피격·히트스톱·스킬·슬라이딩·사격·기존 투척 동작이 없을 때만 가능하다.
+발사점은 전방 20, 높이 64이며 발사 경로와 투사체 한도를 Execute 때 다시 검사한다.
+투사체 생성 뒤 빗나가거나 벽에 부딪혀도 사용 성공이다. MP 회복, 신규 스킬 습득 조건, 아이템 지급·드랍은 구현 범위에 없다.
+
+46 요청은 HP 회복에 `{action:"Use",requestId,revision,instanceId,count:1}`,
+투척에 같은 필드와 `facingLeft:bool`을 사용한다. 클라이언트가 효과량이나 피해량을 보내지 않는다.
+상태 조회는 `{action:"UseStatus",requestId:원래사용ID}`이며 timeout 때 새 Use나 효과 재실행을 하지 않는다.
+47은 action/requestId/result/useState/characterId/revision/definitionId/inventory와 쿨타임 목록을 반환한다.
+useState는 None/Pending/Applied/Cancelled/ConsumedUnknown이다. Applied의 result는 Succeeded다.
+SpawnBlocked 등 예약 후 재검증 실패는 룸 Cancelled 영수증과 DB 취소 commit이 확인된 뒤 Cancelled로만 반환한다.
+StaleOwner·DB 오류·응답 유실은 미소비 또는 환불의 증거가 아니다.
+
+45/47의 `cooldownsComplete:true`와 `cooldowns`는 전체 현재 목록이다. 빈 배열은 현재 쿨타임이 없음을 뜻한다.
+목록 행은 definitionId/cooldownState/cooldownServerTimeMs/cooldownReadyAtMs/cooldownRemainingMs를 담는다.
+시간은 DB UTC epoch 밀리초 10진 문자열이고 remaining은 정수다. Pending의 ready/remaining은 null이다.
+확정되지 않은 목록은 `cooldownsComplete:false,cooldowns:null`이며 이전 쿨타임을 0으로 바꾸지 않는다.
+44의 상태 요청도 DB를 조회해 현재 목록을 갱신한다.
+
+흐름은 룸 Prepare → DB reserve commit(선택 스택 1개 차감, 캐릭터당 Pending 1개)
+→ 같은 룸 Execute → DB complete/cancel commit → 룸 Settle이다.
+그 사이 장비·삭제·획득·자동 소비·성장 저장 및 새 던전 진입/완료 전환은 Busy로 막는다.
+DB complete 시 한 번 샘플링한 UTC_TIMESTAMP(3)에 쿨타임을 더하며, 실제 commit 시각을 기록하는 것은 아니다.
+룸은 효과 적용부터 steady_clock 잠금을 유지하고 DB Pending 동안 추가 사용을 막는다.
+Cancelled는 환불과 revision 증가를 확정하며 쿨타임이 없다. ConsumedUnknown은 소비를 유지하고 보수적 쿨타임을 기록한다.
+
+룸마다 CSPRNG 128비트 incarnation, 서버 프로세스마다 별도 incarnation을 사용한다.
+같은 룸 수명 동안 캐릭터별 최대 4096개 요청 영수증/취소 tombstone을 보존하고, 한도 초과는 DB 예약 전에 거절한다.
+부분 효과 이후 예외를 Cancelled로 분류하지 않는다. HP/투사체와 DB를 아우르는 crash atomicity나 exactly-once를 보장하지 않는다.
+효과 전 필요한 문자열·투사체 capacity를 준비하지만, 이후 예외에는 소비를 보수적으로 유지할 수 있다.
+
+새 fenced claim은 허용하되 이전 Pending이 있으면 43에
+`{requestId:원래선택ID,result:"Pending",characterId,revision,pendingUseRequestId:원래사용ID}`를 반환한다.
+서버가 5초마다 원래 사용을 조회하고 이전 룸 Fence/Query/Cancel 또는 Applied 확정을 조정한다.
+동일 요청 조정 중에는 다른 조회를 동시에 시작하지 않는다. 현재 계정/토큰/세대 검증, 이전 룸 차단,
+Pending 해제가 확인되면 원래 선택 ID의 43 Succeeded → 2 EnterTown을 자동 전송한다. 재select는 필요 없다.
+연결 종료·소유권 상실·정상 종결 때 선택 복구 타이머를 취소하며, 미확정 해제는 기존 admission timer로 조회한다.
+소유권 상실을 DB가 확정한 이전 세션은 효과를 재실행하거나 환불하지 않고 fenced release로 정리한다.
+
+RoomEnded/마지막 Leave/Finish로 게임 입장 mapping이 사라져도 아이템 제어 요청은
+원래 roomId 상위 32비트의 등록된 roomServerId로 라우팅한다. 이 경로는 게임 입장에 사용하지 않는다.
+수신 서버는 process/room incarnation을 모두 검증한다. 종료 룸은 미확정 영수증이 있는 동안 유지하고,
+마지막 Settle 뒤 retirement를 다시 검사한다. TCP timeout/연결 단절을 룸 소실로 간주하지 않는다.
+원래 incarnation의 조회·차단 증거를 얻지 못하면 Pending과 입장/저장 제한을 유지한다.
+실제 소실과 fencing 증거를 운영자가 확인한 경우만 V6 cancel disposition1로 ConsumedUnknown을 확정한다.
+DB의 이 확정은 새 소유자의 조회로 반영되며 효과를 새 룸에서 재생하거나 아이템을 자동 환불하지 않는다.
+
+V6 SQL과 신규 공개 4프로시저/검사 권한, claim/save/release 재부여 절차는
+[DB 마이그레이션 문서](../../docs/workflows/DATABASE_MIGRATIONS.md)를 따른다.
+이번 구현은 소스·JSON/XML·프로토콜 정적 대조만 수행했으며 빌드·실행·DB 적용·전투 테스트는 수행하지 않았다.

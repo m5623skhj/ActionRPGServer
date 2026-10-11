@@ -119,7 +119,7 @@ namespace GameRoomServer
     // Recovery may allow movement while the same unfinished combo still owns its facing.
     bool GameRoom::IsShotFacingLocked(const PlayerState& inPlayer)
     {
-        return inPlayer.shotPhase != ShotPhase::None
+        return inPlayer.itemUseElapsedSeconds < inPlayer.itemUseDurationSeconds || inPlayer.shotPhase != ShotPhase::None
             || (inPlayer.shotCount > 0 && inPlayer.shotCount < MAX_SHOTS && inPlayer.shotInputRemainingSeconds > 0);
     }
 
@@ -191,6 +191,7 @@ namespace GameRoomServer
         const ActionRPG::DungeonProtocol::DungeonActionInput& inInput)
     {
         if (inPlayer.slide.active || inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None
+            || inPlayer.itemUseElapsedSeconds < inPlayer.itemUseDurationSeconds
             || inPlayer.actor.hitstopRemainingSeconds > 0
             || inPlayer.actor.height != 0 || inPlayer.jumpPreparing || inPlayer.skill
             || (inPlayer.shotPhase != ShotPhase::None
@@ -319,6 +320,7 @@ namespace GameRoomServer
     bool GameRoom::TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft)
     {
         if (inPlayer.actor.hp == 0 || inPlayer.actor.reaction != Reaction::None || inPlayer.skill || inPlayer.slide.active
+            || inPlayer.itemUseElapsedSeconds < inPlayer.itemUseDurationSeconds
             || inPlayer.actor.hitstopRemainingSeconds > 0) return false;
         if (inAction == 2 && inPlayer.shotPhase == ShotPhase::Recover && inPlayer.pendingShots == 0)
             inPlayer.shotPhase = ShotPhase::None;
@@ -962,6 +964,9 @@ namespace GameRoomServer
 
     void GameRoom::UpdateCombat(float inDeltaSeconds)
     {
+        for (auto& [id, player] : players)
+            player.itemUseElapsedSeconds = std::min(player.itemUseDurationSeconds,
+                player.itemUseElapsedSeconds + ActionDelta(player.actor));
         if (clearRequested) return;
         const auto now = std::chrono::steady_clock::now();
         for (auto& [id, player] : players)
@@ -1062,6 +1067,11 @@ namespace GameRoomServer
                 record["characterId"] = player.characterId; record["skillSequence"] = player.skillSequence;
                 record["persistentCharacterId"] = std::to_string(player.persistentCharacterId);
                 record["inventoryRevision"] = std::to_string(player.inventoryRevision);
+                record["itemUseSequence"] = player.itemUseSequence;
+                record["itemUseDefinitionId"] = player.itemUseDefinitionId;
+                record["itemUseMotionId"] = player.itemUseMotionId;
+                record["itemUseElapsedSeconds"] = player.itemUseElapsedSeconds;
+                record["itemUseDurationSeconds"] = player.itemUseDurationSeconds;
                 record["equipment"] = player.equipment;
                 record["skillId"] = player.lastSkillId;
                 record["skillActive"] = player.skill.has_value();
@@ -1106,7 +1116,8 @@ namespace GameRoomServer
                     { "x", projectile.position.x }, { "y", projectile.position.y }, { "height", projectile.height },
                     { "direction", projectile.direction }, { "heightDirection", projectile.heightDirection },
                     { "directionY", projectile.directionY }, { "speed", projectile.speed }, { "radius", projectile.radius },
-                    { "skillId", projectile.skillId }, { "ageSeconds", projectile.ageSeconds } });
+                    { "skillId", projectile.skillId }, { "ageSeconds", projectile.ageSeconds },
+                    { "itemDefinitionId", projectile.itemDefinitionId }, { "visual", projectile.visual } });
             auto value = std::make_shared<const std::string>(snapshot.dump());
             handler(value->size() <= MAX_SNAPSHOT_BYTES ? std::move(value) : nullptr);
         });

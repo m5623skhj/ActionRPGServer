@@ -22,7 +22,24 @@
       "icon": "Images/Items/unripe_strawberry.png",
       "category": "Consumable",
       "maxStack": 20,
+      "useRequiredLevel": 1,
+      "useCooldownSeconds": 5,
       "effects": [{ "type": "RestoreHp", "amount": 30 }]
+    },
+    {
+      "id": "Stone",
+      "name": "돌멩이",
+      "description": "앞으로 던져 적에게 피해를 주는 작은 돌멩이.",
+      "icon": "Images/Items/stone.png",
+      "category": "Consumable",
+      "maxStack": 20,
+      "useRequiredLevel": 1,
+      "useCooldownSeconds": 1,
+      "effects": [{
+        "type": "Throw", "damage": 10, "speed": 600, "range": 480, "radius": 6,
+        "spawnForward": 20, "spawnHeight": 64, "hitstopSeconds": 0,
+        "motionId": "AttackFire", "motionDurationSeconds": 0.15
+      }]
     }
   ]
 }

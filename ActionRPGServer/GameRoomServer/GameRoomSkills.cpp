@@ -35,6 +35,7 @@ namespace GameRoomServer
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
                         && player.actor.reaction == Reaction::None && player.actor.hitstopRemainingSeconds == 0
                         && !player.skill && !player.jumpPreparing && !player.slide.active
+                        && player.itemUseElapsedSeconds >= player.itemUseDurationSeconds
                         && (player.shotPhase == ShotPhase::None
                             || (player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)) && input.facingLeft <= 1
                         && definition != self->combatDefinition->playerSkills.skills.end())

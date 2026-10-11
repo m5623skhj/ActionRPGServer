@@ -19,15 +19,16 @@ namespace ActionRPG::Items
 
     struct CharacterRuntimeState
     {
-        std::uint64_t characterId{}, revision{};
+        std::uint64_t characterId{}, revision{}, ownerGeneration{};
         PlayerSkills::CharacterProgression progression;
         Json equipment;
 
         [[nodiscard]] static CharacterRuntimeState Parse(const Json& inValue)
         {
             using Rules = PlayerSkills::Catalog;
-            Rules::Keys(inValue, { "characterId", "revision", "progression", "equipment" });
+            Rules::Keys(inValue, { "characterId", "revision", "ownerGeneration", "progression", "equipment" });
             CharacterRuntimeState result{ DecimalId(inValue.at("characterId")), DecimalId(inValue.at("revision"), true),
+                DecimalId(inValue.at("ownerGeneration")),
                 PlayerSkills::CharacterProgression::Parse(inValue.at("progression")), inValue.at("equipment") };
             Rules::Require(result.equipment.is_array() && result.equipment.size() <= EQUIPMENT_SLOT_COUNT,
                 "Invalid runtime equipment count.");

@@ -140,7 +140,8 @@ namespace GameRoomServer
             writer.Float(projectile.direction); writer.Float(projectile.heightDirection);
             if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         }
-        if (!combatDefinition->playerSkills.skills.empty())
+        // Item projectiles need authoritative motion fields even without a skill catalog.
+        if (!combatDefinition->playerSkills.skills.empty() || projectileCount > 0)
         {
             writer.value.append("SKL1", 4); writer.Integer(playerCount, 2);
             for (const auto& [id, player] : players)
@@ -159,6 +160,20 @@ namespace GameRoomServer
                 writer.Integer(projectile.id, 8); writer.Text(projectile.skillId); writer.Float(projectile.directionY);
                 writer.Float(projectile.speed); writer.Float(projectile.radius); writer.Float(projectile.ageSeconds);
             }
+        }
+        writer.value.append("IUS1", 4); writer.Integer(playerCount, 2);
+        for (const auto& [id, player] : players)
+        {
+            if (player.mapId != inMapId || !enteredPlayers.contains(id) || !player.worldReady) continue;
+            writer.Integer(id, 8); writer.Integer(player.itemUseSequence, 4);
+            writer.Text(player.itemUseDefinitionId); writer.Text(player.itemUseMotionId);
+            writer.Float(player.itemUseElapsedSeconds); writer.Float(player.itemUseDurationSeconds);
+        }
+        writer.value.append("ITP1", 4); writer.Integer(projectileCount, 2);
+        for (const auto& projectile : projectiles)
+        {
+            if (projectile.mapId != inMapId) continue;
+            writer.Integer(projectile.id, 8); writer.Text(projectile.itemDefinitionId); writer.Text(projectile.visual);
         }
         if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         auto frame = std::make_shared<RealtimeFrame>();

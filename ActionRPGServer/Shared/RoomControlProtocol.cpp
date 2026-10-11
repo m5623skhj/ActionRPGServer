@@ -211,7 +211,7 @@ namespace ActionRPG::RoomControlProtocol
         PacketReader reader(inPacket);
         std::uint16_t type{};
         if (!reader.ReadUInt16(type) || type < static_cast<std::uint16_t>(PacketType::RegisterRoomServer)
-            || type > static_cast<std::uint16_t>(PacketType::RoomStarted))
+            || type > static_cast<std::uint16_t>(PacketType::ItemUseResult))
         {
             return std::nullopt;
         }
@@ -499,4 +499,36 @@ namespace ActionRPG::RoomControlProtocol
         return packet;
     }
 
+    std::vector<std::uint8_t> Encode(const ItemUseRequest& inPacket)
+    {
+        if (inPacket.json.empty() || inPacket.json.size() > 8192) throw std::invalid_argument("Invalid item use control payload.");
+        PacketWriter writer(PacketType::ItemUseRequest);
+        writer.WriteUInt64(inPacket.requestId); writer.WriteUInt64(inPacket.roomId);
+        writer.WriteUInt64(inPacket.playerId); writer.WriteString(inPacket.json);
+        return writer.Finish();
+    }
+    std::vector<std::uint8_t> Encode(const ItemUseResult& inPacket)
+    {
+        auto bytes = Encode(static_cast<const ItemUseRequest&>(inPacket));
+        bytes[0] = 0; bytes[1] = static_cast<std::uint8_t>(PacketType::ItemUseResult);
+        return bytes;
+    }
+    std::optional<ItemUseRequest> DecodeItemUseRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket); ItemUseRequest packet;
+        if (!ReadExpectedType(reader, PacketType::ItemUseRequest) || !reader.ReadUInt64(packet.requestId)
+            || packet.requestId == 0 || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0
+            || !reader.ReadUInt64(packet.playerId) || !reader.ReadString(packet.json)
+            || packet.json.empty() || packet.json.size() > 8192 || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+    std::optional<ItemUseResult> DecodeItemUseResult(const std::vector<std::uint8_t>& inPacket)
+    {
+        auto bytes = inPacket;
+        if (ReadPacketType(bytes) != PacketType::ItemUseResult) return std::nullopt;
+        bytes[0] = 0; bytes[1] = static_cast<std::uint8_t>(PacketType::ItemUseRequest);
+        const auto request = DecodeItemUseRequest(bytes);
+        if (!request) return std::nullopt;
+        return ItemUseResult{*request};
+    }
 }

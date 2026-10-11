@@ -42,6 +42,7 @@ namespace GameRoomServer
             std::uint32_t inSessionGeneration);
         void ConfirmJoin(Protocol::ConfirmJoin inRequest);
         void UpdatePlayerProgress(Protocol::UpdatePlayerProgress inRequest);
+        void ItemUse(Protocol::ItemUseRequest inRequest, std::function<void(Protocol::ItemUseResult)> inHandler);
         void LeaveRoom(Protocol::LeaveRoom inRequest);
         void SessionDisconnected(std::uint64_t inChallenge, DungeonSession* inSession,
             std::uint32_t inSessionGeneration, Protocol::RoomId inRoomId, Protocol::PlayerId inPlayerId);
@@ -68,6 +69,7 @@ namespace GameRoomServer
         const std::unordered_map<std::uint32_t, std::shared_ptr<const DungeonDefinition>> definitions;
         const std::shared_ptr<const CombatDefinition> combatDefinition;
         std::unordered_set<Protocol::RoomId> endedRooms;
+        std::unordered_set<Protocol::RoomId> retiringRooms;
         std::unordered_map<std::uint64_t, PendingSession> pendingSessions;
         std::uint32_t maxRoomCount;
         Protocol::RoomServerId roomServerId;
@@ -78,5 +80,6 @@ namespace GameRoomServer
         Protocol::RoomId nextRoomId = 1;
         std::uint64_t randomState;
         bool stopped = false;
+        const std::string processIncarnation;
     };
 }

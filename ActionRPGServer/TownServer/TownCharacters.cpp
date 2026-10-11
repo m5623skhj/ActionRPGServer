@@ -93,14 +93,37 @@ namespace TownServer::Domain
                 const bool current = town.running && session && session->GetAccountId() == accountId
                     && session->GetPlayerId() == 0;
                 if (request.operation == Persistence::Operation::Claim && !result.error && result.response
-                    && result.response->states.front().result == 0)
+                    && (result.response->states.front().result == 0 || result.response->states.front().result == 7))
                 {
                     const auto& state = result.response->states.front();
                     bool entered = false;
                     if (current)
                     {
-                        town.EnterOnStrand(session, state, request.ownerToken, requestId);
-                        entered = session->GetPlayerId() != 0;
+                        Persistence::ItemUseRequest identity;
+                        identity.accountId = accountId; identity.characterId = state.characterId;
+                        identity.generation = state.generation; identity.ownerToken = request.ownerToken;
+                        auto service = std::make_shared<ItemUseService>(town.shared_from_this(), session, identity, *result.response);
+                        town.itemUseServices[sessionId] = service;
+                        if (result.response->use->state == 1 || !result.response->use->pendingRequestId.empty())
+                        {
+                            auto release = request; release.operation = Persistence::Operation::Release;
+                            release.generation = state.generation;
+                            town.characterReleases[sessionId] = std::move(release);
+                            service->RecoverClaim(requestId); entered = true;
+                        }
+                        else
+                        {
+                            town.EnterOnStrand(session, state, request.ownerToken, requestId);
+                            entered = session->GetPlayerId() != 0;
+                            if (entered)
+                            {
+                                auto& entry = town.players.at(session->GetPlayerId());
+                                entry.cooldownsComplete = true; entry.itemCooldowns = Persistence::CooldownsJson(*result.response);
+                                // Recreate with the entered runtime PlayerId.
+                                town.itemUseServices[sessionId] = std::make_shared<ItemUseService>(town.shared_from_this(), session,
+                                    identity, *result.response);
+                            }
+                        }
                     }
                     if (!entered)
                     {
@@ -195,6 +218,13 @@ namespace TownServer::Domain
         if (!deferredAdmissionReleases.contains(inSessionId) || characterWork.contains(inSessionId)) return;
         const auto retry = characterReleaseRetry.find(inSessionId);
         if (retry != characterReleaseRetry.end() && retry->second > std::chrono::steady_clock::now()) return;
+        const auto use = itemUseServices.find(inSessionId);
+        if (use != itemUseServices.end() && use->second->IsPending())
+        {
+            characterReleaseRetry[inSessionId] = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            use->second->ReconcileRelease();
+            return; // Do not release Auth or DB ownership while a prepare/reserve response is unresolved.
+        }
         const auto release = characterReleases.find(inSessionId);
         if (release == characterReleases.end())
         { deferredAdmissionReleases.erase(inSessionId); ReleaseAdmission(inSessionId); return; }
@@ -210,10 +240,13 @@ namespace TownServer::Domain
                 return;
             }
             const auto code = result.response->states.front().result;
+            if (code == 7 && town.itemUseServices.contains(inSessionId))
+                town.itemUseServices.at(inSessionId)->ReconcileRelease();
             if (code != 0 && code != 5)
             { town.characterReleaseRetry[inSessionId] = std::chrono::steady_clock::now() + std::chrono::seconds(5); return; }
             town.characterReleaseRetry.erase(inSessionId);
             town.characterReleases.erase(inSessionId); town.deferredAdmissionReleases.erase(inSessionId);
+            town.itemUseServices.erase(inSessionId);
             town.ReleaseAdmission(inSessionId);
         });
     }

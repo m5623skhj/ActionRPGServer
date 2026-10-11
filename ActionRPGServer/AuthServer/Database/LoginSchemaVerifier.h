@@ -12,7 +12,7 @@ namespace ActionRPG::Database
     class VerifiedLoginSchema final
     {
     public:
-        static constexpr std::uint32_t REQUIRED_SCHEMA_VERSION = 5;
+        static constexpr std::uint32_t REQUIRED_SCHEMA_VERSION = 6;
         [[nodiscard]] bool Matches(const std::shared_ptr<OdbcDatabase>& inDatabase) const noexcept
         {
             return inDatabase && database.lock() == inDatabase;

@@ -143,6 +143,15 @@ namespace GameRoomServer
 
         switch (*type)
         {
+        case Protocol::PacketType::ItemUseRequest:
+        {
+            const auto request = Protocol::DecodeItemUseRequest(inPacket);
+            if (!request) { session->Stop(); return; }
+            const auto weakSelf = weak_from_this();
+            roomManager->ItemUse(*request, [weakSelf](Protocol::ItemUseResult result)
+            { if (const auto self = weakSelf.lock()) self->Send(Protocol::Encode(result)); });
+            return;
+        }
         case Protocol::PacketType::CreateRoom:
         {
             const std::optional<Protocol::CreateRoom> request = Protocol::DecodeCreateRoom(inPacket);
