@@ -3,6 +3,7 @@
 #include "MonsterDefinition.h"
 #include "../Shared/PlayerSkillCatalog.h"
 #include "../Shared/SkillTreeCatalog.h"
+#include "../Shared/CombatTempo.h"
 
 #include <filesystem>
 #include <memory>
@@ -51,6 +52,7 @@ namespace GameRoomServer
 
     struct CombatDefinition
     {
+        ActionRPG::Combat::CombatTempo tempo;
         std::uint32_t playerMaxHp{};
         std::optional<std::uint32_t> playerMaxMp;
         std::uint32_t shotDamage{};

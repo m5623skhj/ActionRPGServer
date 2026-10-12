@@ -203,20 +203,22 @@ namespace GameRoomServer
             return false;
         if (inInput.moveSequence == inPlayer.sequence && (inInput.directionX != inPlayer.directionX
             || inInput.directionY != inPlayer.directionY || !inPlayer.running)) return false;
-        const float length = std::hypot(static_cast<float>(inInput.directionX), static_cast<float>(inInput.directionY));
         const auto definition = combatDefinition->characters.find(inPlayer.characterId);
-        if (length == 0 || definition == combatDefinition->characters.end()) return false;
+        if ((inInput.directionX == 0 && inInput.directionY == 0)
+            || definition == combatDefinition->characters.end()) return false;
         const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
         for (const auto& zone : map.at("transitionZones"))
             if (DungeonDefinition::Contains(zone.at("polygon"), inPlayer.position)) return false;
 
+        const bool facingLeft = inInput.directionX != 0 ? inInput.directionX < 0 : inPlayer.facingLeft;
         SlideState slide;
         slide.active = true;
         slide.sequence = inInput.sequence;
         slide.durationSeconds = definition->second.slide.durationSeconds;
         slide.hitstopSeconds = definition->second.slide.hitstopSeconds;
-        slide.directionX = inInput.directionX / length;
-        slide.directionY = inInput.directionY / length;
+        // Capture same-frame horizontal intent, or existing facing for a vertical-only dash.
+        slide.directionX = facingLeft ? -1.0f : 1.0f;
+        slide.directionY = 0.0f;
         // The coefficient controls total distance, independently of the slide's action duration.
         slide.speed = inPlayer.runSpeed * BuffMultiplier(inPlayer, "movementMultiplier")
             * definition->second.slide.distancePerRunSpeedSeconds / slide.durationSeconds;
@@ -228,7 +230,7 @@ namespace GameRoomServer
         inPlayer.directionY = inInput.directionY;
         inPlayer.running = true;
         inPlayer.lastInput = std::chrono::steady_clock::now();
-        if (inInput.directionX != 0) inPlayer.facingLeft = inInput.directionX < 0;
+        inPlayer.facingLeft = facingLeft;
         inPlayer.slide = std::move(slide);
         ResetShotState(inPlayer);
         inPlayer.bufferedActions.clear();
@@ -409,14 +411,14 @@ namespace GameRoomServer
         return inPosition;
     }
 
-    // Prepare every actor before movement/combat so freeze consumption never depends on hit/update order.
+    // Consume real-time hitstop first, then convert the unfrozen part to combat time once.
     void GameRoom::PrepareActorTimes(float inDeltaSeconds)
     {
         const auto prepare = [this, inDeltaSeconds](ActorState& actor)
         {
             const float stopped = std::min(actor.hitstopRemainingSeconds, inDeltaSeconds);
             actor.hitstopRemainingSeconds = std::max(0.0f, actor.hitstopRemainingSeconds - inDeltaSeconds);
-            actor.actionDeltaSeconds = inDeltaSeconds - stopped;
+            actor.actionDeltaSeconds = (inDeltaSeconds - stopped) * combatDefinition->tempo.scale;
             if (stopped > 0 && actor.hitstopRemainingSeconds == 0) hitstopChanged = true;
         };
         for (auto& [id, player] : players)
@@ -437,7 +439,7 @@ namespace GameRoomServer
         ++inActor.hitstopSequence;
         inActor.hitstopStartTimeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch()).count());
-        inActor.actionDeltaSeconds = TICK_SECONDS;
+        inActor.actionDeltaSeconds = TICK_SECONDS * combatDefinition->tempo.scale;
         hitstopChanged = true;
     }
 
@@ -487,7 +489,8 @@ namespace GameRoomServer
         if (inAttacker && inAttacker != &inActor && inAttacker->hp > 0
             && inAttacker->reaction == Reaction::None && inHitstopSeconds > 0)
         {
-            inAttacker->hitstopRemainingSeconds = std::max(inAttacker->hitstopRemainingSeconds, inHitstopSeconds);
+            const float realHitstopSeconds = combatDefinition->tempo.RealDurationSeconds(inHitstopSeconds);
+            inAttacker->hitstopRemainingSeconds = std::max(inAttacker->hitstopRemainingSeconds, realHitstopSeconds);
             inAttacker->hitstopDurationSeconds = inAttacker->hitstopRemainingSeconds;
             ++inAttacker->hitstopSequence;
             inAttacker->hitstopStartTimeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -978,6 +981,7 @@ namespace GameRoomServer
 
     void GameRoom::UpdateCombat(float inDeltaSeconds)
     {
+        // The caller supplies combat time. Actor action time is already scaled and excludes hitstop.
         for (auto& [id, player] : players)
             player.itemUseElapsedSeconds = std::min(player.itemUseDurationSeconds,
                 player.itemUseElapsedSeconds + ActionDelta(player.actor));
@@ -1098,7 +1102,9 @@ namespace GameRoomServer
                 record["level"] = player.progression.level;
                 record["skillPoints"] = player.progression.skillPoints;
                 record["skillLevels"] = player.progression.skillLevels;
-                record["skillCooldowns"] = player.skillCooldowns;
+                record["skillCooldowns"] = nlohmann::json::object();
+                for (const auto& [skillId, seconds] : player.skillCooldowns)
+                    record["skillCooldowns"][skillId] = self->combatDefinition->tempo.RealSeconds(seconds);
                 record["movementMultiplier"] = BuffMultiplier(player, "movementMultiplier");
                 record["running"] = player.running;
                 record["slideActive"] = player.slide.active;
@@ -1109,7 +1115,8 @@ namespace GameRoomServer
                 record["slideDirectionY"] = player.slide.directionY;
                 record["slideSpeed"] = player.slide.speed;
                 record["buffs"] = nlohmann::json::array();
-                for (const auto& buff : player.buffs) record["buffs"].push_back({ { "skillId", buff.id }, { "remainingSeconds", buff.remainingSeconds } });
+                for (const auto& buff : player.buffs) record["buffs"].push_back({ { "skillId", buff.id },
+                    { "remainingSeconds", self->combatDefinition->tempo.RealSeconds(buff.remainingSeconds) } });
             }
             for (const auto& [id, monster] : self->monsters)
             {

@@ -1,5 +1,6 @@
 {
   "version": 3,
+  "tempoScale": 0.7,
   "player": {
     "maxHp": 100, "maxMp": 100, "walkSpeed": 280, "runSpeed": 480, "bodyHeight": 96, "hitRadius": 20,
     "shot": {
@@ -11,9 +12,9 @@
     },
     "jump": { "prepareSeconds": 0.1, "speed": 567.62, "gravity": 1200 },
     "characters": [
-      { "characterId": 1, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 2.5, "motionId": "slide", "hitstopSeconds": 0.05 } },
-      { "characterId": 2, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 2.5, "motionId": "slide", "hitstopSeconds": 0.05 } },
-      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 2.5, "motionId": "slide", "hitstopSeconds": 0.05 } }
+      { "characterId": 1, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05 } },
+      { "characterId": 2, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05 } },
+      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05 } }
     ]
   },
   "reactions": { "hitStunSeconds": 0.25, "downSeconds": 0.5, "riseSeconds": 0.35 },

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PlayerSkillCatalog.h"
+#include "CombatTempo.h"
 #include <fstream>
 #include <optional>
 
@@ -17,6 +18,7 @@ namespace ActionRPG::Combat
     {
     public:
         using Json = PlayerSkills::Catalog::Json;
+        CombatTempo tempo;
         PlayerResourceLimits defaults;
         std::unordered_map<std::uint32_t, PlayerResourceLimits> characters;
 
@@ -53,7 +55,9 @@ namespace ActionRPG::Combat
             Rules::Require(input.good(), "Cannot read combat resource definition.");
             const auto source = Json::parse(input);
             Rules::Require(source.is_object() && source.at("version") == 3, "Unsupported combat resource version.");
-            return Parse(source.at("player"));
+            auto result = Parse(source.at("player"));
+            result.tempo = CombatTempo::Parse(source.value("tempoScale", Json(1.0)));
+            return result;
         }
     };
 }

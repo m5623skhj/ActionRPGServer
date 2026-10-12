@@ -70,6 +70,9 @@ namespace TownServer::Domain
         for (const auto& [id, limits] : resourceCatalog.characters)
             if (!playerSkills.characterIds.contains("Character" + std::to_string(id)))
                 throw std::invalid_argument("Resource definition references an unknown town character.");
+        for (const auto& [id, definition] : itemsCatalog.definitions)
+            if (definition.use.type != ActionRPG::Items::Definition::Use::Type::None)
+                (void)resourceCatalog.tempo.ItemCooldownMilliseconds(definition.use.cooldownSeconds);
         const ActionRPG::PlayerSkills::Catalog::Json skillPayload{
             { "characterId", 1 }, { "progression", progressionPolicy.Create().ToJson() },
             { "skillTrees", skillTrees.source }, { "playerSkills", playerSkills.source }, { "result", "State" } };

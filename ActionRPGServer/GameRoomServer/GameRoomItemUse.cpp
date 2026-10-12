@@ -68,6 +68,10 @@ namespace GameRoomServer
                     const auto& definition = catalog.definitions.begin()->second;
                     if (definition.use.type == ActionRPG::Items::Definition::Use::Type::None)
                     { reply["status"] = "NotUsable"; handler(reply); return; }
+                    std::uint32_t cooldownMs{};
+                    try { cooldownMs = self->combatDefinition->tempo.ItemCooldownMilliseconds(definition.use.cooldownSeconds); }
+                    catch (const std::exception&)
+                    { reply["status"] = "InvalidCooldown"; handler(reply); return; }
                     for (const auto& [key, row] : self->itemUses)
                         if (row.characterId == characterId && !row.settled && row.state != "Cancelled")
                         { reply["status"] = "Busy"; handler(reply); return; }
@@ -88,6 +92,7 @@ namespace GameRoomServer
                     if (std::string_view(status) != "Succeeded")
                     { reply["status"] = status; handler(reply); return; }
                     ItemUseRecord row;
+                    row.cooldownMs = cooldownMs;
                     row.playerId = inPlayerId; row.characterId = characterId; row.generation = generation;
                     row.operation = operation; row.definitionId = definition.id; row.use = definition.use;
                     row.facingLeft = request.at("operation").value("facingLeft", false);
@@ -174,7 +179,7 @@ namespace GameRoomServer
                                 row.state = "Applied";
                                 action.DoAction(context, row.use);
                                 deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(
-                                    static_cast<std::int64_t>(std::ceil(row.use.cooldownSeconds * 1000)));
+                                    row.cooldownMs);
                                 actor.itemUseDefinitionId.swap(definitionId); actor.itemUseMotionId.swap(motion);
                                 ++actor.itemUseSequence; actor.itemUseElapsedSeconds = 0;
                                 actor.itemUseDurationSeconds = row.use.motionDurationSeconds;

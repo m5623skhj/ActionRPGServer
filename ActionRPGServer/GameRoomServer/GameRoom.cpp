@@ -37,6 +37,7 @@ namespace GameRoomServer
         dungeonWorld["skillTrees"] = combatDefinition->skillTrees.source;
         dungeonWorld["combatRules"] = {
             { "version", COMBAT_PROTOCOL_VERSION }, { "maxHp", combatDefinition->playerMaxHp },
+            { "tempoScale", combatDefinition->tempo.scale },
             { "maxMp", combatDefinition->playerMaxMp ? nlohmann::json(*combatDefinition->playerMaxMp) : nlohmann::json(nullptr) },
             { "tickRate", TICK_RATE }, { "snapshotRate", SNAPSHOT_RATE }, { "tickIntervalSeconds", TICK_SECONDS },
             { "walkSpeed", combatDefinition->walkSpeed }, { "runSpeed", combatDefinition->runSpeed },
@@ -500,7 +501,7 @@ namespace GameRoomServer
                 ++self->serverTick;
                 self->PrepareActorTimes(TICK_SECONDS);
                 self->UpdatePlayers();
-                self->UpdateCombat(TICK_SECONDS);
+                self->UpdateCombat(TICK_SECONDS * self->combatDefinition->tempo.scale);
                 if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested
                     || self->hitstopChanged) self->PublishRealtime();
                 if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();

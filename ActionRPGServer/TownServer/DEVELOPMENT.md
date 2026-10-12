@@ -770,6 +770,14 @@ StaleOwner·DB 오류·응답 유실은 미소비 또는 환불의 증거가 아
 그 사이 장비·삭제·획득·자동 소비·성장 저장 및 새 던전 진입/완료 전환은 Busy로 막는다.
 DB complete 시 한 번 샘플링한 UTC_TIMESTAMP(3)에 쿨타임을 더하며, 실제 commit 시각을 기록하는 것은 아니다.
 룸은 효과 적용부터 steady_clock 잠금을 유지하고 DB Pending 동안 추가 사용을 막는다.
+던전 사용 예약만 공통 `Combat.json.tempoScale`(현재 0.7, 누락 기본 1)을 적용하여 원본 `useCooldownSeconds`를
+`ceil(원본 초 / tempoScale × 1000)` 실제 밀리초로 저장한다. Room의 적용 잠금도 같은 값으로 캡처한다.
+현재 UnripeStrawberry 5초는 7143ms, Stone 1초는 1429ms이며 UI는 DB의 실제 remaining 값을 그대로 표시한다.
+Town 시작 시 모든 사용 아이템의 변환 결과를 V6의 1~3600000ms 범위로 검증한다. 상한 초과는 시작 오류이며
+임의 clamp나 DB 스키마 변경으로 덮지 않는다. 이미 저장된 쿨다운을 템포 변경 때 다시 변환하지 않는다.
+Room은 별도 아이템 원본을 로딩하지 않고 Town이 보낸 정의를 Prepare에서 검증하며, 변환 ms가 범위를
+넘으면 receipt·효과 실행 전에 `InvalidCooldown`으로 거절한다. 저장 완료된 기존 deadline은 실제 시간 그대로 유지한다.
+마을 이동과 일반 저장·네트워크 시간은 이 값으로 감속하지 않는다. 던전 전투 단위는 [전투 계약](../GameRoomServer/COMBAT_PROTOCOL.md#던전-전투-템포)을 따른다.
 Cancelled는 환불과 revision 증가를 확정하며 쿨타임이 없다. ConsumedUnknown은 소비를 유지하고 보수적 쿨타임을 기록한다.
 
 룸마다 CSPRNG 128비트 incarnation, 서버 프로세스마다 별도 incarnation을 사용한다.

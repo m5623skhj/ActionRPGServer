@@ -151,7 +151,8 @@ namespace GameRoomServer
                 writer.Text(player.lastSkillId); writer.Byte(player.skill.has_value()); writer.Byte(player.lastSkillAirborne);
                 writer.Float(player.lastSkillSeconds); writer.Float(BuffMultiplier(player, "movementMultiplier"));
                 writer.Byte(static_cast<std::uint8_t>(player.buffs.size()));
-                for (const auto& buff : player.buffs) { writer.Text(buff.id); writer.Float(buff.remainingSeconds); }
+                for (const auto& buff : player.buffs) { writer.Text(buff.id);
+                    writer.Float(combatDefinition->tempo.RealDurationSeconds(buff.remainingSeconds)); }
             }
             writer.Integer(projectileCount, 2);
             for (const auto& projectile : projectiles)

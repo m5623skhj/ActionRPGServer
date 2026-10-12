@@ -105,11 +105,11 @@ namespace GameRoomServer
             float height{}, verticalSpeed{}, reactionSeconds{};
             Reaction reaction{ Reaction::None };
             std::uint32_t reactionSequence{};
-            float hitRecovery{}, reactionDurationSeconds{}, hitstopRemainingSeconds{};
+            float hitRecovery{}, reactionDurationSeconds{}, hitstopRemainingSeconds{}; // Hitstop fields use real seconds.
             std::uint32_t hitstopSequence{};
             std::uint64_t hitstopStartTimeMs{};
             float hitstopDurationSeconds{};
-            float actionDeltaSeconds{}; // Prepared once per room tick; never serialized.
+            float actionDeltaSeconds{}; // Combat seconds, prepared once per real-time room tick; never serialized.
         };
 
         struct ActiveSkill
@@ -282,6 +282,7 @@ namespace GameRoomServer
             std::uint64_t characterId{}, generation{};
             std::string operation, executionHash, definitionId;
             ActionRPG::Items::Definition::Use use;
+            std::uint32_t cooldownMs{};
             bool facingLeft{}, settled{};
             std::string state{"Prepared"}, reason;
         };

@@ -200,6 +200,7 @@
     <ClInclude Include="Database\ItemUseStoreProcedure.h" />
     <ClInclude Include="ItemUseService.h" />
     <ClInclude Include="..\Shared\PlayerResourceCatalog.h" />
+    <ClInclude Include="..\Shared\CombatTempo.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />

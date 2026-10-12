@@ -54,9 +54,10 @@ namespace GameRoomServer
         std::ifstream input(inPath, std::ios::binary);
         Require(input.good(), "Cannot read Combat.json.");
         const Json source = Json::parse(input);
-        Keys(source, { "version", "player", "reactions", "monsters" });
+        Keys(source, { "version", "tempoScale", "player", "reactions", "monsters" });
         Require(source.at("version") == 3, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
+        result->tempo = ActionRPG::Combat::CombatTempo::Parse(source.value("tempoScale", Json(1.0)));
         const auto& player = source.at("player");
         Keys(player, { "maxHp", "maxMp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });
         const auto resources = ActionRPG::Combat::PlayerResourceCatalog::Parse(player);
@@ -165,6 +166,19 @@ namespace GameRoomServer
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             definition.maxMp = resources.Get(characterId).maxMp;
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");
+        }
+        (void)result->tempo.RealDurationSeconds(result->shotHitstopSeconds);
+        for (const auto& [id, character] : result->characters)
+            (void)result->tempo.RealDurationSeconds(character.slide.hitstopSeconds);
+        for (const auto& [id, monster] : result->monsters)
+            for (const auto& [skillId, effect] : monster.skills)
+                (void)result->tempo.RealDurationSeconds(effect.hitstopSeconds);
+        for (const auto& [id, skill] : result->playerSkills.skills)
+        {
+            if (skill.at("execution").contains("hitstopSeconds"))
+                (void)result->tempo.RealDurationSeconds(skill.at("execution").at("hitstopSeconds").get<float>());
+            if (skill.at("type") == "buff")
+                (void)result->tempo.RealDurationSeconds(skill.at("execution").at("durationSeconds").get<float>());
         }
         return result;
     }

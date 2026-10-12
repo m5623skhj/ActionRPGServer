@@ -29,6 +29,11 @@ INI의 대응 키 `frame_seconds_list`와 시각 전용 effect 모션은 클라�
 
 실행 규칙:
 
+던전의 `combatRules.tempoScale`은 현재 0.7입니다. 모션·이벤트·시전 경과 시간과 원본 스킬/버프 데이터는
+전투 초를 유지하고, 서버는 전투 dt만 감속합니다. JSON `skillCooldowns` 및 JSON/SKL1 버프 `remainingSeconds`는
+실제 남은 초로 변환해 전달하므로 UI는 추가 tempo 곱셈 없이 실제 시간으로 감소시킵니다.
+세부 시간 단위·역경직 예측 계약은 [던전 전투 템포](COMBAT_PROTOCOL.md#던전-전투-템포)를 따릅니다.
+
 - DungeonSkillInput은 인증된 세션의 플레이어로 실행합니다. 입력/기본 액션이 sequence와 20회/초 제한을 공유합니다.
 - 결과는 DungeonActionResult(ID 8)의 version=3 형식이며 슬라이딩/역경직 중에는 시전을 거절합니다.
   기본 플레이어 레코드가 129바이트인 realtime 버전 3와 기존 SKL1 tail의 경계는 [COMBAT_PROTOCOL.md](COMBAT_PROTOCOL.md)를 따릅니다.

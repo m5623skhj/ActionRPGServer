@@ -141,7 +141,7 @@ namespace TownServer::Domain
         if ((use.type == ActionRPG::Items::Definition::Use::Type::Throw) != command.contains("facingLeft"))
         { Publish("InvalidRequest"); return; }
         identity.roomId = entry.dungeonRoomId; identity.revision = expected; identity.instanceId = instanceId;
-        identity.cooldownMs = static_cast<std::uint32_t>(std::ceil(use.cooldownSeconds * 1000));
+        identity.cooldownMs = owner->resourceCatalog.tempo.ItemCooldownMilliseconds(use.cooldownSeconds);
         auto original = command; original.erase("requestId"); original.erase("revision");
         identity.operationJson = original.dump(); definition = owner->itemsCatalog.presentations.at(stack->definitionId);
         Json prepare{{"kind", "Prepare"}, {"requestId", requestId}, {"characterId", std::to_string(identity.characterId)},
