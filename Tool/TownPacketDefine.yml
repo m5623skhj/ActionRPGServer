@@ -17,6 +17,8 @@ ExternalTypes:
   - PartyResultCode
   - PartyDirectoryEntry
   - PartyJoinRequestState
+  - ChatChannel
+  - ChatResultCode
 
 Packet:
   - Type: RequestPacket
@@ -416,3 +418,45 @@ Packet:
     Items:
       - Type: std::string
         Name: json
+
+  - Type: RequestPacket
+    PacketName: ChatRequest
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: ChatChannel
+        Name: channel
+      - Type: std::string
+        Name: message
+
+  - Type: ReplyPacket
+    PacketName: ChatResult
+    Items:
+      - Type: std::uint32_t
+        Name: sequence
+      - Type: ChatResultCode
+        Name: result
+      - Type: ChatChannel
+        Name: channel
+      - Type: std::uint64_t
+        Name: messageId
+      - Type: std::uint32_t
+        Name: retryAfterMs
+
+  - Type: ReplyPacket
+    PacketName: ChatMessage
+    Items:
+      - Type: std::uint64_t
+        Name: messageId
+      - Type: std::uint32_t
+        Name: requestSequence
+      - Type: ChatChannel
+        Name: channel
+      - Type: std::uint64_t
+        Name: senderPlayerId
+      - Type: std::uint64_t
+        Name: senderCharacterId
+      - Type: std::string
+        Name: senderName
+      - Type: std::string
+        Name: message

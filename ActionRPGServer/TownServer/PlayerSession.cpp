@@ -131,6 +131,13 @@ namespace TownServer::Network
         if (GetAccountId() == 0) { Stop(); return; }
         switch (*type)
         {
+        case TownProtocol::PacketType::ChatRequest:
+        {
+            const auto request = TownProtocol::DecodeChatRequest(inPacket);
+            if (!request || !enterRequested || GetPlayerId() == 0) { Stop(); return; }
+            town->SendChat(shared_from_this(), *request);
+            return;
+        }
         case TownProtocol::PacketType::CharacterListRequest:
         case TownProtocol::PacketType::CharacterCreateRequest:
         case TownProtocol::PacketType::CharacterSelectRequest:

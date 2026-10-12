@@ -818,3 +818,49 @@ null이고 임의 100 fallback은 없다. 잘못된 수치·없는 파일·중�
 이 메시지의 자원은 Town HUD에만 사용하며 Dungeon 진입 후 늦은 응답이 Room HP/MP를 덮어쓰면 안 된다.
 MP 소모·회복·영속 저장·새 패킷·DB 변경은 포함하지 않는다. 기존 Use 권한·쿨타임·Pending 정책은 유지한다.
 배포 시 Town 런타임에도 같은 원본 Combat.json을 제공해야 한다. 이번 변경의 빌드·실행 확인은 수행하지 않았다.
+
+### 일반·파티 채팅
+
+TownServer가 현재 캐릭터·파티·수신 범위를 Town strand에서 확정한다. 일반은 발신자가 있는 마을 맵의
+주변 3×3 섹터를 `FindVisiblePlayers`로 다시 조회하고 본인도 포함한다. 다른 맵과 던전·입장 예약·입장 처리 중
+캐릭터는 일반 수신자에서 제외한다. 일반 요청자가 `dungeonRoomId`, `reservedDungeonRoomId` 또는
+`pendingDungeonPlayers` 상태이면 실제 채널을 Party로 바꾼다. 파티가 없으면 NotInParty이며 일반으로 전달하지 않는다.
+파티는 승인 시점의 현재 PartyManager 멤버 전체에게 위치·맵·던전 방과 관계없이 전달한다.
+접속 종료/인증 만료 세션은 수신자에서 제외하며 새 던전 좌표 연결·파티 생성·DB 채팅 저장은 없다.
+
+원본은 `Tool/TownPacketDefine.yml`이며 기존 ID 1~48을 유지하고 다음 3개를 마지막에 추가한다.
+기존 Town TCP의 network byte order(big-endian)와 4바이트 body 길이 프레임을 사용한다.
+아래 string은 UTF-8 바이트 길이 uint16와 본문이며 코드 포인트 길이가 아니다.
+
+| ID/패킷 | 순서대로 전달하는 필드 |
+|---|---|
+| 49 ChatRequest | sequence uint32, channel uint8, message string |
+| 50 ChatResult | sequence uint32, result uint8, 실제 channel uint8, messageId uint64, retryAfterMs uint32 |
+| 51 ChatMessage | messageId uint64, requestSequence uint32, 실제 channel uint8, senderPlayerId uint64, senderCharacterId uint64, senderName string, message string |
+
+ChatChannel은 General=1/Party=2다. ChatResultCode는 Succeeded=0, InvalidChannel=1, InvalidMessage=2,
+RateLimited=3, NotInParty=4, NotEntered=5, StaleSequence=6, SequenceConflict=7, Unavailable=8이다.
+실패의 messageId는 0이며 retryAfterMs는 RateLimited일 때 다음 토큰까지의 실제 밀리초(1~500)다.
+senderPlayerId는 현재 게임 표시용 ID, senderCharacterId는 DB 캐릭터 고유 ID이며 이름도 현재 서버 캐릭터에서 읽는다.
+클라이언트가 발신자·계정·파티·위치 정보를 보내지 않는다. 성공 ACK는 메시지 수신/화면 표시를 대신하지 않는다.
+본인도 51을 한 번 수신했을 때만 기록·말풍선을 추가하고, 던전 일반→파티 전환은 Party 및 전체 탭에만 분류한다.
+말풍선은 현재 화면의 senderPlayerId 캐릭터가 보일 때만 표시하고 다른 장소 파티 메시지도 유한한 기록에는 남긴다.
+
+sequence는 선택된 입장 세션에서 1부터 증가하며 wrap하지 않는다. 마지막 요청 채널·본문·결과만 메모리에 보관한다.
+같은 마지막 sequence와 같은 요청 바이트를 다시 보내면 원래 결과 50만 반환하고 51은 재방송하지 않는다.
+같은 sequence의 다른 본문/채널은 SequenceConflict, 이전 sequence는 StaleSequence다. 실패도 sequence를 소비하므로
+빈도 제한 후 재시도나 파티 가입 후 재시도는 새 sequence를 사용한다. messageId는 Town 수명 내 단조 증가하고
+AOI·채널별 누락 번호는 정상이다. 재접속 때 클라이언트의 요청 번호와 수신 중복 판단 상태를 초기화한다.
+
+본문은 최대 200 Unicode code points/800 UTF-8 바이트다. UTF-8의 잘못된 선행/연속 바이트, overlong,
+surrogate 및 U+10FFFF 초과를 거절한다. 빈/공백·제로폭만 있는 문자열, C0/C1, 개행/문단 구분자, BOM,
+bidi 제어문자를 거절하고 한글·결합 문자·ZWJ emoji는 지원한다. 글자 수는 grapheme이 아닌 scalar 수다.
+새 요청은 채널을 공유하는 실제 시간 token bucket(초당 2개 회복, 초기/최대 5개)을 사용한다.
+잘못된 채널/본문과 NotInParty도 토큰을 소비하고, 마지막 결과 재조회·오래된 요청은 새 메시지를 만들지 않는다.
+본문 바이트 상한/sequence 0/잘못된 패킷·입장 전 요청은 기존처럼 연결을 종료하고 의미상 거절은 50으로 알린다.
+
+이미 송신 큐에 승인한 메시지는 이후 파티 이동/연결 종료 때문에 재방송하지 않는다. TCP 쓰기 실패나 송신 큐
+상한 초과는 기존 세션 종료를 따르며, 성공 ACK가 모든 수신자의 실제 전달을 보장하지는 않는다. 오프라인 재생은 없다.
+입장/귀환과 채팅 판정은 같은 strand에서 순서대로 처리하고, Send 이후 PlayerEntry 참조를 사용하지 않아
+송신 큐 초과로 즉시 접속 종료 처리가 이어져도 제거된 캐릭터 참조를 읽지 않는다.
+서버/클라이언트 선언과 코덱을 함께 배포한다. 이번 작업은 정적 계약 대조만 수행하며 실제 채팅 테스트는 하지 않았다.

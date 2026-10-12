@@ -38,6 +38,7 @@ namespace TownServer::Domain
     class TownInstance final : public std::enable_shared_from_this<TownInstance>
     {
     public:
+        void SendChat(std::shared_ptr<Network::PlayerSession> inSession, TownProtocol::ChatRequest inRequest);
         using DungeonRequestHandler = std::function<void(bool, std::vector<PlayerId>)>;
 
         TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
@@ -115,6 +116,8 @@ namespace TownServer::Domain
 
     private:
         friend class ItemUseService;
+        static constexpr double CHAT_BURST_CAPACITY = 5.0;
+        static constexpr double CHAT_REFILL_PER_SECOND = 2.0;
         struct PlayerEntry;
         std::unordered_map<std::uint64_t, std::shared_ptr<ItemUseService>> itemUseServices;
         std::shared_ptr<ItemUseService> GetItemUseService(PlayerEntry& inEntry);
@@ -157,6 +160,12 @@ namespace TownServer::Domain
             ActionRPG::Combat::PlayerResourceLimits resourceLimits;
             std::uint32_t hp{};
             std::optional<std::uint32_t> mp;
+            std::uint32_t chatSequence{};
+            TownProtocol::ChatChannel chatRequestedChannel{};
+            std::string chatLastMessage;
+            TownProtocol::ChatResult chatLastResult;
+            double chatTokens{CHAT_BURST_CAPACITY};
+            std::chrono::steady_clock::time_point chatRefillTime{std::chrono::steady_clock::now()};
         };
 
         struct Admission
@@ -255,6 +264,7 @@ namespace TownServer::Domain
         std::unordered_set<PlayerId> partyDirectorySubscribers;
         std::uint64_t partyDirectoryRevision{};
         PlayerId nextPlayerId = 1;
+        std::uint64_t nextChatMessageId{1};
         std::uint32_t serverTick = 0;
         bool running = false;
     };

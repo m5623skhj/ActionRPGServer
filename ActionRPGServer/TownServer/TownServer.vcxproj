@@ -171,6 +171,7 @@
     <ClCompile Include="RoomControlTcpServer.cpp" />
     <ClCompile Include="TownClientTcpServer.cpp" />
     <ClCompile Include="TownInstance.cpp" />
+    <ClCompile Include="TownChat.cpp" />
     <ClCompile Include="TownMap.cpp" />
   </ItemGroup>
   <ItemGroup>

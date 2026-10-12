@@ -356,6 +356,46 @@ namespace
 
 namespace TownProtocol
 {
+    std::vector<std::uint8_t> Encode(const ChatRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::ChatRequest);
+        writer.WriteUInt32(inPacket.sequence); writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.channel));
+        writer.WriteString(inPacket.message);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const ChatResult& inPacket)
+    {
+        PacketWriter writer(PacketType::ChatResult);
+        writer.WriteUInt32(inPacket.sequence); writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.result));
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.channel)); writer.WriteUInt64(inPacket.messageId);
+        writer.WriteUInt32(inPacket.retryAfterMs);
+        return writer.Finish();
+    }
+
+    std::vector<std::uint8_t> Encode(const ChatMessage& inPacket)
+    {
+        PacketWriter writer(PacketType::ChatMessage);
+        writer.WriteUInt64(inPacket.messageId); writer.WriteUInt32(inPacket.requestSequence);
+        writer.WriteUInt8(static_cast<std::uint8_t>(inPacket.channel)); writer.WriteUInt64(inPacket.senderPlayerId);
+        writer.WriteUInt64(inPacket.senderCharacterId); writer.WriteString(inPacket.senderName);
+        writer.WriteString(inPacket.message);
+        return writer.Finish();
+    }
+
+    std::optional<ChatRequest> DecodeChatRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket);
+        ChatRequest packet;
+        std::uint8_t channel{};
+        if (inPacket.size() > MAX_CHAT_UTF8_BYTES + 9 || !ReadExpectedType(reader, PacketType::ChatRequest)
+            || !reader.ReadUInt32(packet.sequence) || packet.sequence == 0 || !reader.ReadUInt8(channel)
+            || !reader.ReadString(packet.message) || packet.message.size() > MAX_CHAT_UTF8_BYTES
+            || !reader.Finished()) return std::nullopt;
+        packet.channel = static_cast<ChatChannel>(channel);
+        return packet;
+    }
+
     namespace
     {
         std::vector<std::uint8_t> EncodeJsonPacket(PacketType inType, const std::string& inJson)

@@ -57,6 +57,9 @@ namespace TownProtocol
         InventoryOperationRequest = 46,
         InventoryOperationResponse = 47,
         ItemDefinitionsResponse = 48,
+        ChatRequest = 49,
+        ChatResult = 50,
+        ChatMessage = 51,
     };
 
     struct EnterTownRequest
@@ -352,6 +355,33 @@ namespace TownProtocol
     struct ItemDefinitionsResponse
     {
         std::string json{};
+    };
+
+    struct ChatRequest
+    {
+        std::uint32_t sequence{};
+        ChatChannel channel{};
+        std::string message{};
+    };
+
+    struct ChatResult
+    {
+        std::uint32_t sequence{};
+        ChatResultCode result{};
+        ChatChannel channel{};
+        std::uint64_t messageId{};
+        std::uint32_t retryAfterMs{};
+    };
+
+    struct ChatMessage
+    {
+        std::uint64_t messageId{};
+        std::uint32_t requestSequence{};
+        ChatChannel channel{};
+        std::uint64_t senderPlayerId{};
+        std::uint64_t senderCharacterId{};
+        std::string senderName{};
+        std::string message{};
     };
 
 }
