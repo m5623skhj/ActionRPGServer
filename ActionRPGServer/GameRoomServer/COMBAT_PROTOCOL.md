@@ -179,7 +179,7 @@ version 3과 binary 필드 순서는 유지하며, tempoScale=0.7 서버의 예�
 다시 설정합니다. Falling 물리·Down·Rising 시간 및 다운/기상 중 일반 재피격의 기존 의미는 유지합니다.
 
 공격 데이터의 `hitstopSeconds`는 공격자만 멈추는 시간입니다. 기본 사격은 `player.shot.hitstopSeconds=0`,
-캐릭터별 슬라이딩은 `player.characters[].slide.hitstopSeconds=0.05`, 몬스터 근접 공격은
+캐릭터별 슬라이딩은 `player.characters[].slide.hitstopSeconds=0.18`(tempoScale=0.7에서 실제 약 0.257초), 몬스터 근접 공격은
 `monsters[].skills[].hitstopSeconds=0.05`입니다. 스킬의 `execution.hitstopSeconds`는 [PLAYER_SKILLS.md](PLAYER_SKILLS.md)를 따릅니다.
 유한한 비음수 float로 검증하고 임의의 시간 상한은 두지 않습니다. tempoScale로 나눈 실제 지속시간도
 float 범위 안인지 로딩 때 검증합니다. 명시적 0은 정지를 비활성화합니다.

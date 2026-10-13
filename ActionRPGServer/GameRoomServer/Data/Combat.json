@@ -12,9 +12,9 @@
     },
     "jump": { "prepareSeconds": 0.1, "speed": 567.62, "gravity": 1200 },
     "characters": [
-      { "characterId": 1, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05, "force": 40, "hitType": "Normal" } },
-      { "characterId": 2, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05, "force": 40, "hitType": "Normal" } },
-      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.05, "force": 40, "hitType": "Normal" } }
+      { "characterId": 1, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } },
+      { "characterId": 2, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } },
+      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } }
     ]
   },
   "reactions": { "hitStunSeconds": 0.25, "knockbackSeconds": 0.18, "downSeconds": 0.5, "riseSeconds": 0.35 },
