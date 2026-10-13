@@ -5,29 +5,15 @@
     "left": 0.0,
     "top": 0.0,
     "right": 4608.0,
-    "bottom": 1024.0
+    "bottom": 1080.0
   },
   "images": [
     {
-      "asset": "Images/Towns/town_capital_west.png",
+      "asset": "Images/Towns/town_capital.png",
       "x": 0.0,
       "y": 0.0,
-      "width": 1536.0,
-      "height": 1024.0
-    },
-    {
-      "asset": "Images/Towns/town_capital_central.png",
-      "x": 1536.0,
-      "y": 0.0,
-      "width": 1536.0,
-      "height": 1024.0
-    },
-    {
-      "asset": "Images/Towns/town_capital_east.png",
-      "x": 3072.0,
-      "y": 0.0,
-      "width": 1536.0,
-      "height": 1024.0
+      "width": 4608.0,
+      "height": 1080.0
     }
   ],
   "walkablePolygons": [

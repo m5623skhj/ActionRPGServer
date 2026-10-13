@@ -5,41 +5,41 @@
   "world": {
     "left": 0,
     "top": 0,
-    "right": 1280,
-    "bottom": 720
+    "right": 1920,
+    "bottom": 1080
   },
   "sectorWidth": 480,
   "sectorHeight": 480,
   "spawn": {
     "x": 112,
-    "y": 480
+    "y": 753.1034482758621
   },
   "images": [
     {
       "asset": "Images/Dungeons/FloodedCitadel_Courtyard.png",
       "x": 0,
       "y": 0,
-      "width": 1280,
-      "height": 720
+      "width": 1920,
+      "height": 1080
     },
     {
       "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
       "x": 28,
-      "y": 424,
+      "y": 697.1034482758621,
       "width": 64,
       "height": 112
     },
     {
       "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
-      "x": 1188,
-      "y": 424,
+      "x": 1828,
+      "y": 697.1034482758621,
       "width": 64,
       "height": 112
     },
     {
       "asset": "Images/Dungeons/FloodedCitadel_Editor_pad.png",
-      "x": 600,
-      "y": 656,
+      "x": 920,
+      "y": 1016,
       "width": 80,
       "height": 48
     }
@@ -47,28 +47,28 @@
   "walkablePolygons": [
     [
       {
-        "x": 520,
+        "x": 765,
         "y": 30
       },
       {
-        "x": 760,
+        "x": 1155,
         "y": 30
       },
       {
-        "x": 1240,
-        "y": 380
+        "x": 1880,
+        "y": 575.5172413793103
       },
       {
-        "x": 1240,
-        "y": 700
-      },
-      {
-        "x": 40,
-        "y": 700
+        "x": 1880,
+        "y": 1060
       },
       {
         "x": 40,
-        "y": 380
+        "y": 1060
+      },
+      {
+        "x": 40,
+        "y": 575.5172413793103
       }
     ]
   ],
@@ -79,11 +79,11 @@
         "y": 0
       },
       {
-        "x": 1280,
+        "x": 1920,
         "y": 0
       },
       {
-        "x": 1280,
+        "x": 1920,
         "y": 30
       },
       {
@@ -97,60 +97,60 @@
         "y": 30
       },
       {
-        "x": 520,
+        "x": 765,
         "y": 30
       },
       {
         "x": 40,
-        "y": 380
+        "y": 575.5172413793103
       },
       {
         "x": 40,
-        "y": 700
+        "y": 1060
       },
       {
         "x": 0,
-        "y": 700
+        "y": 1060
       }
     ],
     [
       {
-        "x": 760,
+        "x": 1155,
         "y": 30
       },
       {
-        "x": 1280,
+        "x": 1920,
         "y": 30
       },
       {
-        "x": 1280,
-        "y": 700
+        "x": 1920,
+        "y": 1060
       },
       {
-        "x": 1240,
-        "y": 700
+        "x": 1880,
+        "y": 1060
       },
       {
-        "x": 1240,
-        "y": 380
+        "x": 1880,
+        "y": 575.5172413793103
       }
     ],
     [
       {
         "x": 0,
-        "y": 700
+        "y": 1060
       },
       {
-        "x": 1280,
-        "y": 700
+        "x": 1920,
+        "y": 1060
       },
       {
-        "x": 1280,
-        "y": 720
+        "x": 1920,
+        "y": 1080
       },
       {
         "x": 0,
-        "y": 720
+        "y": 1080
       }
     ]
   ],
@@ -159,21 +159,21 @@
       "id": "Entry_west",
       "position": {
         "x": 112,
-        "y": 480
+        "y": 753.1034482758621
       }
     },
     {
       "id": "Entry_east",
       "position": {
-        "x": 1168,
-        "y": 480
+        "x": 1808,
+        "y": 753.1034482758621
       }
     },
     {
       "id": "Entry_south",
       "position": {
-        "x": 640,
-        "y": 620
+        "x": 960,
+        "y": 980
       }
     }
   ],
@@ -183,8 +183,8 @@
       "id": "Soldier1",
       "dataId": 2,
       "position": {
-        "x": 360,
-        "y": 450
+        "x": 505,
+        "y": 699.8275862068965
       },
       "facingLeft": true
     },
@@ -192,8 +192,8 @@
       "id": "Soldier2",
       "dataId": 2,
       "position": {
-        "x": 500,
-        "y": 590
+        "x": 732.5,
+        "y": 948.448275862069
       },
       "facingLeft": true
     },
@@ -201,8 +201,8 @@
       "id": "Soldier3",
       "dataId": 2,
       "position": {
-        "x": 750,
-        "y": 430
+        "x": 1138.75,
+        "y": 664.3103448275862
       },
       "facingLeft": true
     },
@@ -210,8 +210,8 @@
       "id": "Soldier4",
       "dataId": 2,
       "position": {
-        "x": 920,
-        "y": 590
+        "x": 1415,
+        "y": 948.448275862069
       },
       "facingLeft": true
     },
@@ -219,8 +219,8 @@
       "id": "Soldier5",
       "dataId": 2,
       "position": {
-        "x": 1080,
-        "y": 470
+        "x": 1675,
+        "y": 735.3448275862069
       },
       "facingLeft": true
     }
@@ -231,19 +231,19 @@
       "polygon": [
         {
           "x": 40,
-          "y": 420
+          "y": 646.551724137931
         },
         {
           "x": 80,
-          "y": 420
+          "y": 646.551724137931
         },
         {
           "x": 80,
-          "y": 540
+          "y": 859.6551724137931
         },
         {
           "x": 40,
-          "y": 540
+          "y": 859.6551724137931
         }
       ],
       "connectionId": "BrokenCauseway_ReservoirCourt",
@@ -252,7 +252,7 @@
         "kind": "gate",
         "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
         "x": 28,
-        "y": 424,
+        "y": 697.1034482758621,
         "width": 64,
         "height": 112
       },
@@ -266,20 +266,20 @@
       "id": "Gate_CollapsedGallery",
       "polygon": [
         {
-          "x": 1200,
-          "y": 420
+          "x": 1840,
+          "y": 646.551724137931
         },
         {
-          "x": 1240,
-          "y": 420
+          "x": 1880,
+          "y": 646.551724137931
         },
         {
-          "x": 1240,
-          "y": 540
+          "x": 1880,
+          "y": 859.6551724137931
         },
         {
-          "x": 1200,
-          "y": 540
+          "x": 1840,
+          "y": 859.6551724137931
         }
       ],
       "connectionId": "ReservoirCourt_CollapsedGallery",
@@ -287,8 +287,8 @@
       "visual": {
         "kind": "gate",
         "asset": "Images/Dungeons/FloodedCitadel_Editor_gate.png",
-        "x": 1188,
-        "y": 424,
+        "x": 1828,
+        "y": 697.1034482758621,
         "width": 64,
         "height": 112
       },
@@ -302,20 +302,20 @@
       "id": "Gate_SupplyTerrace",
       "polygon": [
         {
-          "x": 600,
-          "y": 660
+          "x": 895,
+          "y": 1020
         },
         {
-          "x": 680,
-          "y": 660
+          "x": 1025,
+          "y": 1020
         },
         {
-          "x": 680,
-          "y": 700
+          "x": 1025,
+          "y": 1060
         },
         {
-          "x": 600,
-          "y": 700
+          "x": 895,
+          "y": 1060
         }
       ],
       "connectionId": "ReservoirCourt_SupplyTerrace",
@@ -323,8 +323,8 @@
       "visual": {
         "kind": "pad",
         "asset": "Images/Dungeons/FloodedCitadel_Editor_pad.png",
-        "x": 600,
-        "y": 656,
+        "x": 920,
+        "y": 1016,
         "width": 80,
         "height": 48
       },

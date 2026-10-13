@@ -5,34 +5,34 @@
   "world": {
     "left": 0,
     "top": 0,
-    "right": 1280,
-    "bottom": 720
+    "right": 1920,
+    "bottom": 1080
   },
   "sectorWidth": 480,
   "sectorHeight": 480,
   "spawn": {
     "x": 112,
-    "y": 460
+    "y": 717.5862068965517
   },
   "images": [
     {
       "asset": "Images/Dungeons/FallenCitadel_RoyalCorridor.png",
       "x": 0,
       "y": 0,
-      "width": 1280,
-      "height": 720
+      "width": 1920,
+      "height": 1080
     },
     {
       "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
       "x": 28,
-      "y": 404,
+      "y": 661.5862068965517,
       "width": 64,
       "height": 112
     },
     {
       "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
-      "x": 1188,
-      "y": 404,
+      "x": 1828,
+      "y": 661.5862068965517,
       "width": 64,
       "height": 112
     }
@@ -41,19 +41,19 @@
     [
       {
         "x": 40,
-        "y": 300
+        "y": 433.44827586206895
       },
       {
-        "x": 1240,
-        "y": 300
+        "x": 1880,
+        "y": 433.44827586206895
       },
       {
-        "x": 1240,
-        "y": 650
+        "x": 1880,
+        "y": 1010
       },
       {
         "x": 40,
-        "y": 650
+        "y": 1010
       }
     ]
   ],
@@ -64,16 +64,16 @@
         "y": 0
       },
       {
-        "x": 1280,
+        "x": 1920,
         "y": 0
       },
       {
-        "x": 1280,
-        "y": 280
+        "x": 1920,
+        "y": 397.9310344827586
       },
       {
         "x": 0,
-        "y": 280
+        "y": 397.9310344827586
       }
     ]
   ],
@@ -82,14 +82,14 @@
       "id": "Entry_west",
       "position": {
         "x": 112,
-        "y": 460
+        "y": 717.5862068965517
       }
     },
     {
       "id": "Entry_east",
       "position": {
-        "x": 1168,
-        "y": 460
+        "x": 1808,
+        "y": 717.5862068965517
       }
     }
   ],
@@ -99,8 +99,8 @@
       "id": "Soldier1",
       "dataId": 2,
       "position": {
-        "x": 390,
-        "y": 400
+        "x": 553.75,
+        "y": 611.0344827586207
       },
       "facingLeft": true
     },
@@ -108,8 +108,8 @@
       "id": "Soldier2",
       "dataId": 2,
       "position": {
-        "x": 560,
-        "y": 520
+        "x": 830,
+        "y": 824.1379310344828
       },
       "facingLeft": true
     },
@@ -117,8 +117,8 @@
       "id": "Soldier3",
       "dataId": 2,
       "position": {
-        "x": 820,
-        "y": 400
+        "x": 1252.5,
+        "y": 611.0344827586207
       },
       "facingLeft": true
     },
@@ -126,8 +126,8 @@
       "id": "Soldier4",
       "dataId": 2,
       "position": {
-        "x": 1000,
-        "y": 520
+        "x": 1545,
+        "y": 824.1379310344828
       },
       "facingLeft": true
     }
@@ -138,19 +138,19 @@
       "polygon": [
         {
           "x": 40,
-          "y": 400
+          "y": 611.0344827586207
         },
         {
           "x": 80,
-          "y": 400
+          "y": 611.0344827586207
         },
         {
           "x": 80,
-          "y": 520
+          "y": 824.1379310344828
         },
         {
           "x": 40,
-          "y": 520
+          "y": 824.1379310344828
         }
       ],
       "connectionId": "Courtyard_RoyalCorridor",
@@ -159,7 +159,7 @@
         "kind": "gate",
         "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
         "x": 28,
-        "y": 404,
+        "y": 661.5862068965517,
         "width": 64,
         "height": 112
       },
@@ -173,20 +173,20 @@
       "id": "Gate_ThroneRoom",
       "polygon": [
         {
-          "x": 1200,
-          "y": 400
+          "x": 1840,
+          "y": 611.0344827586207
         },
         {
-          "x": 1240,
-          "y": 400
+          "x": 1880,
+          "y": 611.0344827586207
         },
         {
-          "x": 1240,
-          "y": 520
+          "x": 1880,
+          "y": 824.1379310344828
         },
         {
-          "x": 1200,
-          "y": 520
+          "x": 1840,
+          "y": 824.1379310344828
         }
       ],
       "connectionId": "RoyalCorridor_ThroneRoom",
@@ -194,8 +194,8 @@
       "visual": {
         "kind": "gate",
         "asset": "Images/Dungeons/FallenCitadel_Editor_gate.png",
-        "x": 1188,
-        "y": 404,
+        "x": 1828,
+        "y": 661.5862068965517,
         "width": 64,
         "height": 112
       },

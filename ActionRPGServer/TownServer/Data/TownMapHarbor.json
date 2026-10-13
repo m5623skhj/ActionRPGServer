@@ -4,24 +4,24 @@
   "world": {
     "left": 0.0,
     "top": 0.0,
-    "right": 1536.0,
-    "bottom": 1024.0
+    "right": 1920.0,
+    "bottom": 1080.0
   },
   "images": [
     {
       "asset": "Images/Towns/harbor_district.png",
       "x": 0.0,
       "y": 0.0,
-      "width": 1536.0,
-      "height": 1024.0
+      "width": 1920.0,
+      "height": 1080.0
     }
   ],
   "walkablePolygons": [
     [
-      { "x": 32.0, "y": 600.0 },
-      { "x": 1504.0, "y": 600.0 },
-      { "x": 1504.0, "y": 950.0 },
-      { "x": 32.0, "y": 950.0 }
+      { "x": 32.0, "y": 640.0 },
+      { "x": 1504.0, "y": 640.0 },
+      { "x": 1504.0, "y": 920.0 },
+      { "x": 32.0, "y": 920.0 }
     ]
   ],
   "blockedPolygons": [],
