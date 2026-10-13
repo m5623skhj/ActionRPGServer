@@ -32,6 +32,8 @@
       "cooldownSeconds": 2,
       "execution": {
         "damage": 25,
+        "force": 60,
+        "hitType": "Normal",
         "hitstopSeconds": 0.05,
         "depthRadius": 24
       },

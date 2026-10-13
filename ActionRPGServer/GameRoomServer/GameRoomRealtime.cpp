@@ -49,6 +49,7 @@ namespace GameRoomServer
     void GameRoom::PublishRealtime()
     {
         hitstopChanged = false;
+        knockbackChanged = false;
         if (realtimeSubscribers.empty()) return;
         ++realtimeSequence;
         const auto timeMs = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -191,6 +192,26 @@ namespace GameRoomServer
             writer.Integer(id, 8); writer.Byte(monster.definition->level.has_value());
             writer.Integer(monster.definition->level.value_or(0), 4); writer.Byte(monster.definition->isBoss);
             writer.Text(monster.definition->name);
+            if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
+        }
+        // Send inactive records too, so short reactions and collision stops cannot leave client extrapolation running.
+        const auto writeKnockback = [&writer](std::uint64_t id, const ActorState& actor)
+        {
+            writer.Integer(id, 8); writer.Integer(actor.reactionSequence, 4); writer.Byte(actor.knockbackActive);
+            writer.Float(actor.knockbackDirectionX); writer.Float(actor.knockbackDirectionY);
+            writer.Float(actor.knockbackDistance); writer.Float(actor.knockbackElapsedSeconds);
+            writer.Float(actor.knockbackDurationSeconds);
+        };
+        writer.value.append("KBK1", 4); writer.Integer(playerCount, 2);
+        for (const auto& [id, player] : players)
+        {
+            if (player.mapId != inMapId || !enteredPlayers.contains(id) || !player.worldReady) continue;
+            writeKnockback(id, player.actor);
+        }
+        writer.Integer(monsterCount, 2);
+        if (mapMonsters != monsterIdsByMap.end()) for (const auto id : mapMonsters->second)
+        {
+            writeKnockback(id, monsters.at(id).actor);
             if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         }
         if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;

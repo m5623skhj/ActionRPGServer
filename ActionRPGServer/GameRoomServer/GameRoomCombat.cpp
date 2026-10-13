@@ -225,6 +225,8 @@ namespace GameRoomServer
         slide.damage = static_cast<std::uint32_t>(std::clamp(
             static_cast<double>(definition->second.attackPower) * BuffMultiplier(inPlayer, "damageMultiplier")
                 * SLIDE_DAMAGE_COEFFICIENT, 1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+        slide.force = definition->second.slide.force;
+        slide.airborne = definition->second.slide.airborne;
         inPlayer.sequence = inInput.moveSequence;
         inPlayer.directionX = inInput.directionX;
         inPlayer.directionY = inInput.directionY;
@@ -313,7 +315,9 @@ namespace GameRoomServer
             }
             if (!visible) continue;
             inPlayer.slide.hitIds.insert(id);
-            ApplyMonsterDamage(id, inPlayer.slide.damage, false, &inPlayer, inPlayer.slide.hitstopSeconds);
+            ApplyMonsterDamage(id, inPlayer.slide.damage, inPlayer.slide.airborne, &inPlayer,
+                inPlayer.slide.hitstopSeconds, inPlayer.slide.force, inPlayer.position,
+                { inPlayer.slide.directionX, inPlayer.slide.directionY });
             monster.actionStarted = monster.actionComplete = false;
         }
     }
@@ -445,11 +449,14 @@ namespace GameRoomServer
 
     // Only actual HP loss selects a HUD target. The strand sequence orders multiple hits within a tick.
     void GameRoom::ApplyMonsterDamage(std::uint64_t inMonsterId, std::uint32_t inDamage, bool inAirborne,
-        PlayerState* inAttacker, float inHitstopSeconds)
+        PlayerState* inAttacker, float inHitstopSeconds, float inForce,
+        DungeonPoint inAttackOrigin, DungeonPoint inAttackDirection)
     {
-        auto& victim = monsters.at(inMonsterId).actor;
+        auto& monster = monsters.at(inMonsterId);
+        auto& victim = monster.actor;
         const auto beforeHp = victim.hp;
-        ApplyDamage(victim, inDamage, inAirborne, inAttacker ? &inAttacker->actor : nullptr, inHitstopSeconds);
+        ApplyDamage(victim, inDamage, inAirborne, inAttacker ? &inAttacker->actor : nullptr,
+            inHitstopSeconds, inForce, monster.position, inAttackOrigin, inAttackDirection);
         if (victim.hp < beforeHp && inAttacker)
         {
             inAttacker->lastHitSequence = ++monsterHitSequence;
@@ -459,11 +466,15 @@ namespace GameRoomServer
 
     // All callers pass the actual attacking actor, or resolve a player projectile's owner on the strand.
     void GameRoom::ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
-        ActorState* inAttacker, float inHitstopSeconds)
+        ActorState* inAttacker, float inHitstopSeconds, float inForce,
+        DungeonPoint inVictimPosition, DungeonPoint inAttackOrigin, DungeonPoint inAttackDirection)
     {
         if (inActor.hp == 0 || inDamage == 0) return;
         CancelHitstop(inActor);
+        ResetKnockback(inActor);
         ++inActor.reactionSequence;
+        knockbackChanged = true;
+        const double recoveryFactor = 1.0 / (1.0 + static_cast<double>(inActor.hitRecovery) / 100.0);
         inActor.hp -= std::min(inActor.hp, inDamage);
         if (inActor.hp == 0)
         {
@@ -482,9 +493,32 @@ namespace GameRoomServer
         else if (inActor.reaction == Reaction::None || inActor.reaction == Reaction::Hit)
         {
             inActor.reaction = Reaction::Hit;
-            inActor.reactionDurationSeconds = static_cast<float>(static_cast<double>(combatDefinition->hitStunSeconds)
-                / (1.0 + static_cast<double>(inActor.hitRecovery) / 100.0));
+            inActor.reactionDurationSeconds = static_cast<float>(combatDefinition->hitStunSeconds * recoveryFactor);
             inActor.reactionSeconds = inActor.reactionDurationSeconds;
+        }
+        if (inActor.hp > 0 && inActor.reaction != Reaction::None && inForce > 0)
+        {
+            const float distance = static_cast<float>(inForce * recoveryFactor);
+            float duration = static_cast<float>(combatDefinition->knockbackSeconds * recoveryFactor);
+            if (inActor.height == 0) duration = std::min(duration, inActor.reactionSeconds);
+            // Tiny validated values can underflow after recovery scaling; never divide by zero.
+            if (distance > 0 && duration > 0)
+            {
+                float dx = inVictimPosition.x - inAttackOrigin.x;
+                float dy = inVictimPosition.y - inAttackOrigin.y;
+                float length = std::hypot(dx, dy);
+                if (length == 0)
+                {
+                    dx = inAttackDirection.x; dy = inAttackDirection.y;
+                    length = std::hypot(dx, dy);
+                    if (length == 0) { dx = 1; dy = 0; length = 1; }
+                }
+                inActor.knockbackActive = true;
+                inActor.knockbackDirectionX = dx / length;
+                inActor.knockbackDirectionY = dy / length;
+                inActor.knockbackDistance = distance;
+                inActor.knockbackDurationSeconds = duration;
+            }
         }
         if (inAttacker && inAttacker != &inActor && inAttacker->hp > 0
             && inAttacker->reaction == Reaction::None && inHitstopSeconds > 0)
@@ -499,9 +533,51 @@ namespace GameRoomServer
         }
     }
 
-    void GameRoom::UpdateActor(ActorState& inActor, float inDeltaSeconds)
+    void GameRoom::ResetKnockback(ActorState& inActor)
     {
+        if (inActor.knockbackActive) knockbackChanged = true;
+        inActor.knockbackActive = false;
+        inActor.knockbackDirectionX = inActor.knockbackDirectionY = inActor.knockbackDistance = 0;
+        inActor.knockbackElapsedSeconds = inActor.knockbackDurationSeconds = 0;
+    }
+
+    /** Consume the eased distance on the room strand; walls and gates terminate forced movement. */
+    void GameRoom::UpdateKnockback(ActorState& inActor, DungeonPoint& inPosition,
+        const std::string& inMapId, float inDeltaSeconds)
+    {
+        if (!inActor.knockbackActive || inDeltaSeconds <= 0) return;
+        if (inActor.knockbackDurationSeconds <= 0) { ResetKnockback(inActor); return; }
+        const float elapsed = std::min(inActor.knockbackDurationSeconds, inActor.knockbackElapsedSeconds + inDeltaSeconds);
+        const auto eased = [&inActor](float seconds)
+        {
+            const double u = std::clamp(static_cast<double>(seconds) / inActor.knockbackDurationSeconds, 0.0, 1.0);
+            return inActor.knockbackDistance * (2 * u - u * u);
+        };
+        const float distance = static_cast<float>(std::max(0.0,
+            eased(elapsed) - eased(inActor.knockbackElapsedSeconds)));
+        const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
+        const auto& map = dungeonWorld.at("maps").at(inMapId);
+        for (int step = 0; step < steps; ++step)
+        {
+            const DungeonPoint next{ inPosition.x + inActor.knockbackDirectionX * distance / steps,
+                inPosition.y + inActor.knockbackDirectionY * distance / steps };
+            const bool gate = std::any_of(map.at("transitionZones").begin(), map.at("transitionZones").end(),
+                [inPosition, next](const auto& zone) { return CrossesPolygon(zone.at("polygon"), inPosition, next); });
+            if (!DungeonDefinition::Movable(map, next) || gate) { ResetKnockback(inActor); return; }
+            inPosition = next;
+        }
+        inActor.knockbackElapsedSeconds = elapsed;
+        if (elapsed >= inActor.knockbackDurationSeconds) ResetKnockback(inActor);
+    }
+
+    void GameRoom::UpdateActor(ActorState& inActor, DungeonPoint& inPosition,
+        const std::string& inMapId, float inDeltaSeconds)
+    {
+        if (inActor.hp == 0 || inActor.reaction == Reaction::None) ResetKnockback(inActor);
         if (inActor.hp == 0 || inDeltaSeconds == 0) return;
+        const float knockbackDelta = inActor.height == 0 && inActor.reaction != Reaction::None
+            ? std::min(inDeltaSeconds, inActor.reactionSeconds) : inDeltaSeconds;
+        UpdateKnockback(inActor, inPosition, inMapId, knockbackDelta);
         if (inActor.height > 0)
         {
             inActor.verticalSpeed -= combatDefinition->gravity * inDeltaSeconds;
@@ -528,7 +604,12 @@ namespace GameRoomServer
                     inActor.reactionSeconds = combatDefinition->riseSeconds;
                     inActor.reactionDurationSeconds = combatDefinition->riseSeconds;
                 }
-                else { inActor.reaction = Reaction::None; inActor.reactionDurationSeconds = 0; }
+                else
+                {
+                    inActor.reaction = Reaction::None;
+                    inActor.reactionDurationSeconds = 0;
+                    ResetKnockback(inActor);
+                }
             }
         }
     }
@@ -787,7 +868,8 @@ namespace GameRoomServer
                                     && (victim.position.x - inMonster.position.x) * (inMonster.facingLeft ? -1 : 1) >= 0)
                                 {
                                     ApplyDamage(victim.actor, effect.damage, skill.at("hitType") == "Airborne",
-                                        &inMonster.actor, effect.hitstopSeconds);
+                                        &inMonster.actor, effect.hitstopSeconds, skill.value("force", 0.0f),
+                                        victim.position, inMonster.position, { inMonster.facingLeft ? -1.0f : 1.0f, 0 });
                                     ResetShotState(victim);
                                     StopSlide(victim);
                                     victim.skill.reset();
@@ -864,6 +946,8 @@ namespace GameRoomServer
                 auto& spawned = projectiles.back();
                 spawned.speed = combatDefinition->projectileSpeed; spawned.radius = combatDefinition->projectileRadius;
                 spawned.hitstopSeconds = combatDefinition->shotHitstopSeconds;
+                spawned.force = combatDefinition->shotForce; spawned.airborne = combatDefinition->shotAirborne;
+                spawned.attackOrigin = inPlayer.position; spawned.attackDirection = { direction, 0 };
                 spawned.damage = static_cast<std::uint32_t>(std::max(1.0f,
                     combatDefinition->shotDamage * BuffMultiplier(inPlayer, "damageMultiplier")));
 
@@ -887,7 +971,8 @@ namespace GameRoomServer
                     if (nearestId != 0)
                     {
                         auto& victim = monsters.at(nearestId);
-                        ApplyMonsterDamage(nearestId, spawned.damage, false, &inPlayer, spawned.hitstopSeconds);
+                        ApplyMonsterDamage(nearestId, spawned.damage, spawned.airborne, &inPlayer, spawned.hitstopSeconds,
+                            spawned.force, spawned.attackOrigin, spawned.attackDirection);
                         victim.actionStarted = victim.actionComplete = false;
                         spawned.remainingDistance = 0;
                     }
@@ -957,7 +1042,8 @@ namespace GameRoomServer
                     const auto owner = players.find(projectile.ownerId);
                     PlayerState* attacker = owner != players.end() && enteredPlayers.contains(owner->first)
                         && owner->second.mapId == projectile.mapId ? &owner->second : nullptr;
-                    ApplyMonsterDamage(nearestId, projectile.damage, false, attacker, projectile.hitstopSeconds);
+                    ApplyMonsterDamage(nearestId, projectile.damage, projectile.airborne, attacker, projectile.hitstopSeconds,
+                        projectile.force, projectile.attackOrigin, projectile.attackDirection);
                     victim.actionStarted = victim.actionComplete = false;
                     projectile.remainingDistance = 0;
                 }
@@ -973,8 +1059,11 @@ namespace GameRoomServer
         if (std::all_of(bosses.begin(), bosses.end(), [this](auto id) { return monsters.at(id).actor.hp == 0; }))
         {
             clearRequested = true;
-            for (auto& [id, player] : players) { StopSlide(player); CancelHitstop(player.actor); }
-            for (auto& [id, monster] : monsters) CancelHitstop(monster.actor);
+            for (auto& [id, player] : players)
+            {
+                StopSlide(player); CancelHitstop(player.actor); ResetKnockback(player.actor);
+            }
+            for (auto& [id, monster] : monsters) { CancelHitstop(monster.actor); ResetKnockback(monster.actor); }
             if (clearHandler) clearHandler(roomId);
         }
     }
@@ -1008,7 +1097,7 @@ namespace GameRoomServer
             const float height = player.actor.height;
             player.shotInputRemainingSeconds = std::max(0.0f, player.shotInputRemainingSeconds - actionDelta);
             if (player.shotPhase == ShotPhase::None && player.shotInputRemainingSeconds == 0) ResetShotState(player);
-            UpdateActor(player.actor, actionDelta);
+            UpdateActor(player.actor, player.position, player.mapId, actionDelta);
             if (height > 0 && player.actor.height == 0) player.airShotCount = 0;
             if (actionDelta > 0) UpdateShots(id, player, actionDelta);
             UpdateSkillTimers(player, inDeltaSeconds);
@@ -1023,7 +1112,7 @@ namespace GameRoomServer
         for (auto& [id, monster] : monsters)
         {
             const Reaction before = monster.actor.reaction;
-            UpdateActor(monster.actor, ActionDelta(monster.actor));
+            UpdateActor(monster.actor, monster.position, monster.mapId, ActionDelta(monster.actor));
             if (before != Reaction::None && monster.actor.reaction == Reaction::None)
                 EnterNode(monster, monster.definition->GetAi().at("initialNodeId").get<std::string>());
             UpdateMonster(monster, ActionDelta(monster.actor), inDeltaSeconds);
@@ -1063,6 +1152,13 @@ namespace GameRoomServer
                 record["hitstopSequence"] = actor.hitstopSequence;
                 record["hitstopStartTimeMs"] = actor.hitstopStartTimeMs;
                 record["hitstopDurationSeconds"] = actor.hitstopDurationSeconds;
+                record["knockbackSequence"] = actor.reactionSequence;
+                record["knockbackActive"] = actor.knockbackActive;
+                record["knockbackDirectionX"] = actor.knockbackDirectionX;
+                record["knockbackDirectionY"] = actor.knockbackDirectionY;
+                record["knockbackDistance"] = actor.knockbackDistance;
+                record["knockbackElapsedSeconds"] = actor.knockbackElapsedSeconds;
+                record["knockbackDurationSeconds"] = actor.knockbackDurationSeconds;
             };
             for (const auto& [id, player] : self->players)
             {

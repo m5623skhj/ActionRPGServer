@@ -110,6 +110,9 @@ namespace GameRoomServer
             std::uint64_t hitstopStartTimeMs{};
             float hitstopDurationSeconds{};
             float actionDeltaSeconds{}; // Combat seconds, prepared once per real-time room tick; never serialized.
+            bool knockbackActive{};
+            float knockbackDirectionX{}, knockbackDirectionY{}, knockbackDistance{};
+            float knockbackElapsedSeconds{}, knockbackDurationSeconds{};
         };
 
         struct ActiveSkill
@@ -130,6 +133,8 @@ namespace GameRoomServer
             bool active{};
             std::uint32_t sequence{}, damage{};
             float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{}, hitstopSeconds{};
+            float force{};
+            bool airborne{};
             std::unordered_set<std::uint64_t> hitIds;
         };
         struct BufferedAction
@@ -213,16 +218,25 @@ namespace GameRoomServer
             float directionY{}, speed{}, radius{}, ageSeconds{};
             std::uint32_t damage{};
             float hitstopSeconds{};
+            float force{};
+            bool airborne{};
+            DungeonPoint attackOrigin, attackDirection;
         };
 
         void PrepareActorTimes(float inDeltaSeconds);
         [[nodiscard]] static float ActionDelta(const ActorState& inActor);
         void CancelHitstop(ActorState& inActor);
-        void UpdateActor(ActorState& inActor, float inDeltaSeconds);
+        void ResetKnockback(ActorState& inActor);
+        void UpdateKnockback(ActorState& inActor, DungeonPoint& inPosition,
+            const std::string& inMapId, float inDeltaSeconds);
+        void UpdateActor(ActorState& inActor, DungeonPoint& inPosition,
+            const std::string& inMapId, float inDeltaSeconds);
         void ApplyDamage(ActorState& inActor, std::uint32_t inDamage, bool inAirborne,
-            ActorState* inAttacker, float inHitstopSeconds);
+            ActorState* inAttacker, float inHitstopSeconds, float inForce,
+            DungeonPoint inVictimPosition, DungeonPoint inAttackOrigin, DungeonPoint inAttackDirection);
         void ApplyMonsterDamage(std::uint64_t inMonsterId, std::uint32_t inDamage, bool inAirborne,
-            PlayerState* inAttacker, float inHitstopSeconds);
+            PlayerState* inAttacker, float inHitstopSeconds, float inForce,
+            DungeonPoint inAttackOrigin, DungeonPoint inAttackDirection);
         void UpdateMonster(MonsterState& inMonster, float inDeltaSeconds, float inWorldDeltaSeconds);
         void InitializeMonsterBehavior(MonsterState& inMonster, std::uint64_t inInstanceId);
         void SeparateMonsters(float inDeltaSeconds);
@@ -274,6 +288,7 @@ namespace GameRoomServer
         std::uint64_t monsterHitSequence{};
         bool clearRequested{};
         bool hitstopChanged{};
+        bool knockbackChanged{};
         State state = State::WaitingForPlayers;
         const std::string itemUseIncarnation{ActionRPG::Items::NewIncarnation()};
         struct ItemUseRecord

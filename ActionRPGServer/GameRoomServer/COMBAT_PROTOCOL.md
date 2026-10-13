@@ -213,6 +213,69 @@ float 범위 안인지 로딩 때 검증합니다. 명시적 0은 정지를 비�
 역경직 이력은 최신 이벤트를 보존하며 별도 전체 명중 로그는 아닙니다. 상태 손실 시 다음 전체 상태와 JSON 복구를 사용합니다.
 실제 시간 분해능은 30Hz 틱이며 이번 작업은 빌드·실행·시각적 체감 검증을 수행하지 않았습니다.
 
+### 피격 밀림과 Force
+
+`force`는 지면 XY의 총 밀림 거리(world units)이며 화면 픽셀·질량·수직 상승 속도가 아니다.
+유한한 0~500 float만 허용하고 누락은 0이다. float 변환 시 양수가 0이 되는 데이터는 거부한다.
+기본 사격은 `Combat.json.player.shot`, 슬라이딩은 `player.characters[].slide`의 `force`와
+`hitType`을 읽는다. 플레이어 스킬은 `PlayerSkills.json.execution`, 몬스터는 원본 `.ai.json.skills[]`의
+같은 필드를 사용한다. 몬스터 Combat 효과에 중복 저장하지 않는다. `hitType`은 `Normal`/`Airborne`이며
+사격·슬라이딩·플레이어 스킬의 누락 기본값은 `Normal`, 몬스터의 기존 필수 hitType은 유지한다.
+기본 수치는 사격 24, 앞차기 60, 슬라이딩 40, 갑옷병 베기 24, 수호자 베기 48이다.
+Stone은 기존 force=0/Normal을 유지하며 아이템 계약과 DB는 변경하지 않는다.
+
+`reactions.knockbackSeconds`는 기본 밀림 시간이다. 누락 기본값 0.18, 유한한 0.01~1 전투 초를 허용하며
+초기 월드 `combatRules.knockbackSeconds`로 전달한다. `k=1/(1+hitRecovery/100)`으로 계산하여
+일반 경직은 `hitStunSeconds*k`, 밀림 거리와 시간은 각각 `force*k`, `knockbackSeconds*k`이다.
+밀림 시간은 지상 피격 상태의 남은 시간도 넘지 않는다. 다운/기상 중 일반 재피격은 기존 반응 시간을
+재설정하지 않으며 그 단계의 잔여 시간 안에서만 새 밀림을 적용한다. HR=100이면 현재 사격 거리는 12,
+밀림 시간은 0.09 전투 초다. 회복계수 적용 뒤 거리나 시간이 0이면 밀림을 비활성화하여 0 나눗셈을 피한다.
+피격 해제 시 모든 잔여 밀림을 삭제하여 일반 자세에서 계속 밀리지 않는다.
+
+에어본도 수평 밀림에 같은 k를 적용하되 기존 상승 속도 420, 중력·낙하·Down·Rising 규칙은 유지한다.
+이미 공중인 피해자는 다시 띄우지 않고 즉시 하강한다. `Falling`은 상승 구간도 포함하는 기존 반응이다.
+공격자 역경직만 유지하며 피해자의 이전 역경직은 취소한다. 밀림은 이미 한 번 감속된 `ActionDelta`로
+진행하고 거리·dt에 tempoScale을 다시 곱하지 않는다. 현재 0.18 전투 초는 약 0.257 실제 초다.
+
+방향은 명중 당시 피해자 XY에서 공격 원점 XY를 뺀 단위벡터다. 직접 공격·슬라이딩·몬스터는 명중 시
+공격자 위치, 기본/스킬 투사체는 생성 시 저장한 발사자 위치를 사용한다. 같은 좌표이면 저장한 공격 방향을
+사용하며 수직 스킬 투사체도 yaw/시전자 방향으로 지면 헤딩을 보존한다. 발사자의 이후 이동/퇴장과 히트스톱 owner 조회는
+투사체 밀림 방향에 영향을 주지 않는다. 재피격은 이전 밀림을 새 값으로 교체하며 거리를 합산하지 않는다.
+
+누적 이동량은 `D(t)=distance*(2u-u*u)`, `u=clamp(t/duration,0,1)`이며 매 틱 차이만 이동한다.
+룸 strand에서 4 world unit 이하 하위 이동마다 발 타원과 장애물·맵 경계 및 출입구 교차를 검사한다.
+막히면 남은 밀림을 삭제하며 벽 축슬라이드나 자동 방 이동은 하지 않는다. 피격 중 기존 입력/AI/분리 이동은
+진행하지 않는다. 사망·방 이동·퇴장·클리어·룸 종료에도 밀림을 초기화한다.
+
+### KBK1 실시간 밀림 상태
+
+기존 realtime version=3 고정 레코드와 tail을 유지하고 `HUD1` 뒤에 항상 `KBK1`을 추가한다.
+헤더는 ASCII `KBK1`, 플레이어 수 uint16, 플레이어 행, 몬스터 수 uint16, 몬스터 행 순서다.
+현재 맵의 모든 actor를 비활성 상태까지 포함한다. 각 행은 패딩 없는 33바이트, little endian이다.
+
+| 순서 | 형식 | 의미 |
+|---|---|---|
+| id | uint64 | playerId 또는 monster instanceId |
+| knockbackSequence | uint32 | 해당 actor의 마지막 reactionSequence |
+| knockbackActive | uint8 | 0/1 |
+| knockbackDirectionX/Y | float32 두 개 | 지면 단위벡터 |
+| knockbackDistance | float32 | HR 적용 후 총거리 |
+| knockbackElapsedSeconds | float32 | 전투 초 경과 |
+| knockbackDurationSeconds | float32 | HR/피격 잔여 시간 상한 적용 후 전투 초 |
+
+JSON player/monster 행에도 위 knockback 필드 이름을 동일하게 제공한다. 비활성은 방향/거리/시간이 모두 0이며
+번호는 마지막 피격 번호를 유지한다. active=true는 살아 있는 피격 actor에서만 나오며 reaction=None과 공존하지 않는다.
+새 피격/교체/충돌/자연 종료/피격 해제가 발생한 틱 끝에는 목표 15Hz 주기와 별도로 상태를 전송한다.
+아주 짧은 밀림은 같은 틱에서 종료될 수 있으므로 새 번호의 비활성 행도 최종 권위 XY를 적용해야 한다.
+
+클라이언트는 snapshot XY에서 `D(clamp(elapsed+실제age*tempoScale,0,duration))-D(elapsed)`만 외삽하며
+기간 끝에서 멈춘다. 밀림 중/새 번호/종료 권위 위치를 기존 16px deadzone 또는 35% 일반 이동 보정으로 버리지 않는다.
+active=false, 새 피격 번호, reaction=None/Dead, 맵·룸 변경은 이전 밀림 외삽을 즉시 폐기한다.
+같은 피격 번호의 종료는 최신 snapshotSequence/serverTick 순서로 판단하며 늦은 JSON이 되돌리지 않는다.
+KBK1이 없는 이전 서버 프레임은 새 클라이언트에서 비활성으로 처리한다. 구형 클라이언트의 미지 태그 처리는
+보장하지 않으므로 서버·클라이언트·카탈로그/편집기 계약을 함께 배포한다. 기존 48KiB frame 한도를 유지하며
+초과 frame은 잘라 보내지 않는다. 이번 변경은 정적 검토만 했으며 빌드·실행·전투 테스트는 수행하지 않았다.
+
 몬스터 프로필의 `skills` 예:
 
 ```json

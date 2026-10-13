@@ -229,12 +229,14 @@ namespace GameRoomServer
             Require(!monsters.empty(), "No monster definitions.");
             for (const auto& [id, skill] : skills)
             {
-                Keys(*skill, { "id", "label", "animationId", "durationSeconds", "cooldownSeconds", "minRange", "maxRange", "hitType" });
+                Keys(*skill, { "id", "label", "animationId", "durationSeconds", "cooldownSeconds", "minRange", "maxRange", "hitType", "force" });
                 (void)Text(skill->at("label")); (void)Text(skill->at("animationId"), true);
                 (void)Number(skill->at("durationSeconds"), 0.001); (void)Number(skill->at("cooldownSeconds"), 0);
                 const double minRange = Number(skill->at("minRange"), 0);
                 (void)Number(skill->at("maxRange"), minRange);
                 Require(skill->at("hitType") == "Normal" || skill->at("hitType") == "Airborne", "Invalid skill hit type.");
+                const double force = Number(skill->value("force", Json(0)), 0, 500);
+                Require(force == 0 || static_cast<float>(force) > 0, "Skill force underflows float.");
             }
             for (const auto& [id, motion] : motions)
             {

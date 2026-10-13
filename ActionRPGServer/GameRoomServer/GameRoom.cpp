@@ -48,6 +48,7 @@ namespace GameRoomServer
             { "jumpSpeed", combatDefinition->jumpSpeed }, { "gravity", combatDefinition->gravity },
             { "jumpPrepareSeconds", combatDefinition->jumpPrepareSeconds },
             { "hitStunSeconds", combatDefinition->hitStunSeconds }, { "downSeconds", combatDefinition->downSeconds },
+            { "knockbackSeconds", combatDefinition->knockbackSeconds },
             { "riseSeconds", combatDefinition->riseSeconds }, { "airFireLift", combatDefinition->airFireLift },
             { "airRecoilDistance", combatDefinition->airRecoilDistance }, { "muzzleHeight", combatDefinition->muzzleHeight },
             { "projectileSpeed", combatDefinition->projectileSpeed }, { "maxShots", 5 }
@@ -220,6 +221,7 @@ namespace GameRoomServer
                         ++player.mapEpoch;
                         StopSlide(player);
                         CancelHitstop(player.actor);
+                        ResetKnockback(player.actor);
                         player.bufferedActions.clear();
                         ResetShotState(player);
                         player.position = DungeonDefinition::Point(entry->at("position"));
@@ -285,8 +287,13 @@ namespace GameRoomServer
                 player.bufferedActions.clear();
                 self->StopSlide(player);
                 self->CancelHitstop(player.actor);
+                self->ResetKnockback(player.actor);
             }
-            for (auto& [id, monster] : self->monsters) self->CancelHitstop(monster.actor);
+            for (auto& [id, monster] : self->monsters)
+            {
+                self->CancelHitstop(monster.actor);
+                self->ResetKnockback(monster.actor);
+            }
             self->PublishRealtime();
             self->realtimeSubscribers.clear();
             asio::error_code ignoredError;
@@ -363,6 +370,7 @@ namespace GameRoomServer
                 player->second.bufferedActions.clear();
                 self->StopSlide(player->second);
                 self->CancelHitstop(player->second.actor);
+                self->ResetKnockback(player->second.actor);
                 player->second.skill.reset(); player->second.buffs.clear(); player->second.lastSkillId.clear();
             }
             self->realtimeSubscribers.erase(inPlayerId);
@@ -389,6 +397,7 @@ namespace GameRoomServer
                 player->second.bufferedActions.clear();
                 self->StopSlide(player->second);
                 self->CancelHitstop(player->second.actor);
+                self->ResetKnockback(player->second.actor);
             }
             self->realtimeSubscribers.erase(inPlayerId);
             const bool roomEmpty = self->enteredPlayers.empty()
@@ -428,8 +437,13 @@ namespace GameRoomServer
                 player.bufferedActions.clear();
                 self->StopSlide(player);
                 self->CancelHitstop(player.actor);
+                self->ResetKnockback(player.actor);
             }
-            for (auto& [id, monster] : self->monsters) self->CancelHitstop(monster.actor);
+            for (auto& [id, monster] : self->monsters)
+            {
+                self->CancelHitstop(monster.actor);
+                self->ResetKnockback(monster.actor);
+            }
             self->PublishRealtime();
             asio::error_code ignoredError;
             self->tickTimer.cancel(ignoredError);
@@ -503,7 +517,7 @@ namespace GameRoomServer
                 self->UpdatePlayers();
                 self->UpdateCombat(TICK_SECONDS * self->combatDefinition->tempo.scale);
                 if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested
-                    || self->hitstopChanged) self->PublishRealtime();
+                    || self->hitstopChanged || self->knockbackChanged) self->PublishRealtime();
                 if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();
             }
         });

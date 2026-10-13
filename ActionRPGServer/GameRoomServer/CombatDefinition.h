@@ -40,6 +40,8 @@ namespace GameRoomServer
         float distancePerRunSpeedSeconds{};
         std::string motionId;
         float hitstopSeconds{};
+        float force{};
+        bool airborne{};
     };
 
     struct CharacterCombatDefinition
@@ -59,6 +61,8 @@ namespace GameRoomServer
         float walkSpeed{}, runSpeed{}, bodyHeight{}, hitRadius{};
         float shotPrepareSeconds{}, shotIntervalSeconds{}, shotRecoverSeconds{};
         float shotHitstopSeconds{};
+        float shotForce{}, knockbackSeconds{};
+        bool shotAirborne{};
         float projectileSpeed{}, projectileRange{}, projectileRadius{};
         float muzzleForward{}, muzzleHeight{}, airMuzzleForward{}, airMuzzleHeight{};
         float jumpPrepareSeconds{}, jumpSpeed{}, gravity{}, hitStunSeconds{}, downSeconds{}, riseSeconds{};

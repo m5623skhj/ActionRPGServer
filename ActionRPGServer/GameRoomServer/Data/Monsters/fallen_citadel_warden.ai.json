@@ -10,7 +10,8 @@
       "cooldownSeconds": 1.8,
       "minRange": 0,
       "maxRange": 120,
-      "hitType": "Normal"
+      "hitType": "Normal",
+      "force": 48
     }
   ],
   "motions": [],

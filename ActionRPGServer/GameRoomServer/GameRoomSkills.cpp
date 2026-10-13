@@ -123,6 +123,11 @@ namespace GameRoomServer
                 projectile.speed = execution.at("speed").get<float>(); projectile.radius = execution.at("radius").get<float>();
                 projectile.remainingDistance = execution.at("range").get<float>(); projectile.skillId = cast.id;
                 projectile.hitstopSeconds = execution.at("hitstopSeconds").get<float>();
+                projectile.force = execution.at("force").get<float>();
+                projectile.airborne = execution.at("hitType") == "Airborne";
+                projectile.attackOrigin = inPlayer.position;
+                // Preserve the ground heading even for a vertical launch with zero XY travel.
+                projectile.attackDirection = { sign * std::cos(yaw), std::sin(yaw) };
                 projectile.damage = static_cast<std::uint32_t>(std::clamp(
                     static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
                     * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
@@ -178,7 +183,9 @@ namespace GameRoomServer
                         static_cast<double>(combatDefinition->skillTrees.Damage(combatDefinition->playerSkills, cast.id, cast.skillLevel))
                         * BuffMultiplier(inPlayer, "damageMultiplier"), 1.0,
                         static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
-                    ApplyMonsterDamage(id, damage, false, &inPlayer, execution.at("hitstopSeconds").get<float>());
+                    ApplyMonsterDamage(id, damage, execution.at("hitType") == "Airborne", &inPlayer,
+                        execution.at("hitstopSeconds").get<float>(), execution.at("force").get<float>(),
+                        inPlayer.position, { sign, 0 });
                     monster.actionStarted = monster.actionComplete = false;
                 }
             }

@@ -38,6 +38,17 @@ namespace GameRoomServer
             Require(inValue.get<double>() == 0 || value > 0, "Combat value underflows float.");
             return value;
         }
+        float Force(const Json& inValue)
+        {
+            const float value = Number(inValue, 0, 500);
+            Require(inValue.get<double>() == 0 || value > 0, "Force underflows float.");
+            return value;
+        }
+        bool Airborne(const Json& inValue)
+        {
+            Require(inValue == "Normal" || inValue == "Airborne", "Invalid combat hit type.");
+            return inValue == "Airborne";
+        }
         std::uint32_t Integer(const Json& inValue, std::uint32_t inMin, std::uint32_t inMax)
         {
             Require(inValue.is_number_integer(), "Expected combat integer.");
@@ -70,12 +81,14 @@ namespace GameRoomServer
         const auto& shot = player.at("shot");
         Keys(shot, { "damage", "prepareSeconds", "intervalSeconds", "recoverSeconds", "speed", "range",
             "radius", "muzzleForward", "muzzleHeight", "airMuzzleForward", "airMuzzleHeight",
-            "airFireLift", "airRecoilDistance", "hitstopSeconds" });
+            "airFireLift", "airRecoilDistance", "hitstopSeconds", "force", "hitType" });
         result->shotDamage = Integer(shot.at("damage"), 1, 1000000);
         result->shotPrepareSeconds = Number(shot.at("prepareSeconds"), 0.05, 10);
         result->shotIntervalSeconds = Number(shot.at("intervalSeconds"), 0.05, 10);
         result->shotRecoverSeconds = Number(shot.at("recoverSeconds"), 0.05, 10);
         result->shotHitstopSeconds = NonnegativeFloat(shot.value("hitstopSeconds", Json(0)));
+        result->shotForce = Force(shot.value("force", Json(0)));
+        result->shotAirborne = Airborne(shot.value("hitType", Json("Normal")));
         result->projectileSpeed = Number(shot.at("speed"), 1, 5000);
         result->projectileRange = Number(shot.at("range"), 1, 5000);
         result->projectileRadius = Number(shot.at("radius"), 0.1, 100);
@@ -91,7 +104,8 @@ namespace GameRoomServer
         result->jumpSpeed = Number(jump.at("speed"), 1, 2000);
         result->gravity = Number(jump.at("gravity"), 1, 5000);
         const auto& reactions = source.at("reactions");
-        Keys(reactions, { "hitStunSeconds", "downSeconds", "riseSeconds" });
+        Keys(reactions, { "hitStunSeconds", "downSeconds", "riseSeconds", "knockbackSeconds" });
+        result->knockbackSeconds = Number(reactions.value("knockbackSeconds", Json(0.18)), 0.01, 1);
         result->hitStunSeconds = Number(reactions.at("hitStunSeconds"), 0.05, 10);
         result->downSeconds = Number(reactions.at("downSeconds"), 0.05, 10);
         result->riseSeconds = Number(reactions.at("riseSeconds"), 0.05, 10);
@@ -157,12 +171,13 @@ namespace GameRoomServer
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
             const auto& slide = character.at("slide");
-            Keys(slide, { "durationSeconds", "distancePerRunSpeedSeconds", "motionId", "hitstopSeconds" });
+            Keys(slide, { "durationSeconds", "distancePerRunSpeedSeconds", "motionId", "hitstopSeconds", "force", "hitType" });
             CharacterCombatDefinition definition{ Integer(character.at("attackPower"), 1, 1000000),
                 NonnegativeFloat(character.value("hitRecovery", Json(0))),
                 { Number(slide.at("durationSeconds"), 0.05, 2),
                     Number(slide.at("distancePerRunSpeedSeconds"), 0.05, 5), slide.at("motionId").get<std::string>(),
-                    NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))) } };
+                    NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))),
+                    Force(slide.value("force", Json(0))), Airborne(slide.value("hitType", Json("Normal"))) } };
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             definition.maxMp = resources.Get(characterId).maxMp;
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");

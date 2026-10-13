@@ -202,12 +202,17 @@ namespace ActionRPG::PlayerSkills
                 }
                 else
                 {
-                    // Normalize legacy attack data without replacing an explicitly disabled hitstop.
+                    // Normalize legacy attack effects while preserving explicit zero values.
                     Require(execution.is_object(), "Expected attack execution object.");
                     if (!execution.contains("hitstopSeconds")) execution["hitstopSeconds"] = 0.0;
-                    if (type == "direct") Keys(execution, { "damage", "depthRadius", "hitstopSeconds" });
-                    else Keys(execution, { "damage", "speed", "radius", "range", "hitstopSeconds" });
+                    if (!execution.contains("force")) execution["force"] = 0.0;
+                    if (!execution.contains("hitType")) execution["hitType"] = "Normal";
+                    if (type == "direct") Keys(execution, { "damage", "depthRadius", "hitstopSeconds", "force", "hitType" });
+                    else Keys(execution, { "damage", "speed", "radius", "range", "hitstopSeconds", "force", "hitType" });
                     (void)NonnegativeFloat(execution.at("hitstopSeconds"));
+                    Number(execution.at("force"), 0, 500);
+                    (void)NonnegativeFloat(execution.at("force"));
+                    Require(execution.at("hitType") == "Normal" || execution.at("hitType") == "Airborne", "Invalid hit type.");
                     Integer(execution.at("damage"), 1, 1000000);
                     if (type == "direct") Number(execution.at("depthRadius"), 0.1, 500);
                     else
