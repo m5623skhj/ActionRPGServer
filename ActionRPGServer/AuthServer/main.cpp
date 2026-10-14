@@ -192,8 +192,10 @@ int main()
             const auto connection = body.at("connection").get<std::string>();
             const auto lease = body.at("lease").get<std::string>();
             const auto id = sessions.ResolveLease(serverId, connection, lease);
-            const bool valid = activeAccount(id) && sessions.Renew(id, serverId, connection, lease);
-            return Json{{"valid", valid}, {"expiresIn", valid ? 15 : 0}};
+            const bool accountActive = activeAccount(id);
+            std::string reason;
+            const bool valid = sessions.Renew(id, serverId, connection, lease, accountActive, reason);
+            return Json{{"valid", valid}, {"expiresIn", valid ? 15 : 0}, {"reason", reason}};
         });
         add("/internal/release", true, [&](const auto&, const Json& body, const std::string& serverId)
         {

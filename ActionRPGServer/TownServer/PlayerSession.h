@@ -16,6 +16,8 @@ namespace TownServer::Domain
     class TownInstance;
 }
 
+namespace TownProtocol { enum class SessionStatusCode : std::uint8_t; }
+
 namespace TownServer::Network
 {
     class RoomControlTcpServer;
@@ -45,6 +47,7 @@ namespace TownServer::Network
         bool CompleteAuthentication(std::uint64_t inAttemptId, std::uint64_t inAccountId) noexcept;
         [[nodiscard]] bool MatchesAuthentication(std::uint64_t inAttemptId) const noexcept;
         void CloseAuthentication() noexcept;
+        void StopWithStatus(TownProtocol::SessionStatusCode inCode);
         void SetAdmissionDeadline(std::chrono::steady_clock::time_point inDeadline) noexcept;
         void HandlePacket(std::vector<std::uint8_t> inPacket);
 
@@ -58,5 +61,6 @@ namespace TownServer::Network
         std::atomic_int64_t admissionDeadline{};
         std::atomic<LoginState> loginState{ LoginState::Unauthenticated };
         std::atomic_bool enterRequested{ false };
+        std::atomic_bool closingWithStatus{ false };
     };
 }

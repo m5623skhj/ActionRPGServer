@@ -356,6 +356,14 @@ namespace
 
 namespace TownProtocol
 {
+    std::vector<std::uint8_t> Encode(const SessionStatus& inPacket)
+    {
+        PacketWriter writer(PacketType::SessionStatus);
+        writer.WriteUInt8(inPacket.code);
+        writer.WriteUInt32(inPacket.retryAfterMs);
+        return writer.Finish();
+    }
+
     std::vector<std::uint8_t> Encode(const ChatRequest& inPacket)
     {
         PacketWriter writer(PacketType::ChatRequest);

@@ -177,8 +177,11 @@ namespace TownServer::Domain
             std::chrono::steady_clock::time_point deadline;
             std::chrono::steady_clock::time_point nextRenewal;
             bool renewing{};
+            std::string ticket;
+            bool pendingNotified{};
         };
         void PollAdmissions();
+        void ConsumeAdmission(std::uint64_t inSessionId);
         void FinishCharacterWork(std::uint64_t inSessionId);
         void DrainCharacterRelease(std::uint64_t inSessionId);
         bool ApplyCharacterState(PlayerEntry& inEntry, const Persistence::CharacterState& inState);

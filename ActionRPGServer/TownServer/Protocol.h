@@ -11,6 +11,12 @@ namespace TownProtocol
     inline constexpr std::size_t MAX_CHAT_UTF8_BYTES = 800;
     inline constexpr std::size_t MAX_CHAT_CODE_POINTS = 200;
 
+    enum class SessionStatusCode : std::uint8_t
+    {
+        WaitingForPriorOwner = 1, Replaced = 2, AdmissionTimeout = 3, AuthUnavailable = 4,
+        AuthorizationExpired = 5, LoggedOut = 6, ServerTransfer = 7, AccountUnavailable = 8
+    };
+
     enum class ChatChannel : std::uint8_t { General = 1, Party = 2 };
     enum class ChatResultCode : std::uint8_t
     {
@@ -145,6 +151,7 @@ namespace TownProtocol
 
 namespace TownProtocol
 {
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const SessionStatus& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ChatRequest& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ChatResult& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ChatMessage& inPacket);

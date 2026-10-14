@@ -102,10 +102,10 @@ Auth HTTPS 포트는 8443이다. 타운은 `ACTIONRPG_AUTH_HOST`의 인증서 �
 |---|---|---|
 | `/v1/challenges` | `{}` | `challengeId`, `nonce`, `expiresIn=300` |
 | `/v1/login` | `challengeId`, `idToken` | `gameToken`, `expiresIn=28800` |
-| `/v1/tickets` | Bearer + `serverId` | `ticket`, `expiresIn=30`, `ready` |
+| `/v1/tickets` | Bearer + `serverId` | `ticket`, `expiresIn=30`, `ready`, `retryAfterMs` |
 | `/v1/logout` | Bearer + `{}` | `{}` |
-| `/internal/consume` | `ticket`, `connection` | `accountId`, `lease`, `expiresIn=15` |
-| `/internal/renew` | `lease`, `connection` | `valid`, `expiresIn` |
+| `/internal/consume` | `ticket`, `connection` | grant: `accountId`, `lease`, `expiresIn=15`; 대기: `status=Pending`, `ready=false`, `retryAfterMs=1000`, `waitRemainingMs` |
+| `/internal/renew` | `lease`, `connection` | `valid`, `expiresIn`, `reason` |
 | `/internal/release` | `lease`, `connection` | `{}` |
 
 내부 요청은 `X-Town-Id`, `X-Town-Key` 헤더가 필수다. `connection`은 타운에서 새 연결마다
@@ -116,8 +116,10 @@ ID를 선택할 수 없다. 권한을 해제하는 release는 타운이 모든 �
 
 클라이언트 흐름: challenge 발급 → 해당 nonce를 Google OIDC 인증 요청에 연결 → ID 토큰
 제출 → 게임 토큰 보관 → 목적 타운 티켓 발급 → 타운 TLS 첫 패킷 36 → 성공 패킷 37 →
-기존 EnterTown. `ready=false`이면 기존 접속 종료 후 새 티켓을 받아야 한다. 아직 소유자가
-남아 있을 때 소비한 티켓도 재사용되지 않는다. 토큰을 URL/로그에 넣지 않는다.
+캐릭터 목록/선택으로 진행한다. `ready=false`도 해당 티켓으로 Town TLS에 연결하여 대기할 수 있다.
+Town의 SessionStatus(52) code=1은 기존 접속 정리 중이며, 성공 37 전에 게임/캐릭터 요청을 보내지 않는다.
+명시적인 Pending에만 같은 연결에서 서버가 consume을 재확인한다. 오류·응답 유실은 자동 재시도하지 않는다.
+토큰을 URL/로그에 넣지 않는다.
 현재 클라이언트 소스의 AuthClient/LoginFlow에는 시스템 브라우저·PKCE·state·loopback
 callback과 nonce 연동 경로가 있다. 실제 Google 등록·배포 설정과 왕복 동작은 별도 검증 대상이다.
 Google이 Desktop client secret을 요구하는 등록에서는 클라이언트가 같은 Desktop ID의 값을
@@ -134,7 +136,7 @@ authorized party, exp, iat, sub, 일회성 challenge nonce를 검사한다. 하�
 계약이며 웹/네이티브의 여러 authorized party 허용은 별도 협의가 필요하다.
 
 새 로그인은 기존 게임 토큰을 무효화하고 기존 타운 권한의 갱신을 거절한다. 기존 타운은
-5초 갱신 주기에서 이를 확인해 TCP를 종료하고 던전 퇴장을 확인한다. 새 세션의 입장은
+1초 갱신 주기에서 이를 확인해 종료 사유를 알리고 TCP를 종료하며 던전 퇴장을 확인한다. 새 세션의 입장은
 기존 소유권 해제 후 허용한다. 타운 이동도 같은 흐름이며 게임 토큰은 재사용한다.
 로그인 계정 생성 결과와 상태 조회 결과는 커밋 전에 형식을 검증한다. 정지/없는 계정은
 티켓 발급·소비·갱신에서 거절하고 기존 게임 토큰과 미사용 티켓을 폐기한다.
@@ -193,7 +195,7 @@ sequenceDiagram
     T-->>C: AdmissionResult(37, result=0)
     C->>T: EnterTownRequest(1)
     T-->>C: 마을·플레이어·스킬 상태
-    loop 연결 유지 중 5초마다
+    loop 연결 유지 중 1초마다
         T->>A: /internal/renew (lease, connection)
         A->>D: 계정 상태 재확인
         A-->>T: valid, expiresIn
@@ -233,8 +235,18 @@ ID 토큰만 제출한다. Google access token과 Auth gameToken은 ID 토큰의
 
 한 계정의 새 티켓 발급은 이전 미사용 티켓을 대체한다. 기존 owner가 있으면 draining으로
 전환하고 ready=false를 반환한다. 목적 타운·연결 검사가 맞더라도 이전 소유권이 남아 있으면
-소비에 실패하며, 해당 소비 경로에서 제거된 티켓은 재사용할 수 없다. ready=false 상태로
-타운에 보내지 말고 이전 연결 종료 확인 후 새 티켓을 받아야 한다.
+consume은 소유권을 부여하지 않은 Pending을 반환하고 티켓을 유지한다. Town은 같은 연결에서 1초 이상
+간격으로 재확인하며 최초 연결부터 최대 30초 및 Auth가 전달한 티켓 잔여 시간 중 짧은 쪽을 상한으로 삼는다.
+반복 Pending이나 늦은 응답이 대기 시간을 연장하지 않는다. 성공 grant는 즉시 티켓을 제거하므로
+성공 응답이 유실되어도 재사용할 수 없다. 새 로그인/목적지 티켓은 계정의 이전 미사용 티켓을 폐기한다.
+한 티켓의 중복 consume이나 늦은 release로 새 lease를 지우지 않으며 기존 owner의 자동 강제 해제는 없다.
+
+renew 종료 사유는 Replaced/AuthorizationExpired/LoggedOut/ServerTransfer/AccountUnavailable/AuthUnavailable이다.
+DB/전송 실패 또는 사유를 확인할 수 없는 응답은 중복 로그인으로 단정하지 않는다. Town은 종료 전 게임 인증을
+폐기하고 사유 패킷을 최선 노력으로 전송한 뒤 최대 1초 내 닫는다. 새 입장은 기존 DB 저장·던전 퇴장·캐릭터 및
+Auth 소유권 해제 뒤에만 허용한다. 통신 장애에서는 대기 시간 초과로 끝나며 소유권을 무조건 지우지 않는다.
+1초 갱신은 기존 5초 대비 정상 연결의 Auth/계정 상태 조회 빈도를 최대 약 5배 늘린다. worker/queue 상한은 유지하며
+과부하·timeout도 실패로 종료한다. 서버·클라이언트 동시 배포가 필요하고 이번 작업은 정적 검토만 수행했다.
 
 새 Google 로그인과 타운 이동 모두 이전 lease를 즉시 지우지 않는다. 이전 Town이 갱신 거절을
 확인해 클라이언트를 종료하고 Room의 퇴장/부재를 확인한 다음 release한다. release는 동일

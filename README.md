@@ -61,7 +61,8 @@ V5 소유 토큰·generation·revision이 이전 서버의 지연 저장을 차�
    현재 클라이언트에는 PKCE·state·loopback callback과 인증 코드 교환 경로가 있다.
 2. Auth `/v1/login`이 ID 토큰을 검증하고 MySQL 계정을 조회/첫 가입한 뒤 gameToken을 발급한다.
    클라이언트는 이 토큰으로 `/v1/tickets`에서 목적 타운의 단일 사용 티켓을 받는다.
-3. ready=true 티켓으로 Town TLS의 첫 패킷 36을 보낸다. Town의 Auth consume 승인을 받은
+3. 발급 티켓으로 Town TLS의 첫 패킷 36을 보낸다. ready=false이면 상태 패킷 52를 받아 같은 연결에서
+   기존 접속 정리를 최대 30초 기다린다. Town의 Auth consume 승인을 받은
    성공 패킷 37 이후 캐릭터 목록(38)·필요 시 생성(40)·선택(42)을 진행한다.
    서버가 계정 소유권과 DB 상태를 확인하면 선택 성공(43) 뒤 마을 입장 응답(2)을 보낸다.
    이전 EnterTownRequest(1)로 이름·종류를 임의 지정하는 입장 경로는 차단한다.
@@ -244,7 +245,7 @@ PlayerSkills.json, SkillTrees.json을 읽는다. Room은 Data/Dungeons, Data/Mon
 
 ## 연결 종료와 지원 한계
 
-새 Google 로그인은 기존 토큰을 폐기한다. 기존 Town은 5초 갱신 실패 또는 15초 권한 만료를
+새 Google 로그인은 기존 토큰을 폐기한다. 기존 Town은 1초 갱신 실패 또는 15초 권한 만료를
 통해 종료되므로 즉시 강제 종료 push가 아니다. 새 로그인은 허용하지만 새 타운 입장은 이전
 던전의 멤버 제거/부재 확인과 Auth 소유권 해제 후 가능하다. 타운 이동은 게임 토큰을 재사용한다.
 

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../Shared/AuthTransport.h"
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <mutex>
 #include <unordered_map>
 
@@ -23,6 +25,7 @@ namespace AuthServer
             std::string lease;
             Clock::time_point leaseExpires;
             bool draining{};
+            std::string drainReason;
         };
         struct Ticket
         {
@@ -50,6 +53,7 @@ namespace AuthServer
                 {
                     tokens.erase(iterator->second.token);
                     iterator->second.token.clear();
+                    if (!iterator->second.draining) iterator->second.drainReason = "AuthorizationExpired";
                     iterator->second.draining = true;
                     if (iterator->second.lease.empty()) { iterator = accounts.erase(iterator); continue; }
                 }
@@ -88,9 +92,11 @@ namespace AuthServer
                 throw std::runtime_error("Capacity reached.");
             auto& account = accounts[inAccountId];
             tokens.erase(account.token);
+            std::erase_if(tickets, [inAccountId](const auto& item) { return item.second.accountId == inAccountId; });
             account.token = ActionRPG::Authentication::RandomToken();
             account.expires = Clock::now() + std::chrono::hours(8);
             account.draining = !account.lease.empty();
+            account.drainReason = account.draining ? "Replaced" : "";
             tokens.emplace(account.token, inAccountId);
             return {{"gameToken", account.token}, {"expiresIn", 28800}};
         }
@@ -110,12 +116,15 @@ namespace AuthServer
             const auto found = tokens.find(inToken);
             if (found == tokens.end() || tickets.size() >= MAX_ENTRIES) throw std::runtime_error("Invalid session.");
             auto& account = accounts.at(found->second);
-            // One outstanding ticket per session; a new destination replaces the prior choice.
-            std::erase_if(tickets, [&inToken](const auto& inItem) { return inItem.second.token == inToken; });
+            // Only the latest account-level destination can consume, including concurrent token replacement.
+            std::erase_if(tickets, [id = found->second](const auto& item) { return item.second.accountId == id; });
+            if (!account.draining && !account.lease.empty())
+                account.drainReason = account.serverId == inServerId ? "Replaced" : "ServerTransfer";
             account.draining = !account.lease.empty();
             auto ticket = ActionRPG::Authentication::RandomToken();
             tickets.emplace(ticket, Ticket{found->second, inToken, inServerId, Clock::now() + std::chrono::seconds(30)});
-            return {{"ticket", ticket}, {"expiresIn", 30}, {"ready", account.lease.empty()}};
+            return {{"ticket", ticket}, {"expiresIn", 30}, {"ready", account.lease.empty()},
+                {"retryAfterMs", account.lease.empty() ? 0 : 1000}};
         }
 
         std::uint64_t ResolveTicket(const std::string& inTicket, const std::string& inServerId)
@@ -134,16 +143,24 @@ namespace AuthServer
             const auto found = tickets.find(inTicket);
             if (found == tickets.end() || found->second.serverId != inServerId) throw std::runtime_error("Invalid ticket.");
             const auto ticket = found->second;
-            tickets.erase(found); // Never reusable, including failed or lost responses.
             const auto owner = accounts.find(ticket.accountId);
-            if (owner == accounts.end() || owner->second.token != ticket.token || !owner->second.lease.empty())
-                throw std::runtime_error("Prior owner has not released.");
+            if (owner == accounts.end() || owner->second.token != ticket.token)
+            { tickets.erase(found); throw std::runtime_error("Invalid session."); }
+            // Explicit Pending has not granted ownership. Only this response may be polled again.
+            if (!owner->second.lease.empty())
+            {
+                const auto remaining = std::max<std::int64_t>(0,
+                    std::chrono::duration_cast<std::chrono::milliseconds>(ticket.expires - Clock::now()).count());
+                return {{"ready", false}, {"retryAfterMs", 1000}, {"status", "Pending"}, {"waitRemainingMs", remaining}};
+            }
+            tickets.erase(found); // A granted ticket is never reusable, including a lost grant response.
             auto& account = owner->second;
             account.serverId = inServerId;
             account.connection = inConnection;
             account.lease = ActionRPG::Authentication::RandomToken();
             account.leaseExpires = Clock::now() + std::chrono::seconds(15);
             account.draining = false;
+            account.drainReason.clear();
             return {{"accountId", ticket.accountId}, {"lease", account.lease}, {"expiresIn", 15}};
         }
 
@@ -158,16 +175,20 @@ namespace AuthServer
         }
 
         bool Renew(std::uint64_t inId, const std::string& inServerId, const std::string& inConnection,
-            const std::string& inLease)
+            const std::string& inLease, bool inAccountActive, std::string& outReason)
         {
             std::lock_guard lock(mutex);
             Prune();
             const auto found = accounts.find(inId);
+            outReason = "AuthorizationExpired";
             if (found == accounts.end()) return false;
             auto& account = found->second;
-            if (account.serverId != inServerId || account.connection != inConnection || account.lease != inLease
-                || account.draining || account.leaseExpires <= Clock::now()) return false;
+            if (account.serverId != inServerId || account.connection != inConnection || account.lease != inLease) return false;
+            if (account.draining) { outReason = account.drainReason; return false; }
+            if (account.leaseExpires <= Clock::now()) return false;
+            if (!inAccountActive) { outReason = "AuthUnavailable"; return false; }
             account.leaseExpires = Clock::now() + std::chrono::seconds(15);
+            outReason.clear();
             return true;
         }
 
@@ -176,7 +197,8 @@ namespace AuthServer
             std::lock_guard lock(mutex);
             for (auto& [id, account] : accounts)
                 if (account.serverId == inServerId && account.connection == inConnection && account.lease == inLease)
-                { account.lease.clear(); account.connection.clear(); account.serverId.clear(); account.draining = false; return; }
+                { account.lease.clear(); account.connection.clear(); account.serverId.clear(); account.draining = false;
+                    account.drainReason.clear(); return; }
         }
 
         void Logout(const std::string& inToken)
@@ -188,6 +210,7 @@ namespace AuthServer
             account.token.clear();
             account.expires = Clock::now();
             account.draining = true;
+            account.drainReason = "LoggedOut";
             tokens.erase(found);
         }
 
@@ -201,6 +224,7 @@ namespace AuthServer
             account.token.clear();
             account.expires = Clock::now();
             account.draining = true;
+            account.drainReason = "AccountUnavailable";
             std::erase_if(tickets, [inAccountId](const auto& inItem) { return inItem.second.accountId == inAccountId; });
         }
     };

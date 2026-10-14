@@ -460,3 +460,11 @@ Packet:
         Name: senderName
       - Type: std::string
         Name: message
+
+  - Type: ReplyPacket
+    PacketName: SessionStatus
+    Items:
+      - Type: std::uint8_t
+        Name: code
+      - Type: std::uint32_t
+        Name: retryAfterMs

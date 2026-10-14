@@ -15,6 +15,7 @@ namespace ActionRPG::Network
           socket(std::move(inSocket)),
           tlsContext(std::move(inTlsContext)),
           handshakeDeadline(socket.get_executor()),
+          shutdownDeadline(socket.get_executor()),
           closeHandler(std::move(inCloseHandler))
     {
         if (tlsContext) tls = std::make_unique<asio::ssl::stream<asio::ip::tcp::socket&>>(socket, *tlsContext);
@@ -57,6 +58,24 @@ namespace ActionRPG::Network
         });
     }
 
+    // Best-effort terminal notice; revoke game authority before calling, and never wait on a slow peer indefinitely.
+    void TcpSession::SendAndStop(std::vector<std::uint8_t> inPacketBody)
+    {
+        const auto self = shared_from_this();
+        asio::dispatch(socket.get_executor(), [self, body = std::move(inPacketBody)]() mutable
+        {
+            if (self->stopped || self->closingAfterSend) return;
+            for (const auto& packet : self->sendQueue) self->queuedSendBytes -= packet.size();
+            self->sendQueue.clear();
+            self->QueuePacket(std::move(body));
+            if (self->stopped) return;
+            self->closingAfterSend = true;
+            self->shutdownDeadline.expires_after(std::chrono::seconds(1));
+            self->shutdownDeadline.async_wait([self](const asio::error_code& error) { if (!error) self->Close(); });
+            if (!self->writeInProgress && self->sendQueue.empty()) self->Close();
+        });
+    }
+
     void TcpSession::SetReceiveHandler(ReceiveHandler inReceiveHandler)
     {
         receiveHandler = std::move(inReceiveHandler);
@@ -69,6 +88,7 @@ namespace ActionRPG::Network
 
     void TcpSession::ReadHeader()
     {
+        if (stopped || closingAfterSend) return;
         const std::shared_ptr<TcpSession> self = shared_from_this();
         Read(asio::buffer(receiveHeader), [self](const asio::error_code& inError, const std::size_t)
         {
@@ -91,6 +111,7 @@ namespace ActionRPG::Network
 
     void TcpSession::ReadBody(const std::uint32_t inBodySize)
     {
+        if (stopped || closingAfterSend) return;
         receiveBody.resize(inBodySize);
         if (receiveBody.empty())
         {
@@ -115,6 +136,7 @@ namespace ActionRPG::Network
 
     void TcpSession::HandlePacket()
     {
+        if (stopped || closingAfterSend) return;
         if (!receiveHandler)
         {
             Close();
@@ -125,7 +147,7 @@ namespace ActionRPG::Network
 
     void TcpSession::QueuePacket(std::vector<std::uint8_t> inPacketBody)
     {
-        if (stopped || inPacketBody.size() > MAX_PACKET_BODY_SIZE)
+        if (stopped || closingAfterSend || inPacketBody.size() > MAX_PACKET_BODY_SIZE)
         {
             return;
         }
@@ -151,8 +173,13 @@ namespace ActionRPG::Network
 
     void TcpSession::WriteNext()
     {
-        if (stopped || writeInProgress || sendQueue.empty())
+        if (stopped || writeInProgress)
         {
+            return;
+        }
+        if (sendQueue.empty())
+        {
+            if (closingAfterSend) Close();
             return;
         }
 
@@ -186,6 +213,7 @@ namespace ActionRPG::Network
         stopped = true;
         asio::error_code ignoredError;
         handshakeDeadline.cancel(ignoredError);
+        shutdownDeadline.cancel(ignoredError);
         socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignoredError);
         socket.close(ignoredError);
         sendQueue.clear();

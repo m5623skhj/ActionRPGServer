@@ -51,6 +51,14 @@ namespace TownServer::Network
         tcpSession->Stop();
     }
 
+    void PlayerSession::StopWithStatus(TownProtocol::SessionStatusCode inCode)
+    {
+        if (closingWithStatus.exchange(true, std::memory_order_acq_rel)) return;
+        CloseAuthentication();
+        tcpSession->SendAndStop(TownProtocol::Encode(TownProtocol::SessionStatus{
+            static_cast<std::uint8_t>(inCode), 0 }));
+    }
+
     void PlayerSession::Send(std::vector<std::uint8_t> inPacket)
     {
         tcpSession->Send(std::move(inPacket));
@@ -117,6 +125,7 @@ namespace TownServer::Network
 
     void PlayerSession::HandlePacket(std::vector<std::uint8_t> inPacket)
     {
+        if (closingWithStatus.load(std::memory_order_acquire)) return;
         const std::optional<TownProtocol::PacketType> type = TownProtocol::ReadPacketType(inPacket);
         const std::shared_ptr<Domain::TownInstance> town = townInstance.lock();
         if (!type || !town) { Stop(); return; }

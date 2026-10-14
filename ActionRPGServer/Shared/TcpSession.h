@@ -26,6 +26,7 @@ namespace ActionRPG::Network
 
         void Start();
         void Stop();
+        void SendAndStop(std::vector<std::uint8_t> inPacketBody);
         void Send(std::vector<std::uint8_t> inPacketBody);
         void SetReceiveHandler(ReceiveHandler inReceiveHandler);
 
@@ -47,6 +48,7 @@ namespace ActionRPG::Network
         std::shared_ptr<asio::ssl::context> tlsContext;
         std::unique_ptr<asio::ssl::stream<asio::ip::tcp::socket&>> tls;
         asio::steady_timer handshakeDeadline;
+        asio::steady_timer shutdownDeadline;
         template<typename TBuffer, typename THandler>
         void Read(const TBuffer& inBuffer, THandler inHandler)
         {
@@ -67,5 +69,6 @@ namespace ActionRPG::Network
         std::size_t queuedSendBytes = 0;
         bool writeInProgress = false;
         bool stopped = false;
+        bool closingAfterSend = false;
     };
 }
