@@ -21,11 +21,298 @@
   ],
   "images": [
     {
-      "asset": "Images/Towns/town_main.png",
+      "asset": "Images/Towns/town_scenery_a.png",
       "x": 0,
       "y": 0,
-      "width": 6144,
-      "height": 2048
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_scenery_b.png",
+      "x": 1024,
+      "y": 0,
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_scenery_a.png",
+      "x": 2048,
+      "y": 0,
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_scenery_b.png",
+      "x": 3072,
+      "y": 0,
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_scenery_a.png",
+      "x": 4096,
+      "y": 0,
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_scenery_b.png",
+      "x": 5120,
+      "y": 0,
+      "width": 1024,
+      "height": 1152
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 0,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 512,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 1024,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 1536,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 2048,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 2560,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 3072,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 3584,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 4096,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 4608,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 5120,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 5632,
+      "y": 1152,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 0,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 512,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 1024,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 1536,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 2048,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 2560,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 3072,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 3584,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 4096,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 4608,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 5120,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_paving.png",
+      "x": 5632,
+      "y": 1664,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_shop_blue.png",
+      "x": 128,
+      "y": 486,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_house_red.png",
+      "x": 816,
+      "y": 476,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_shop_blue.png",
+      "x": 1504,
+      "y": 486,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_house_red.png",
+      "x": 2192,
+      "y": 476,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_shop_blue.png",
+      "x": 2880,
+      "y": 486,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_house_red.png",
+      "x": 3568,
+      "y": 476,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_shop_blue.png",
+      "x": 4136,
+      "y": 486,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_house_red.png",
+      "x": 5488,
+      "y": 476,
+      "width": 512,
+      "height": 768
+    },
+    {
+      "asset": "Images/Towns/town_gate_arch.png",
+      "x": 4713,
+      "y": 749,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "asset": "Images/Towns/town_flowerbed.png",
+      "x": 2614,
+      "y": 1094,
+      "width": 512,
+      "height": 288
+    },
+    {
+      "asset": "Images/Towns/town_transfer_pad.png",
+      "x": 150,
+      "y": 1336,
+      "width": 128,
+      "height": 128
+    },
+    {
+      "asset": "Images/Towns/town_transfer_pad.png",
+      "x": 4905,
+      "y": 1501,
+      "width": 128,
+      "height": 128
     }
   ],
   "mapId": "town_01",
