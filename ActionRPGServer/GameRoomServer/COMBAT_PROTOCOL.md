@@ -59,7 +59,7 @@ AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는
 `reactions`는 경직·쓰러짐·기상 시간을 정의합니다. 서버 좌표는 기존 방 데이터와 같은 월드 단위입니다.
 초기 월드 JSON에 `combatRules`를 추가하여 클라이언트가 서버 타이밍을 읽을 수 있도록 했습니다.
 `combatRules.version=3`이며 `slideDefinitions` 배열은 캐릭터별
-`characterId`, `attackPower`, `durationSeconds`, `distancePerRunSpeedSeconds`, `motionId`, `hitRecovery`, `hitstopSeconds`를 전달합니다.
+`characterId`, `attackPower`, `durationSeconds`, `distancePerRunSpeedSeconds`, `hitStartRatio`, `hitEndRatio`, `motionId`, `hitRecovery`, `hitstopSeconds`를 전달합니다.
 `shotHitstopSeconds`도 초기 월드에 포함합니다. 일반 경직의 기본 `hitStunSeconds`는 0.25초입니다.
 기본 사격의 `shot.damage`와 플레이어 스킬의 피해량·랭크 계산은 캐릭터 `attackPower`로 대체하지 않습니다.
 
@@ -157,10 +157,18 @@ version 3과 binary 필드 순서는 유지하며, tempoScale=0.7 서버의 예�
 피격·사망·클리어·퇴장·룸 종료 때 즉시 취소합니다. 종료 뒤에는 최신 유지 이동 입력을 일반 이동에 적용합니다.
 
 접촉 피해는 시작 시 `attackPower × 현재 가장 높은 damageMultiplier × 1.0`으로 확정하고
-양의 uint32 범위로 제한한 뒤 소수 부분을 버립니다. 투사체 없이 이동 구간 전체의 접촉과 높이·벽 가림을 검사하여
+양의 uint32 범위로 제한한 뒤 소수 부분을 버립니다. 투사체 없이 공격 유효 시간에 해당하는 이동 경로의 접촉과 높이·벽 가림을 검사하여
 슬라이딩 한 번당 각 몬스터를 한 번만 타격합니다. 타격 시 피해 버프를 다시 곱하지 않습니다.
-벽·게이트는 기존 4단위 이동 단계마다 검사하되 몬스터 접촉 검사는 틱당 실제 이동한 전체 구간에 한 번만 수행합니다.
-정지할 때도 허용된 구간을 타격 검사한 뒤 종료하며, 시작 시 정지 위치의 접촉 검사는 별도로 한 번 수행합니다.
+`player.characters[].slide`와 월드 `combatRules.slideDefinitions[]`의 필수 필드
+`hitStartRatio`, `hitEndRatio`는 유한한 수이며 `0 <= hitStartRatio < hitEndRatio <= 1`이어야 합니다.
+유효 시간은 `[durationSeconds × hitStartRatio, durationSeconds × hitEndRatio)`입니다.
+현재 모든 캐릭터는 `0.225`, `0.5`로 동작 시간 `[0.09, 0.20)`초, 8프레임 모션의 0-based 2~3번에 해당합니다.
+준비·마무리에는 피해가 없으며 시작 패킷 처리 중 즉시 접촉 피해를 주지 않습니다.
+벽·게이트는 기존 4단위 이동 단계마다 검사합니다. 몬스터 접촉 검사는 틱당 실제로 허용된 이동 시간과
+공격 유효 시간의 교집합으로 자른 경로에 한 번만 수행합니다. 큰 틱이 양쪽 경계를 넘더라도 준비/마무리
+경로를 포함하지 않고, 끝 경계에서 처음 접촉한 대상은 제외합니다. 시작 경계의 정지 접촉은 포함합니다.
+벽에 막힌 틱도 실제로 허용된 경로만 검사한 뒤 종료하며, 준비 중 벽에 막히면 공격 구간까지 진행한 것으로
+취급하지 않습니다. 첫 이동 단계가 막혀도 이미 공격 유효 시간 안에 있던 위치의 접촉은 검사합니다.
 슬라이딩 거리·속도 계산은 행동 시간 기준이므로 역경직은 이동과 진행 시간을 함께 멈추며 총 목표 거리를 줄이지 않습니다.
 서버 데이터 상한(달리기 2000, 이동 버프 10, 거리 계수 5, 최소 지속시간 0.05)에 따른 슬라이딩 속도 상한은
 2000000좌표/초입니다. 30Hz에서 틱당 최대 약 16667개의 4단위 이동 검사가 필요하며 int 변환 범위 안입니다.

@@ -172,13 +172,18 @@ namespace GameRoomServer
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
             const auto& slide = character.at("slide");
-            Keys(slide, { "durationSeconds", "distancePerRunSpeedSeconds", "motionId", "hitstopSeconds", "force", "hitType" });
+            Keys(slide, { "durationSeconds", "distancePerRunSpeedSeconds", "motionId", "hitstopSeconds", "force", "hitType",
+                "hitStartRatio", "hitEndRatio" });
             CharacterCombatDefinition definition{ Integer(character.at("attackPower"), 1, 1000000),
                 NonnegativeFloat(character.value("hitRecovery", Json(0))),
                 { Number(slide.at("durationSeconds"), 0.05, 2),
                     Number(slide.at("distancePerRunSpeedSeconds"), 0.05, 5), slide.at("motionId").get<std::string>(),
                     NonnegativeFloat(slide.value("hitstopSeconds", Json(0.05))),
-                    Force(slide.value("force", Json(0))), Airborne(slide.value("hitType", Json("Normal"))) } };
+                    Force(slide.value("force", Json(0))), Airborne(slide.value("hitType", Json("Normal"))),
+                    Number(slide.at("hitStartRatio"), 0, 1), Number(slide.at("hitEndRatio"), 0, 1) } };
+            Require(definition.slide.hitStartRatio < definition.slide.hitEndRatio
+                && definition.slide.durationSeconds * definition.slide.hitStartRatio
+                    < definition.slide.durationSeconds * definition.slide.hitEndRatio, "Invalid slide hit window.");
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             definition.maxMp = resources.Get(characterId).maxMp;
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");

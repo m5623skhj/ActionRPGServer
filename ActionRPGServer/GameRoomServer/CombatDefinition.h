@@ -43,6 +43,8 @@ namespace GameRoomServer
         float hitstopSeconds{};
         float force{};
         bool airborne{};
+        // Fractions of action duration; start inclusive, end exclusive.
+        float hitStartRatio{}, hitEndRatio{};
     };
 
     struct CharacterCombatDefinition

@@ -215,6 +215,8 @@ namespace GameRoomServer
         slide.active = true;
         slide.sequence = inInput.sequence;
         slide.durationSeconds = definition->second.slide.durationSeconds;
+        slide.hitStartSeconds = slide.durationSeconds * definition->second.slide.hitStartRatio;
+        slide.hitEndSeconds = slide.durationSeconds * definition->second.slide.hitEndRatio;
         slide.hitstopSeconds = definition->second.slide.hitstopSeconds;
         // Capture same-frame horizontal intent, or existing facing for a vertical-only dash.
         slide.directionX = facingLeft ? -1.0f : 1.0f;
@@ -236,7 +238,6 @@ namespace GameRoomServer
         inPlayer.slide = std::move(slide);
         ResetShotState(inPlayer);
         inPlayer.bufferedActions.clear();
-        HitSlideContacts(inPlayer, inPlayer.position, inPlayer.position);
         CheckClear();
         return true;
     }
@@ -248,7 +249,8 @@ namespace GameRoomServer
     }
 
     /** Advance at the captured speed for at most the remaining duration. Four-unit foot-collision steps
-     * stop at walls/gates; one contact sweep per tick covers the entire accepted displacement.
+     * stop at walls/gates. Clip accepted movement to the half-open attack window before contact checks;
+     * a blocked slide never projects its path/time through the wall into the active phase.
      */
     void GameRoom::UpdateSlide(PlayerState& inPlayer, float inDeltaSeconds)
     {
@@ -277,8 +279,22 @@ namespace GameRoomServer
             inPlayer.position = next;
             slide.seconds = std::min(slide.durationSeconds, before + delta * (step + 1) / steps);
         }
-        // Check the accepted segment before StopSlide clears the per-slide hit IDs, including blocked ticks.
-        HitSlideContacts(inPlayer, tickStart, inPlayer.position);
+        const float hitStart = std::max(before, slide.hitStartSeconds);
+        const float hitEnd = std::min(slide.seconds, slide.hitEndSeconds);
+        if (hitStart <= hitEnd && hitStart < slide.hitEndSeconds)
+        {
+            const float acceptedSeconds = slide.seconds - before;
+            const auto pointAt = [&](float inSeconds) -> DungeonPoint
+            {
+                const float fraction = acceptedSeconds > 0
+                    ? std::clamp((inSeconds - before) / acceptedSeconds, 0.0f, 1.0f) : 0.0f;
+                return { tickStart.x + (inPlayer.position.x - tickStart.x) * fraction,
+                    tickStart.y + (inPlayer.position.y - tickStart.y) * fraction };
+            };
+            // Equal endpoints cover contact at the inclusive start, or a blocked/stationary
+            // position already in the active phase. Never include the exclusive end contact.
+            HitSlideContacts(inPlayer, pointAt(hitStart), pointAt(hitEnd), hitEnd < slide.hitEndSeconds);
+        }
         if (blocked) { StopSlide(inPlayer); return; }
         if (inDeltaSeconds >= remaining)
         {
@@ -288,7 +304,7 @@ namespace GameRoomServer
     }
 
     // Each slide hits a living monster once. Damage is already buffed at start; never multiply it here.
-    void GameRoom::HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd)
+    void GameRoom::HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd, bool inIncludeEnd)
     {
         const auto found = monsterIdsByMap.find(inPlayer.mapId);
         if (found == monsterIdsByMap.end()) return;
@@ -301,7 +317,7 @@ namespace GameRoomServer
             const auto fraction = ProjectileHitFraction(inStart, 0, inEnd, 0, monster.position,
                 combatDefinition->hitRadius + profile.hitRadius,
                 monster.actor.height - combatDefinition->bodyHeight, monster.actor.height + profile.bodyHeight);
-            if (!fraction) continue;
+            if (!fraction || (!inIncludeEnd && *fraction >= 1.0f)) continue;
             const DungeonPoint contact{ inStart.x + (inEnd.x - inStart.x) * *fraction,
                 inStart.y + (inEnd.y - inStart.y) * *fraction };
             const float length = Distance(contact, monster.position);

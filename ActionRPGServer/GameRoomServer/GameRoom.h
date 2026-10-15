@@ -136,6 +136,7 @@ namespace GameRoomServer
             bool active{};
             std::uint32_t sequence{}, damage{};
             float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{}, hitstopSeconds{};
+            float hitStartSeconds{}, hitEndSeconds{};
             float force{};
             bool airborne{};
             std::unordered_set<std::uint64_t> hitIds;
@@ -253,7 +254,7 @@ namespace GameRoomServer
         void UpdateBufferedActions(PlayerState& inPlayer, float inDeltaSeconds);
         bool TryStartSlide(PlayerState& inPlayer, const ActionRPG::DungeonProtocol::DungeonActionInput& inInput);
         void UpdateSlide(PlayerState& inPlayer, float inDeltaSeconds);
-        void HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd);
+        void HitSlideContacts(PlayerState& inPlayer, DungeonPoint inStart, DungeonPoint inEnd, bool inIncludeEnd);
         static void StopSlide(PlayerState& inPlayer);
         void UpdateProjectiles(float inDeltaSeconds);
         void UpdateSkillTimers(PlayerState& inPlayer, float inDeltaSeconds);
