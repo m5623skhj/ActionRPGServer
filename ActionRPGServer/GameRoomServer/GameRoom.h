@@ -59,6 +59,9 @@ namespace GameRoomServer
         void UpdatePlayerProgress(PlayerId inPlayerId, std::string inProgression);
         void ItemUse(PlayerId inPlayerId, nlohmann::json inRequest, std::function<void(nlohmann::json)> inHandler);
         void CanRetire(std::function<void(bool)> inHandler);
+        void SetQuestTransport(std::string inIncarnation, std::function<void(std::string)> inSend);
+        void AcknowledgeQuests(std::string inJson);
+        void QuestContext(PlayerId inPlayerId, std::function<void(std::string)> inHandler);
         void Leave(PlayerId inPlayerId, LeaveResultHandler inResultHandler);
         void RemoveUnannouncedPlayer(PlayerId inPlayerId, std::function<void(bool)> inResultHandler);
         void ValidateCompletion(std::vector<PlayerId> inParticipants, std::function<void(bool)> inHandler);
@@ -257,6 +260,13 @@ namespace GameRoomServer
         void UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds, bool inStarting = false);
         [[nodiscard]] static float BuffMultiplier(const PlayerState& inPlayer, const char* inStat);
         void CheckClear();
+        bool EmitQuest(std::string inKind, std::string inTarget, const std::string& inMapId,
+            std::vector<PlayerId> inPlayers, std::uint64_t inMonsterId = 0);
+        std::vector<PlayerId> QuestParticipants(const std::string& inMapId) const;
+        std::vector<std::string> QuestRegions(const PlayerState& inPlayer) const;
+        void ObserveQuestLocations();
+        void FlushQuests();
+        void DrainQuests(std::function<void()> inDone);
         [[nodiscard]] bool IsMapCleared(const std::string& inMapId) const;
         [[nodiscard]] static const char* ReactionName(Reaction inReaction);
         [[nodiscard]] DungeonPoint MoveOnMap(const std::string& inMapId, DungeonPoint inPosition,
@@ -265,6 +275,14 @@ namespace GameRoomServer
         asio::strand<asio::io_context::executor_type> strand;
         asio::steady_timer enterTimer;
         asio::steady_timer tickTimer;
+        asio::steady_timer questTimer;
+        std::string questIncarnation;
+        std::function<void(std::string)> questSend;
+        std::uint64_t questSequence{};
+        std::deque<nlohmann::json> questOutbox;
+        std::string questBatch;
+        std::vector<std::function<void()>> questDrains;
+        std::unordered_map<PlayerId, std::unordered_set<std::string>> questRegions;
         std::chrono::steady_clock::time_point nextTickAt{};
         RoomId roomId;
         std::uint32_t dungeonId;
@@ -287,6 +305,7 @@ namespace GameRoomServer
         std::uint64_t nextProjectileId{ 1 };
         std::uint64_t monsterHitSequence{};
         bool clearRequested{};
+        std::string questClearMap;
         bool hitstopChanged{};
         bool knockbackChanged{};
         State state = State::WaitingForPlayers;

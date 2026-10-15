@@ -31,6 +31,26 @@ namespace GameRoomServer
           processIncarnation(ActionRPG::Items::NewIncarnation())
     {
         rooms.reserve(maxRoomCount);
+        for (const auto& [id, quest] : combatDefinition->quests.definitions)
+            for (const auto& step : quest.at("steps")) for (const auto& goal : step.at("objectives"))
+            {
+                const auto& target = goal.at("target");
+                if (goal.at("type") == "KillMonster" && !combatDefinition->monsters.contains(target.at("monsterDataId").get<std::uint32_t>()))
+                    throw std::invalid_argument("Unknown quest monster.");
+                if (goal.at("type") == "ClearDungeon" && !definitions.contains(target.at("dungeonId").get<std::uint32_t>()))
+                    throw std::invalid_argument("Unknown quest dungeon.");
+                if (goal.at("type") == "Reach")
+                {
+                    const auto mapId = target.at("mapId").get<std::string>();
+                    for (const auto& [dungeonId, dungeon] : definitions)
+                    {
+                        if (!dungeon->world.at("maps").contains(mapId) || !target.contains("region")) continue;
+                        const auto& region = target.at("region");
+                        if (!DungeonDefinition::Movable(dungeon->world.at("maps").at(mapId),
+                            {region.at("x").get<float>(), region.at("y").get<float>()})) throw std::invalid_argument("Invalid dungeon quest region.");
+                    }
+                }
+            }
     }
 
     void RoomManager::SetSendHandler(SendHandler inSendHandler)
@@ -97,6 +117,11 @@ namespace GameRoomServer
                             });
                     });
                 self->rooms.emplace(roomId, room);
+                room->SetQuestTransport(self->processIncarnation, [weakSelf, roomId](std::string text)
+                {
+                    if (const auto manager = weakSelf.lock()) asio::dispatch(manager->strand, [manager, roomId, text = std::move(text)]
+                    { if (manager->rooms.contains(roomId)) manager->Send(Protocol::Encode(Protocol::QuestEvents{roomId, text})); });
+                });
                 room->Start();
 
                 result.succeeded = true;
@@ -304,6 +329,22 @@ namespace GameRoomServer
     }
 
     // Town disconnects must remove the same member from the authoritative room set.
+    void RoomManager::AcknowledgeQuests(Protocol::QuestEventsAck request)
+    {
+        asio::dispatch(strand, [self = shared_from_this(), request = std::move(request)]
+        { const auto room = self->rooms.find(request.roomId); if (room != self->rooms.end()) room->second->AcknowledgeQuests(request.json); });
+    }
+    void RoomManager::QuestContext(Protocol::QuestContextRequest request, std::function<void(Protocol::QuestContextResult)> handler)
+    {
+        asio::dispatch(strand, [self = shared_from_this(), request, handler = std::move(handler)]
+        {
+            const auto room = self->rooms.find(request.roomId);
+            if (room == self->rooms.end()) { handler(Protocol::QuestContextResult{request, ""}); return; }
+            room->second->QuestContext(request.playerId, [request, handler](std::string text)
+            { handler(Protocol::QuestContextResult{request, std::move(text)}); });
+        });
+    }
+
     void RoomManager::LeaveRoom(Protocol::LeaveRoom inRequest)
     {
         const auto self = shared_from_this();

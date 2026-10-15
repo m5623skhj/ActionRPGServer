@@ -58,7 +58,7 @@ namespace TownServer::Domain
         if (found == players.end() || found->second.session->GetAccountId() != found->second.accountId)
         { inHandler("Disconnected"); return; }
         auto& entry = found->second;
-        if (entry.saving || entry.itemUsePending) { inHandler("Busy"); return; }
+        if (entry.saving || entry.itemUsePending || QuestBusy(entry.session->GetSessionId())) { inHandler("Busy"); return; }
         Persistence::Request request;
         request.operation = Persistence::Operation::Save; request.accountId = entry.accountId;
         request.characterId = entry.persistentCharacterId; request.ownerToken = entry.ownerToken;
@@ -76,6 +76,12 @@ namespace TownServer::Domain
             handler = std::move(inHandler)](TownInstance& town, auto result) mutable
         {
             const auto found = town.players.find(inPlayerId);
+            if (!result.error && result.response)
+            {
+                const auto& state = result.response->states.front();
+                if ((state.result == 0 || state.result == 3) && state.generation == request.generation)
+                    town.ObserveQuestCharacter(sessionId, state);
+            }
             std::string status = "Disconnected";
             std::shared_ptr<Network::PlayerSession> failedSession;
             if (found != town.players.end() && found->second.session->GetSessionId() == sessionId
@@ -193,7 +199,7 @@ namespace TownServer::Domain
                 session->Send(TownProtocol::Encode(TownProtocol::InventoryOperationResponse{body.dump()}));
                 if (status == "Succeeded" || status == "RevisionConflict") town->SendInventoryState(entry, requestId);
             };
-            if (entry.saving || entry.itemUsePending) { reply("Busy"); return; }
+            if (entry.saving || entry.itemUsePending || self->QuestBusy(entry.session->GetSessionId())) { reply("Busy"); return; }
             const auto action = operation.at("action").get<std::string>();
             if (action == "Sell") { reply("NotImplemented"); return; }
             auto proposed = entry.inventory;
@@ -222,26 +228,14 @@ namespace TownServer::Domain
         {
             const auto found = self->players.find(inPlayerId);
             if (found == self->players.end()) { handler("Disconnected"); return; }
-            auto& entry = found->second; auto inventory = entry.inventory;
-            if (entry.saving || entry.itemUsePending) { handler("Busy"); return; }
-            std::string status = "Succeeded";
-            try
-            {
-                if (inExpectedRevision == entry.revision)
-                    status = inventory.Acquire(self->itemsCatalog, definitionId, inCount,
-                        [] { return Persistence::RandomHex(16); });
-            }
-            catch (...) { handler("IdentityUnavailable"); return; }
-            if (status != "Succeeded") { handler(status); return; }
-            self->SaveCharacter(inPlayerId, requestId, inExpectedRevision, entry.progression, std::move(inventory),
-                {{"action", "Acquire"}, {"definitionId", definitionId}, {"count", inCount}},
-                [weakTown = self->weak_from_this(), inPlayerId, requestId, handler = std::move(handler)](std::string status)
-            {
-                if (const auto town = weakTown.lock(); town && status == "Succeeded")
-                    if (const auto found = town->players.find(inPlayerId); found != town->players.end())
-                        town->SendInventoryState(found->second, requestId);
-                handler(std::move(status));
-            });
+            const auto runtime = self->questRuntimes.find(found->second.session->GetSessionId());
+            if (runtime == self->questRuntimes.end() || !runtime->second->loaded) { handler("Busy"); return; }
+            if (!ActionRPG::Items::IsHexId(requestId, 64) || !self->itemsCatalog.definitions.contains(definitionId)
+                || inCount == 0 || inCount > 1000000) { handler("InvalidRequest"); return; }
+            QuestWork work; work.internal = true; work.requestId = requestId;
+            work.command = {{"action", "Acquire"}, {"expectedRevision", std::to_string(inExpectedRevision)},
+                {"definitionId", definitionId}, {"count", inCount}};
+            work.done = std::move(handler); self->QueueQuest(runtime->second, std::move(work));
         });
     }
 

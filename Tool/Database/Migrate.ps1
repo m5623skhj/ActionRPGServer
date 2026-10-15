@@ -6,9 +6,11 @@ param(
     [switch]$ServicesStopped,
     [switch]$CreateDatabase,
     [switch]$InspectOnly,
-    [ValidateRange(0, 6)][int]$InspectVersion,
+    [ValidateRange(0, 7)][int]$InspectVersion,
     [switch]$RecoverBootstrap,
-    [switch]$RecoverAccounts
+    [switch]$RecoverAccounts,
+    [switch]$PermissionsOnly,
+    [switch]$SchemaOnly
 )
 
 Set-StrictMode -Version Latest
@@ -345,10 +347,12 @@ function Normalize-Check([string]$Sql, [switch]$Metadata) {
 
 function Get-Snapshot {
     Assert-Lock
-    $itemUse = (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_item_use_schema_migration_history'") -ceq '1'
+    $quest = (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_quest_schema_migration_history'") -ceq '1'
+    $itemUse = $quest -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_item_use_schema_migration_history'") -ceq '1'
     $inventory = $itemUse -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_inventory_schema_migration_history'") -ceq '1'
     $expanded = $inventory -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_character_schema_migration_history'") -ceq '1'
-    $snapshot = if ($itemUse) { Read-Sets 'CALL get_item_use_schema_migration_history()' }
+    $snapshot = if ($quest) { Read-Sets 'CALL get_quest_schema_migration_history()' }
+        elseif ($itemUse) { Read-Sets 'CALL get_item_use_schema_migration_history()' }
         elseif ($inventory) { Read-Sets 'CALL get_inventory_schema_migration_history()' }
         elseif ($expanded) { Read-Sets 'CALL get_character_schema_migration_history()' }
         else { Read-Sets 'CALL get_schema_migration_history()' }
@@ -356,13 +360,14 @@ function Get-Snapshot {
     if ($expanded) { $shapes += 6 }
     if ($inventory) { $shapes += @(6, 6, 6, 6, 6, 6, 6) }
     if ($itemUse) { $shapes += @(6, 6, 6, 6, 6, 6) }
+    if ($quest) { $shapes += @(6, 6, 6, 6, 6) }
     Assert-Condition ($snapshot.Sets.Count -eq $shapes.Count) 'Invalid history result set count.'
     for ($i = 0; $i -lt $shapes.Count; ++$i) {
         Assert-Condition ($snapshot.Sets[$i].Columns -eq $shapes[$i]) 'Invalid history result shape.'
     }
     Assert-Condition ($snapshot.Sets[0].Rows.Count -eq 1) 'Invalid history header.'
     $header = $snapshot.Sets[0].Rows[0]
-    $format = if ($itemUse) { '4' } elseif ($inventory) { '3' } elseif ($expanded) { '2' } else { '1' }
+    $format = if ($quest) { '5' } elseif ($itemUse) { '4' } elseif ($inventory) { '3' } elseif ($expanded) { '2' } else { '1' }
     Assert-Condition ($header[0] -ceq $format -and $header[1] -ceq 'sha256-utf8-lf-v1' -and
         $header[2] -ceq $Database -and $header[3] -match '^8\.0\.46(?:$|[-+])' -and $header[4] -notmatch 'MariaDB') 'Unsupported target/inspection format.'
     return $snapshot
@@ -451,9 +456,9 @@ function Assert-Rows($Actual, $Expected, [string]$Label) {
 }
 
 function Assert-Structure($Snapshot, [int]$Head) {
-    Assert-Condition ($Head -ge 0 -and $Head -le 6) 'Update the schema inspection contract before adding schema versions.'
-    $resultCount = if ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
-    $format = if ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
+    Assert-Condition ($Head -ge 0 -and $Head -le 7) 'Update the schema inspection contract before adding schema versions.'
+    $resultCount = if ($Head -ge 7) { 29 } elseif ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
+    $format = if ($Head -ge 7) { '5' } elseif ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
     Assert-Condition ($Snapshot.Sets.Count -eq $resultCount -and $Snapshot.Sets[0].Rows[0][0] -ceq $format) 'Inspector/version mismatch.'
     $columns = [System.Collections.Generic.List[object]]::new()
     $constraints = [System.Collections.Generic.List[object]]::new()
@@ -618,6 +623,59 @@ function Assert-Structure($Snapshot, [int]$Head) {
         $indexes.Add(@('character_item_uses','ix_character_item_uses_cooldown','1','2','definition_id',$null))
         $indexes.Add(@('character_item_uses','ix_character_item_uses_cooldown','1','3','cooldown_until',$null))
     }
+    if ($Head -ge 7) {
+        $columns.Add(@('character_quest_events','character_id','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_events','room_id','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_events','origin_incarnation','binary(16)','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_events','event_sequence','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_events','payload_hash','binary(32)','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_events','created_at','datetime(6)','NO',$null,'','InnoDB',$null,$null))
+        $constraints.Add(@('character_quest_events','PRIMARY','PRIMARY KEY','character_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quest_events','PRIMARY','PRIMARY KEY','room_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quest_events','PRIMARY','PRIMARY KEY','origin_incarnation',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quest_events','PRIMARY','PRIMARY KEY','event_sequence',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quest_events','fk_character_quest_events_character','FOREIGN KEY','character_id','characters','character_id',$null,$null,$Database,'RESTRICT','RESTRICT'))
+        $constraints.Add(@('character_quest_events','ck_character_quest_events_identity','CHECK',$null,$null,$null,(Normalize-Check "room_id > 0 AND event_sequence > 0"),'YES',$null,$null,$null))
+        $indexes.Add(@('character_quest_events','PRIMARY','0','1','character_id',$null))
+        $indexes.Add(@('character_quest_events','PRIMARY','0','2','room_id',$null))
+        $indexes.Add(@('character_quest_events','PRIMARY','0','3','origin_incarnation',$null))
+        $indexes.Add(@('character_quest_events','PRIMARY','0','4','event_sequence',$null))
+        $columns.Add(@('character_quest_tracking','character_id','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quest_tracking','tracking_json','json','NO',$null,'','InnoDB',$null,$null))
+        $constraints.Add(@('character_quest_tracking','PRIMARY','PRIMARY KEY','character_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quest_tracking','fk_character_quest_tracking_character','FOREIGN KEY','character_id','characters','character_id',$null,$null,$Database,'RESTRICT','RESTRICT'))
+        $constraints.Add(@('character_quest_tracking','ck_character_quest_tracking_json','CHECK',$null,$null,$null,(Normalize-Check "JSON_TYPE(tracking_json) = 'OBJECT'"),'YES',$null,$null,$null))
+        $indexes.Add(@('character_quest_tracking','PRIMARY','0','1','character_id',$null))
+        $columns.Add(@('character_quests','character_id','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','quest_id','varbinary(64)','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','cycle_key','varbinary(32)','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','status','varbinary(16)','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','accept_generation','bigint unsigned','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','state_json','json','NO',$null,'','InnoDB',$null,$null))
+        $columns.Add(@('character_quests','updated_at','datetime(6)','NO',$null,'','InnoDB',$null,$null))
+        $constraints.Add(@('character_quests','PRIMARY','PRIMARY KEY','character_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','PRIMARY','PRIMARY KEY','quest_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','PRIMARY','PRIMARY KEY','cycle_key',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','PRIMARY','PRIMARY KEY','accept_generation',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','uk_character_quests_generation','UNIQUE','character_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','uk_character_quests_generation','UNIQUE','quest_id',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','uk_character_quests_generation','UNIQUE','accept_generation',$null,$null,$null,$null,$null,$null,$null))
+        $constraints.Add(@('character_quests','fk_character_quests_character','FOREIGN KEY','character_id','characters','character_id',$null,$null,$Database,'RESTRICT','RESTRICT'))
+        $constraints.Add(@('character_quests','ck_character_quests_id','CHECK',$null,$null,$null,(Normalize-Check "OCTET_LENGTH(quest_id) > 0"),'YES',$null,$null,$null))
+        $constraints.Add(@('character_quests','ck_character_quests_cycle','CHECK',$null,$null,$null,(Normalize-Check "OCTET_LENGTH(cycle_key) > 0"),'YES',$null,$null,$null))
+        $constraints.Add(@('character_quests','ck_character_quests_status','CHECK',$null,$null,$null,(Normalize-Check "status IN (_binary'Active', _binary'ReadyToReport', _binary'RewardPending', _binary'Completed', _binary'Abandoned', _binary'Expired')"),'YES',$null,$null,$null))
+        $constraints.Add(@('character_quests','ck_character_quests_generation','CHECK',$null,$null,$null,(Normalize-Check "accept_generation > 0"),'YES',$null,$null,$null))
+        $constraints.Add(@('character_quests','ck_character_quests_json','CHECK',$null,$null,$null,(Normalize-Check "JSON_TYPE(state_json) = 'OBJECT'"),'YES',$null,$null,$null))
+        $indexes.Add(@('character_quests','PRIMARY','0','1','character_id',$null))
+        $indexes.Add(@('character_quests','PRIMARY','0','2','quest_id',$null))
+        $indexes.Add(@('character_quests','PRIMARY','0','3','cycle_key',$null))
+        $indexes.Add(@('character_quests','PRIMARY','0','4','accept_generation',$null))
+        $indexes.Add(@('character_quests','uk_character_quests_generation','0','1','character_id',$null))
+        $indexes.Add(@('character_quests','uk_character_quests_generation','0','2','quest_id',$null))
+        $indexes.Add(@('character_quests','uk_character_quests_generation','0','3','accept_generation',$null))
+        $indexes.Add(@('character_quests','ix_character_quests_live','1','1','character_id',$null))
+        $indexes.Add(@('character_quests','ix_character_quests_live','1','2','status',$null))
+    }
     $actualConstraints = [System.Collections.Generic.List[object]]::new()
     foreach ($row in $Snapshot.Sets[3].Rows) {
         if ($InspectOnly) { Write-Host ('Constraints raw: ' + (ConvertTo-Json -InputObject $row -Compress)) }
@@ -626,7 +684,7 @@ function Assert-Structure($Snapshot, [int]$Head) {
         $actualConstraints.Add($copy)
     }
     $orderedColumns = [System.Collections.Generic.List[object]]::new()
-    foreach ($table in @('account_identities','accounts','character_item_uses','character_items','character_operations','character_skills','character_state','characters','schema_migrations')) {
+    foreach ($table in @('account_identities','accounts','character_item_uses','character_items','character_operations','character_quest_events','character_quest_tracking','character_quests','character_skills','character_state','characters','schema_migrations')) {
         foreach ($column in $columns) { if ($column[0] -ceq $table) { $orderedColumns.Add($column) } }
     }
     Assert-Condition ((ConvertTo-Json -InputObject $Snapshot.Sets[2].Rows -Compress -Depth 4) -ceq
@@ -711,6 +769,34 @@ function Assert-Structure($Snapshot, [int]$Head) {
         $parameters.Add(@('cancel_item_use','9','IN','inDisposition','int unsigned',$null,$null))
         $parameters.Add(@('cancel_item_use','10','IN','inReason','varchar(64)','ascii','ascii_bin'))
     }
+    if ($Head -ge 7) {
+        $files += $script:catalog[7].Up
+        $parameters.Add(@('apply_quest_inventory','1','IN','inCharacterId','bigint unsigned',$null,$null))
+        $parameters.Add(@('apply_quest_inventory','2','IN','inProgressionJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('apply_quest_inventory','3','IN','inInventoryJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('emit_quest_state','1','IN','inResultCode','int',$null,$null))
+        $parameters.Add(@('emit_quest_state','2','IN','inCharacterId','bigint unsigned',$null,$null))
+        $parameters.Add(@('emit_quest_state','3','IN','inIncludeSnapshots','tinyint(1)',$null,$null))
+        $parameters.Add(@('emit_quest_state','4','IN','inServerNowMs','bigint unsigned',$null,$null))
+        $parameters.Add(@('emit_quest_state','5','IN','inQuestIdsJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('get_character_quests','1','IN','inAccountId','bigint unsigned',$null,$null))
+        $parameters.Add(@('get_character_quests','2','IN','inCharacterId','bigint unsigned',$null,$null))
+        $parameters.Add(@('get_character_quests','3','IN','inOwnerToken','varchar(64)','ascii','ascii_bin'))
+        $parameters.Add(@('get_character_quests','4','IN','inOwnerGeneration','bigint unsigned',$null,$null))
+        $parameters.Add(@('get_character_quests','5','IN','inQuestIdsJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('save_character_quests','1','IN','inAccountId','bigint unsigned',$null,$null))
+        $parameters.Add(@('save_character_quests','2','IN','inCharacterId','bigint unsigned',$null,$null))
+        $parameters.Add(@('save_character_quests','3','IN','inOwnerToken','varchar(64)','ascii','ascii_bin'))
+        $parameters.Add(@('save_character_quests','4','IN','inOwnerGeneration','bigint unsigned',$null,$null))
+        $parameters.Add(@('save_character_quests','5','IN','inRequestId','varchar(64)','ascii','ascii_bin'))
+        $parameters.Add(@('save_character_quests','6','IN','inExpectedRevision','bigint unsigned',$null,$null))
+        $parameters.Add(@('save_character_quests','7','IN','inMode','varchar(16)','ascii','ascii_bin'))
+        $parameters.Add(@('save_character_quests','8','IN','inOperationJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('save_character_quests','9','IN','inChangesJson','mediumtext','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('save_character_quests','10','IN','inProgressionJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('save_character_quests','11','IN','inInventoryJson','text','utf8mb4','utf8mb4_bin'))
+        $parameters.Add(@('save_character_quests','12','IN','inQuestIdsJson','text','utf8mb4','utf8mb4_bin'))
+    }
     $routineMap = @{}
     foreach ($file in $files) {
         foreach ($statement in $file.Statements) {
@@ -728,6 +814,7 @@ function Assert-Structure($Snapshot, [int]$Head) {
     if ($Head -ge 4) { $routineNames += 'get_character_schema_migration_history' }
     if ($Head -ge 5) { $routineNames += @('emit_character_state','list_characters','create_character','claim_character','save_character_state','release_character','get_inventory_schema_migration_history') }
     if ($Head -ge 6) { $routineNames += @('emit_item_use','reserve_item_use','get_item_use','complete_item_use','cancel_item_use','get_item_use_schema_migration_history') }
+    if ($Head -ge 7) { $routineNames += @('emit_quest_state','get_character_quests','save_character_quests','get_quest_schema_migration_history','apply_quest_inventory') }
     for ($i = 0; $i -lt $routineNames.Count; ++$i) {
         $set = $Snapshot.Sets[7 + $i]
         Assert-Condition ($set.Rows.Count -eq 1) 'Invalid SHOW CREATE row count.'
@@ -830,7 +917,7 @@ WHERE other.execution_id IS NULL AND failed.execution_id = ? AND failed.version 
     Assert-Condition ((Get-Head $final) -eq 0) 'Bootstrap recovery head mismatch.'
     Assert-Structure $final 0
     Assert-RecoveryObjects 0
-    Write-Host 'Recovery complete. Active version: V000000. Original FAILED audit preserved; run a separate normal Up to apply V000001..V000006.'
+    Write-Host 'Recovery complete. Active version: V000000. Original FAILED audit preserved; run a separate normal Up to apply V000001..V000007.'
 }
 
 function Invoke-AccountsRecovery {
@@ -882,7 +969,7 @@ WHERE later.execution_id IS NULL AND failed.execution_id = ? AND failed.version 
     Assert-Structure $final 1
     Assert-RecoveryObjects 1
     Assert-Condition ((Read-Scalar 'SELECT NOT EXISTS (SELECT 1 FROM accounts) AND NOT EXISTS (SELECT 1 FROM account_identities)') -ceq '1') 'Account data changed during recovery; inspect before proceeding.'
-    Write-Host 'Recovery complete. Active version: V000001. Original FAILED audit preserved; run a separate normal Up to apply V000002..V000006.'
+    Write-Host 'Recovery complete. Active version: V000001. Original FAILED audit preserved; run a separate normal Up to apply V000002..V000007.'
 }
 
 # RUNNING is committed before the first DDL. A crash/unknown completion remains
@@ -915,6 +1002,13 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
             $tableLocks = $true
             Assert-Condition ((Read-Scalar 'SELECT COUNT(*) FROM character_item_uses') -ceq '0') 'Down 000006 refused: pending or terminal use history exists.'
         }
+        if ($Action -eq 'DOWN' -and $Version -eq 7) {
+            [void](Invoke-Write 'LOCK TABLES character_quest_events WRITE, character_quest_tracking WRITE, character_quests WRITE, schema_migrations WRITE')
+            $tableLocks = $true
+            Assert-Condition ((Read-Scalar 'SELECT COUNT(*) FROM character_quest_events') -ceq '0' -and
+                (Read-Scalar 'SELECT COUNT(*) FROM character_quest_tracking') -ceq '0' -and
+                (Read-Scalar 'SELECT COUNT(*) FROM character_quests') -ceq '0') 'Down 000007 refused: quest state, tracking or event history exists.'
+        }
         $script:stage = "$Action version $Version"
         $file = if ($Action -eq 'UP') { $Up } else { $Down }
         $start = 0
@@ -930,7 +1024,7 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
             [void](Invoke-Write $file.Statements[$i])
             # The empty pair is gone atomically. CREATE/DROP routines must not run
             # with explicit table locks; the named migration lock remains owned.
-            if ($tableLocks -and $Action -eq 'DOWN' -and $Version -in @(4, 5, 6) -and $i -eq 0) {
+            if ($tableLocks -and $Action -eq 'DOWN' -and $Version -in @(4, 5, 6, 7) -and $i -eq 0) {
                 [void](Invoke-Write 'UNLOCK TABLES'); $tableLocks = $false
             }
         }
@@ -947,8 +1041,15 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
 
 try {
     $script:stage = 'operator confirmation'
+    . (Join-Path $PSScriptRoot 'RuntimePermissions.ps1')
     if ([string]::IsNullOrWhiteSpace($Database)) { $Database = Read-MigrationValue 'Target database' 'actionrpg' }
     Assert-Condition ($Database.Length -ge 1 -and $Database.Length -le 64) 'Database name must contain 1..64 characters.'
+    Assert-Condition (-not $PermissionsOnly.IsPresent -or ($Direction -eq 'Up' -and -not $SchemaOnly.IsPresent -and
+        -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent -and -not $RecoverBootstrap.IsPresent -and
+        -not $RecoverAccounts.IsPresent)) '-PermissionsOnly requires Up without creation, inspection, recovery or -SchemaOnly.'
+    Assert-Condition (-not $SchemaOnly.IsPresent -or (-not $InspectOnly.IsPresent -and
+        -not $RecoverBootstrap.IsPresent -and -not $RecoverAccounts.IsPresent)) '-SchemaOnly cannot be combined with inspection or recovery.'
+    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts) { Assert-RuntimeDatabaseName $Database }
     if (-not $ServicesStopped.IsPresent) {
         Write-Host "Requested direction: $Direction / database: $Database"
         $confirmation = Read-Host 'Stop all Auth/Town/Room and other DB-using services. Type Y or y to confirm'
@@ -977,7 +1078,7 @@ try {
         Assert-Condition ($version -gt 0 -and -not $script:catalog.ContainsKey($version)) 'Duplicate/reserved migration version.'
         $script:catalog.Add($version, [pscustomobject]@{ Name = $name; Up = (Read-SqlFile $item.FullName); Down = (Read-SqlFile (Join-Path (Join-Path $root 'Down') $item.Name)) })
     }
-    Assert-Condition ($script:catalog.Count -eq 6) 'Current schema inspection supports versions 000001..000006; extend the contract with new migrations.'
+    Assert-Condition ($script:catalog.Count -eq 7) 'Current schema inspection supports versions 000001..000007; extend the contract with new migrations.'
     for ($i = 1; $i -le $script:catalog.Count; ++$i) { Assert-Condition ($script:catalog.ContainsKey($i)) 'Migration version gap.' }
     Assert-Condition ((@(Get-ChildItem -LiteralPath (Join-Path $root 'Down') -Filter '*.sql' -File)).Count -eq $script:catalog.Count) 'Unexpected Down files.'
     Assert-Condition ((Normalize-Sql $script:catalog[1].Down.Statements[0]) -ceq 'drop table account_identities , accounts' -and
@@ -1002,6 +1103,13 @@ try {
         $restored = @($script:catalog[6].Down.Statements | Where-Object { $_ -match ('(?is)^CREATE\s+PROCEDURE\s+' + $routineName + '\b') })
         Assert-Condition ($original.Count -eq 1 -and $restored.Count -eq 1 -and
             (Normalize-Sql $original[0]) -ceq (Normalize-Sql $restored[0])) 'Down 000006 does not restore the exact V5 routine contract.'
+    }
+    Assert-Condition ($script:catalog[7].Up.Statements.Count -eq 8 -and
+        $script:catalog[7].Down.Statements.Count -eq 6 -and
+        (Normalize-Sql $script:catalog[7].Down.Statements[0]) -ceq 'drop table character_quest_events , character_quest_tracking , character_quests') 'Unsafe Down 000007 contract.'
+    foreach ($routineName in @('get_quest_schema_migration_history','save_character_quests','get_character_quests','emit_quest_state','apply_quest_inventory')) {
+        $drops = @($script:catalog[7].Down.Statements | Where-Object { (Normalize-Sql $_) -ceq ('drop procedure ' + $routineName) })
+        Assert-Condition ($drops.Count -eq 1) 'Down 000007 must drop only the declared quest routines.'
     }
     $script:stage = 'connection input'
     $secret = Get-MigrationConnectionString
@@ -1067,17 +1175,25 @@ try {
         return
     }
     if ($hasHistory -ceq '0') {
+        Assert-Condition (-not $PermissionsOnly.IsPresent) 'Permissions-only requires an existing verified schema; run normal Up first.'
         Assert-Condition ($Direction -eq 'Up') 'Unmanaged schema: Down requires a verified migration history.'
         $objects = Read-Scalar 'SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE())'
         Assert-Condition ($objects -ceq '0') 'Refusing to baseline a nonempty/unmanaged schema.'
-        Write-Host 'Plan: bootstrap V000000, then Up V000001 -> V000006.'
+        Write-Host 'Plan: bootstrap V000000, then Up V000001 -> V000007.'
         Invoke-Migration 0 'migration_history' 'UP' $script:bootstrap $null 0 -Bootstrap
     }
     $snapshot = Get-Snapshot
     $head = Get-Head $snapshot
     Assert-Structure $snapshot $head
+    if ($PermissionsOnly) {
+        $script:stage = 'runtime permissions (schema already verified; no migrations were run)'
+        Write-Host "Schema verified at V$('{0:D6}' -f $head). Synchronizing runtime EXECUTE only."
+        Sync-RuntimeDatabasePermissions $script:connection $Database $head { Assert-Lock }
+        Write-Host 'Complete. Runtime permissions synchronized and checked; no migration/audit update was made.'
+        return
+    }
     if ($Direction -eq 'Up') {
-        Write-Host "Plan: active V$('{0:D6}' -f $head) -> V000006; Up each pending version in order."
+        Write-Host "Plan: active V$('{0:D6}' -f $head) -> V000007; Up each pending version in order."
         for ($version = $head + 1; $version -le $script:catalog.Count; ++$version) {
             $file = $script:catalog[$version]
             Invoke-Migration $version $file.Name 'UP' $file.Up $file.Down $version
@@ -1091,7 +1207,14 @@ try {
     $final = Get-Snapshot
     $finalHead = Get-Head $final
     Assert-Structure $final $finalHead
-    Write-Host "Complete. Active version: V$('{0:D6}' -f $finalHead)."
+    Write-Host "Schema complete. Active version: V$('{0:D6}' -f $finalHead)."
+    if ($SchemaOnly) {
+        Write-Host 'Schema-only requested: runtime permissions were not synchronized or checked.'
+    } else {
+        $script:stage = 'runtime permissions (schema migrations already complete)'
+        Sync-RuntimeDatabasePermissions $script:connection $Database $finalHead { Assert-Lock }
+        Write-Host "Complete. Active version: V$('{0:D6}' -f $finalHead); runtime permissions synchronized and checked."
+    }
 } catch {
     # Any driver/framework exception may include connection details or SQL.
     # Only explicitly tagged, credential-free precondition messages are shown.
@@ -1101,10 +1224,16 @@ try {
         if ($exception.Data.Contains('SafeMigrationMessage')) { $detail = [string]$exception.Data['SafeMigrationMessage']; break }
         $exception = $exception.InnerException
     }
-    $operation = if ($InspectOnly) { 'Inspection' } elseif ($RecoverBootstrap -or $RecoverAccounts) { 'Recovery' } else { 'Migration' }
+    $operation = if ($PermissionsOnly -or $script:stage.StartsWith('runtime permissions')) { 'Permission preparation' }
+        elseif ($InspectOnly) { 'Inspection' } elseif ($RecoverBootstrap -or $RecoverAccounts) { 'Recovery' } else { 'Migration' }
     [Console]::Error.WriteLine("$operation stopped at $script:stage. $detail")
     if ($CreateDatabase) { [Console]::Error.WriteLine('Any successfully created database remains; database creation is not rolled back or recorded as a versioned migration.') }
-    [Console]::Error.WriteLine('Do not replay partial DDL or edit audit rows. Inspect actual schema and RUNNING/FAILED audit before an approved recovery.')
+    if ($script:stage.StartsWith('runtime permissions')) {
+        [Console]::Error.WriteLine('The schema was verified before permission preparation. Earlier GRANT statements may remain applied; no grants are rolled back.')
+        [Console]::Error.WriteLine("Retry Tool\Database\UpMigration.bat -Database $Database -PermissionsOnly after fixing credentials/permissions. Do not replay DDL or edit audit rows.")
+    } else {
+        [Console]::Error.WriteLine('Do not replay partial DDL or edit audit rows. Inspect actual schema and RUNNING/FAILED audit before an approved recovery.')
+    }
     exit 1
 } finally {
     $secret = $null

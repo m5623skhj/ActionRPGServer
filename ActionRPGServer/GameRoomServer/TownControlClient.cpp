@@ -143,6 +143,17 @@ namespace GameRoomServer
 
         switch (*type)
         {
+        case Protocol::PacketType::QuestEventsAck:
+        {
+            const auto packet = Protocol::DecodeQuestEventsAck(inPacket);
+            if (!packet) { session->Stop(); return; } roomManager->AcknowledgeQuests(*packet); return;
+        }
+        case Protocol::PacketType::QuestContextRequest:
+        {
+            const auto packet = Protocol::DecodeQuestContextRequest(inPacket); if (!packet) { session->Stop(); return; }
+            roomManager->QuestContext(*packet, [weak = weak_from_this()](Protocol::QuestContextResult result)
+            { if (const auto owner = weak.lock()) owner->Send(Protocol::Encode(result)); }); return;
+        }
         case Protocol::PacketType::ItemUseRequest:
         {
             const auto request = Protocol::DecodeItemUseRequest(inPacket);

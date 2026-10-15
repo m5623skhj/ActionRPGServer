@@ -150,6 +150,25 @@ namespace TownServer::Network
         });
     }
 
+    void RoomControlTcpServer::QuestContext(std::uint64_t roomId, std::uint64_t playerId, std::function<void(std::string)> handler)
+    {
+        asio::dispatch(GetExecutor(), [this, roomId, playerId, handler = std::move(handler)]() mutable
+        {
+            const auto route = roomToServerSession.find(roomId);
+            if (route == roomToServerSession.end() || !roomServers.contains(route->second) || pendingQuestContexts.size() >= 4096)
+            { handler(""); return; }
+            const auto id = nextRequestId++; auto timer = std::make_shared<asio::steady_timer>(GetExecutor());
+            timer->expires_after(std::chrono::seconds(5));
+            pendingQuestContexts.emplace(id, PendingItemUse{route->second, roomId, playerId, timer, std::move(handler)});
+            timer->async_wait([this, id](const asio::error_code& error)
+            {
+                if (error) return; const auto found = pendingQuestContexts.find(id); if (found == pendingQuestContexts.end()) return;
+                auto handler = std::move(found->second.handler); pendingQuestContexts.erase(found); handler("");
+            });
+            roomServers.at(route->second).session->Send(Protocol::Encode(Protocol::QuestContextRequest{id, roomId, playerId}));
+        });
+    }
+
     void RoomControlTcpServer::HandleAcceptedSession(
         std::shared_ptr<ActionRPG::Network::TcpSession> inSession)
     {
@@ -182,6 +201,12 @@ namespace TownServer::Network
 
     void RoomControlTcpServer::HandleClosedSession(const std::uint64_t inSessionId)
     {
+        for (auto iterator = pendingQuestContexts.begin(); iterator != pendingQuestContexts.end();)
+        {
+            if (iterator->second.serverSessionId != inSessionId) { ++iterator; continue; }
+            iterator->second.timer->cancel(); auto handler = std::move(iterator->second.handler);
+            iterator = pendingQuestContexts.erase(iterator); handler("");
+        }
         for (auto iterator = pendingItemUses.begin(); iterator != pendingItemUses.end();)
         {
             if (iterator->second.serverSessionId != inSessionId) { ++iterator; continue; }
@@ -265,6 +290,36 @@ namespace TownServer::Network
 
         switch (*type)
         {
+        case Protocol::PacketType::QuestEvents:
+        {
+            const auto packet = Protocol::DecodeQuestEvents(inPacket);
+            if (!packet || !roomToServerSession.contains(packet->roomId) || roomToServerSession.at(packet->roomId) != inSessionId)
+            { CloseInvalidSession(state); return; }
+            const auto weakSession = std::weak_ptr<ActionRPG::Network::TcpSession>(state.session);
+            townInstance->QuestEvents(packet->roomId, packet->json, [this, weakSession, inSessionId, packet = *packet](bool committed)
+            {
+                if (!weakSession.expired())
+                {
+                    asio::dispatch(GetExecutor(), [this, inSessionId, packet, committed]
+                    {
+                        const auto server = roomServers.find(inSessionId);
+                        if (committed && server != roomServers.end() && roomToServerSession.contains(packet.roomId)
+                            && roomToServerSession.at(packet.roomId) == inSessionId)
+                            server->second.session->Send(Protocol::Encode(Protocol::QuestEventsAck{packet}));
+                    });
+                }
+            }); return;
+        }
+        case Protocol::PacketType::QuestContextResult:
+        {
+            const auto packet = Protocol::DecodeQuestContextResult(inPacket);
+            if (!packet) { CloseInvalidSession(state); return; }
+            const auto found = pendingQuestContexts.find(packet->requestId); if (found == pendingQuestContexts.end()) return;
+            if (found->second.serverSessionId != inSessionId || found->second.roomId != packet->roomId || found->second.playerId != packet->playerId)
+            { CloseInvalidSession(state); return; }
+            found->second.timer->cancel(); auto handler = std::move(found->second.handler);
+            pendingQuestContexts.erase(found); handler(packet->json); return;
+        }
         case Protocol::PacketType::ItemUseResult:
         {
             const auto packet = Protocol::DecodeItemUseResult(inPacket);

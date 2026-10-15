@@ -17,7 +17,7 @@
   처음부터 몬스터가 없는 방은 바로 이동할 수 있습니다. 방 안에서의 이동은 기존대로 유지합니다.
   몬스터는 던전 인스턴스 생성 시 한 번만 만들며, 같은 진행 중 방을 다시 방문해도 처치 상태를 유지합니다.
   새로운 던전 인스턴스를 만들면 해당 인스턴스의 몬스터를 새로 생성합니다.
-- 아이템 카탈로그·드랍·인벤토리·보상 지급, 부활·전멸 종료, 장애물 경로 탐색은 이 구현에 포함되지 않습니다.
+- 퀘스트 제출·보상과 영속 인벤토리는 Town이 처리합니다. 전리품 드랍, 부활·전멸 종료, 장애물 경로 탐색은 포함되지 않습니다.
   기존 TownServer는 완료 통지를 받아 보상 대상만 기록합니다.
 - 빌드·게임 실행·기능 테스트는 수행하지 않았습니다. 정적 검토만으로 실제 플레이 동작을 보장하지 않습니다.
 
@@ -546,3 +546,28 @@ HP는 기본 actor 레코드에서 읽는다. 서버의 기존 frame 48KiB 한�
 최신 RT를 적용한 뒤 늦은 JSON이 MP나 마지막 명중 sequence/대상을 되돌리지 않도록 한다.
 룸 교체 시 sequence 기준을 새로 시작한다. Town SkillState의 자원은 Town HUD 전용이며 Dungeon의
 Room 자원 상태를 덮어쓰지 않는다. 서버·클라이언트를 함께 갱신해야 하며 빌드/실제 HUD 실행은 확인하지 않았다.
+
+## 퀘스트 진행 사실 전달
+
+RoomControl 기존 1~13은 유지하고 14 QuestEvents/15 QuestEventsAck/16 QuestContextRequest/
+17 QuestContextResult를 추가한다. 14/15는 roomId와 최대 16KiB JSON, 16은 requestId·roomId·
+playerId, 17은 같은 식별자와 최대 16KiB 권위 위치 JSON이다. 기존 BE 정수/text16 형식을 따른다.
+등록된 제어 연결과 roomToServerSession 경로가 일치하는 방의 사실만 Town이 처리한다.
+
+사실은 프로세스 incarnation 32자리 hex, 방의 단조 sequence 십진 문자열, dungeonId/mapId,
+kind(MonsterKilled/RegionReached/DungeonCleared), targetId와 creditedPlayerIds를 포함한다.
+처치는 HP 양수→0일 때 한 번 생성하고 같은 맵의 입장·worldReady 참여자에게 인정한다.
+사망한 참여자도 포함하며 다른 맵·미입장 플레이어는 제외한다. 지역 도달은 실제 도달한
+플레이어 한 명에게만 인정한다. 클리어는 마지막 보스 처치 맵의 같은 조건 참여자에게 인정한다.
+Town은 수락 전에 Room strand의 sequence·위치 barrier를 조회하여 수락 전 지연 사실을 제외하고,
+이미 도착한 장소 및 이후 단계의 Reach도 권위 현재 위치로 판정한다.
+
+방 outbox는 512개, 한 배치는 최대 32개/16KiB다. 같은 배치를 실제 시간 1초 간격으로
+재전송하며 Town의 DB 확정·중복 확인 뒤 받은 동일 ACK만 제거한다. 대기열이 가득 차면
+새 치명타와 클리어 전환을 보류하며 지역 진입은 등록하지 않고 다음 tick에서 다시 확인한다.
+퇴장 확인과 RoomEnded는 대기 사실 저장이 끝난 뒤 보낸다. 퀘스트 진행으로 증가한
+공유 캐릭터 revision도 UpdatePlayerProgress로 Room에 반영하며 HP를 초기화하지 않는다.
+
+outbox는 메모리이므로 DB 확정 전 프로세스 장애로 잃은 사실의 자동 복구는 보장하지 않는다.
+DB에 확정된 보상·처치는 요청 receipt와 Room fact 식별자로 중복 반영을 막는다.
+이번 구현은 정적 대조만 수행했으며 서버 실행·DB 적용·실제 전투 검증은 하지 않았다.

@@ -9,7 +9,7 @@ namespace GameRoomServer
         const auto self = shared_from_this();
         asio::dispatch(strand, [self, handler = std::move(inHandler)]()
         {
-            handler(std::all_of(self->itemUses.begin(), self->itemUses.end(),
+            handler(self->questOutbox.empty() && std::all_of(self->itemUses.begin(), self->itemUses.end(),
                 [](const auto& row) { return row.second.settled; }));
         });
     }

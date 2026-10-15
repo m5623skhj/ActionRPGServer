@@ -890,3 +890,51 @@ bidi 제어문자를 거절하고 한글·결합 문자·ZWJ emoji는 지원한�
 입장/귀환과 채팅 판정은 같은 strand에서 순서대로 처리하고, Send 이후 PlayerEntry 참조를 사용하지 않아
 송신 큐 초과로 즉시 접속 종료 처리가 이어져도 제거된 캐릭터 참조를 읽지 않는다.
 서버/클라이언트 선언과 코덱을 함께 배포한다. 이번 작업은 정적 계약 대조만 수행하며 실제 채팅 테스트는 하지 않았다.
+
+## 15. 영속 퀘스트와 NPC
+
+원본은 `Data/Quests.json` 한 곳이다. Town이 원본을 읽고 GameRoom 빌드 대상도 같은 파일을
+런타임 `Data/Quests.json`으로 복사한다. `Shared/QuestCatalog.h`는 정의·참조·용량을,
+`Shared/QuestState.h`는 단계와 진행도 규칙을 검사한다. 카테고리 Scenario/Normal/Event와
+반복 Once/Daily/Weekly는 독립적이며 UTC 일일 0시·월요일 0시 정책을 사용한다.
+수락 시 정의와 resetPolicy를 인스턴스에 보관하여 재설정·기존 보상 판정을 유지한다.
+기존 미완료 인스턴스가 참조하는 NPC와 아이템 정의는 유지해야 한다. 퀘스트 원본을 퇴역시켜도
+해당 NPC·제출/보상 아이템까지 삭제하면 기존 인스턴스의 보고·제출·보상이 차단된다.
+이벤트 visibility/acceptance/progress/reward는 별개의 UTC 반열린 구간이며 전투 tempo를 적용하지 않는다.
+
+Town 패킷 1~52는 유지하고 JSON 패킷 53 QuestStateRequest, 54 QuestStatePage,
+55 QuestActionRequest, 56 QuestActionResult를 추가했다. 요청은 2KiB, requestId는 64자리
+소문자 hex, expectedRevision과 characterId는 십진 문자열이다. Accept/Abandon/Report/Claim은
+questId·cycleKey, Talk은 npcId, Track은 최대 3개의 trackedQuestIds를 보낸다.
+위치·처치·획득·보상 수치는 클라이언트에서 받지 않는다. 전체 요청은 초당 5회/burst 10,
+조회는 초당 1회, NPC 대화는 초당 2회로 제한한다. NPC는 같은 Town 맵에서 거리 96 이내여야 한다.
+
+StatePage는 한 snapshotId·revision의 페이지를 전부 조립한 뒤 교체한다. 페이지는 14KiB,
+최대 48개/합계 512KiB이며 quests/npcs/itemDefinitions와 trackedQuestIds를 포함한다.
+표시 상태는 Available/Unavailable와 영속 Active/ReadyToReport/RewardPending/Completed/
+Abandoned/Expired를 사용한다. 현재 단계 objectives의 description은 선택 표시 문자열이다.
+정의 최대 64개/각 4KiB, NPC 32개, 단계·목표 각 8개, 고정 보상 8개, 선택 8묶음×8개,
+캐릭터의 진행·보고·미수령 인스턴스 합계는 16개다. 오래된 미수령 주기는 유지하며
+같은 주기의 미완료 퀘스트를 다시 수락하면 acceptGeneration을 증가시킨다.
+
+목표는 KillMonster/HoldItem/AcquireItem/Reach/TalkNpc/ClearDungeon이다. 현재 단계의 모든
+목표가 완료되어야 다음 단계로 이동하고 하나의 사실이 여러 단계에 중복 적용되지 않는다.
+HoldItem은 보상 수령 시 수락된 정의의 모든 단계에 필요한 수량을 아이템별로 합산하고,
+현재 미장착 가방에서 작은 스택부터 제출한다. 부족하면 상태·아이템·보상을 전부 변경하지 않는다.
+AcquireItem은 실제 신규 획득만 세며 로드·장착·이동·아이템 사용 취소 복원은 획득으로 세지 않는다.
+보상은 현재 지원하는 아이템과 스킬 포인트뿐이다. 자동 완료도 RewardPending까지만 진행하고
+명시적인 Claim에서 제출·보상·Completed를 한 DB 트랜잭션으로 확정한다.
+
+V7의 get_character_quests(5 IN)/save_character_quests(12 IN), 2개 결과 집합이 필요하다.
+캐릭터 claim 뒤 퀘스트 조회를 완료하기 전에는 게임 진입 성공을 보내지 않는다.
+캐릭터의 기존 owner token/generation/revision을 공유하며 퀘스트 큐(캐릭터당 64개),
+인벤토리 저장, 스킬 저장, 아이템 사용을 Town strand에서 직렬화한다. Progress는 가방을
+다시 쓰지 않으며 실제 획득은 Inventory, 제출·보상은 Claim 모드로 저장한다.
+같은 원본 요청은 같은 mode·operation·expectedRevision으로 DB receipt를 먼저 확인한다.
+Room fact는 별도의 incarnation/roomId/sequence 식별자로 중복 반영을 차단한다.
+기존 V0~V6 SQL은 유지하며 DB 담당의 V7·검증기·권한을 함께 적용해야 한다.
+
+초기 5개는 몰락한 성채 조사/후속 보고, 일일 갑옷병 순찰, 주간 돌멩이 제출,
+신규 돌멩이 획득 행사다. 마을 안내소는 실제 town_01 진입 위치를 사용하며
+무료 초기 아이템·자동 지급·새 이미지 자산은 추가하지 않았다.
+새 코드와 DB 계약은 정적으로 대조했다. 빌드·실행·DB 적용 및 실제 플레이 검증은 수행하지 않았다.

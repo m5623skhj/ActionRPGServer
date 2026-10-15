@@ -468,3 +468,27 @@ Packet:
         Name: code
       - Type: std::uint32_t
         Name: retryAfterMs
+
+  - Type: RequestPacket
+    PacketName: QuestStateRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: QuestStatePage
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: RequestPacket
+    PacketName: QuestActionRequest
+    Items:
+      - Type: std::string
+        Name: json
+
+  - Type: ReplyPacket
+    PacketName: QuestActionResult
+    Items:
+      - Type: std::string
+        Name: json

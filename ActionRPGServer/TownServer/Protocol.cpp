@@ -438,6 +438,14 @@ namespace TownProtocol
     { return EncodeJsonPacket(PacketType::InventoryOperationResponse, inPacket.json); }
     std::vector<std::uint8_t> Encode(const ItemDefinitionsResponse& inPacket)
     { return EncodeJsonPacket(PacketType::ItemDefinitionsResponse, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const QuestStatePage& inPacket)
+    { return EncodeJsonPacket(PacketType::QuestStatePage, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const QuestActionResult& inPacket)
+    { return EncodeJsonPacket(PacketType::QuestActionResult, inPacket.json); }
+    std::optional<QuestStateRequest> DecodeQuestStateRequest(const std::vector<std::uint8_t>& inPacket)
+    { if (inPacket.size() > 2052) return {}; return DecodeJsonPacket<QuestStateRequest>(inPacket, PacketType::QuestStateRequest); }
+    std::optional<QuestActionRequest> DecodeQuestActionRequest(const std::vector<std::uint8_t>& inPacket)
+    { if (inPacket.size() > 2052) return {}; return DecodeJsonPacket<QuestActionRequest>(inPacket, PacketType::QuestActionRequest); }
     std::optional<CharacterListRequest> DecodeCharacterListRequest(const std::vector<std::uint8_t>& inPacket)
     { return DecodeJsonPacket<CharacterListRequest>(inPacket, PacketType::CharacterListRequest); }
     std::optional<CharacterCreateRequest> DecodeCharacterCreateRequest(const std::vector<std::uint8_t>& inPacket)

@@ -21,7 +21,7 @@ namespace ActionRPG::Database
             std::wstring upChecksum;
             std::optional<std::wstring> downChecksum;
         };
-        using Deployment = std::array<Migration, 7>;
+        using Deployment = std::array<Migration, 8>;
 
         [[noreturn]] void InvalidSchema()
         {
@@ -99,9 +99,9 @@ namespace ActionRPG::Database
             const std::filesystem::path directory(Environment(L"ACTIONRPG_DB_MIGRATIONS_DIRECTORY"));
             if (!directory.is_absolute() || !std::filesystem::is_directory(directory)) InvalidSchema();
             Deployment deployment;
-            const std::array<std::wstring, 7> names{L"migration_history", L"create_login_accounts",
+            const std::array<std::wstring, 8> names{L"migration_history", L"create_login_accounts",
                 L"create_google_login_procedure", L"create_auth_account_status_procedure", L"create_characters_and_skills",
-                L"create_character_inventory_persistence", L"create_item_use_ledger"};
+                L"create_character_inventory_persistence", L"create_item_use_ledger", L"create_character_quests"};
             for (std::size_t version = 0; version < deployment.size(); ++version)
             {
                 auto& migration = deployment[version];
@@ -228,7 +228,7 @@ namespace ActionRPG::Database
             const auto& row = inResponse.resultSets[0].front();
             const auto& version = Required(row, 3);
             const auto comment = Lower(Required(row, 4));
-            if (Required(row, 0) != L"4" || Required(row, 1) != L"sha256-utf8-lf-v1"
+            if (Required(row, 0) != L"5" || Required(row, 1) != L"sha256-utf8-lf-v1"
                 || Required(row, 2) != inDatabase || (version != L"8.0.46" && !version.starts_with(L"8.0.46-")
                     && !version.starts_with(L"8.0.46+"))
                 || comment.find(L"mysql") == std::wstring::npos || comment.find(L"mariadb") != std::wstring::npos
@@ -509,6 +509,21 @@ namespace ActionRPG::Database
                 Column(L"character_operations", L"payload_hash", L"binary(32)", L"NO"),
                 Column(L"character_operations", L"revision", L"bigint unsigned", L"NO"),
                 Column(L"character_operations", L"created_at", L"datetime(6)", L"NO"),
+                Column(L"character_quest_events", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_quest_events", L"room_id", L"bigint unsigned", L"NO"),
+                Column(L"character_quest_events", L"origin_incarnation", L"binary(16)", L"NO"),
+                Column(L"character_quest_events", L"event_sequence", L"bigint unsigned", L"NO"),
+                Column(L"character_quest_events", L"payload_hash", L"binary(32)", L"NO"),
+                Column(L"character_quest_events", L"created_at", L"datetime(6)", L"NO"),
+                Column(L"character_quest_tracking", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_quest_tracking", L"tracking_json", L"json", L"NO"),
+                Column(L"character_quests", L"character_id", L"bigint unsigned", L"NO"),
+                Column(L"character_quests", L"quest_id", L"varbinary(64)", L"NO"),
+                Column(L"character_quests", L"cycle_key", L"varbinary(32)", L"NO"),
+                Column(L"character_quests", L"status", L"varbinary(16)", L"NO"),
+                Column(L"character_quests", L"accept_generation", L"bigint unsigned", L"NO"),
+                Column(L"character_quests", L"state_json", L"json", L"NO"),
+                Column(L"character_quests", L"updated_at", L"datetime(6)", L"NO"),
                 Column(L"character_skills", L"character_id", L"bigint unsigned", L"NO"),
                 Column(L"character_skills", L"skill_id", L"varbinary(64)", L"NO"),
                 Column(L"character_skills", L"skill_level", L"int unsigned", L"NO"),
@@ -586,6 +601,28 @@ namespace ActionRPG::Database
                 Check(L"character_item_uses", L"ck_character_item_uses_position", L"container = 2 AND slot < 40"),
                 Check(L"character_item_uses", L"ck_character_item_uses_definition", L"OCTET_LENGTH(definition_id) > 0"),
                 Check(L"character_item_uses", L"ck_character_item_uses_room", L"room_id > 0"),
+                {L"character_quest_events", L"PRIMARY", L"PRIMARY KEY", L"character_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quest_events", L"PRIMARY", L"PRIMARY KEY", L"room_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quest_events", L"PRIMARY", L"PRIMARY KEY", L"origin_incarnation", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quest_events", L"PRIMARY", L"PRIMARY KEY", L"event_sequence", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quest_events", L"fk_character_quest_events_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                {L"character_quest_events", L"ck_character_quest_events_identity", L"CHECK", {}, {}, {}, L"room_id > 0 AND event_sequence > 0", L"YES", {}, {}, {}},
+                {L"character_quest_tracking", L"PRIMARY", L"PRIMARY KEY", L"character_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quest_tracking", L"fk_character_quest_tracking_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                {L"character_quest_tracking", L"ck_character_quest_tracking_json", L"CHECK", {}, {}, {}, L"JSON_TYPE(tracking_json) = 'OBJECT'", L"YES", {}, {}, {}},
+                {L"character_quests", L"PRIMARY", L"PRIMARY KEY", L"character_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"PRIMARY", L"PRIMARY KEY", L"quest_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"PRIMARY", L"PRIMARY KEY", L"cycle_key", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"PRIMARY", L"PRIMARY KEY", L"accept_generation", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"uk_character_quests_generation", L"UNIQUE", L"character_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"uk_character_quests_generation", L"UNIQUE", L"quest_id", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"uk_character_quests_generation", L"UNIQUE", L"accept_generation", {}, {}, {}, {}, {}, {}, {}},
+                {L"character_quests", L"fk_character_quests_character", L"FOREIGN KEY", L"character_id", L"characters", L"character_id", {}, {}, inDatabase, L"RESTRICT", L"RESTRICT"},
+                {L"character_quests", L"ck_character_quests_id", L"CHECK", {}, {}, {}, L"OCTET_LENGTH(quest_id) > 0", L"YES", {}, {}, {}},
+                {L"character_quests", L"ck_character_quests_cycle", L"CHECK", {}, {}, {}, L"OCTET_LENGTH(cycle_key) > 0", L"YES", {}, {}, {}},
+                {L"character_quests", L"ck_character_quests_status", L"CHECK", {}, {}, {}, L"status IN (_binary'Active', _binary'ReadyToReport', _binary'RewardPending', _binary'Completed', _binary'Abandoned', _binary'Expired')", L"YES", {}, {}, {}},
+                {L"character_quests", L"ck_character_quests_generation", L"CHECK", {}, {}, {}, L"accept_generation > 0", L"YES", {}, {}, {}},
+                {L"character_quests", L"ck_character_quests_json", L"CHECK", {}, {}, {}, L"JSON_TYPE(state_json) = 'OBJECT'", L"YES", {}, {}, {}},
                 Primary(L"schema_migrations", L"execution_id"),
                 Check(L"schema_migrations", L"ck_migrations_completion",
                     L"(state = 'RUNNING' AND finished_at IS NULL) OR (state IN ('SUCCEEDED', 'FAILED') AND finished_at IS NOT NULL)"),
@@ -621,6 +658,20 @@ namespace ActionRPG::Database
                 {L"character_item_uses", L"ix_character_item_uses_cooldown", L"1", L"1", L"character_id", {}},
                 {L"character_item_uses", L"ix_character_item_uses_cooldown", L"1", L"2", L"definition_id", {}},
                 {L"character_item_uses", L"ix_character_item_uses_cooldown", L"1", L"3", L"cooldown_until", {}},
+                {L"character_quest_events", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"character_quest_events", L"PRIMARY", L"0", L"2", L"room_id", {}},
+                {L"character_quest_events", L"PRIMARY", L"0", L"3", L"origin_incarnation", {}},
+                {L"character_quest_events", L"PRIMARY", L"0", L"4", L"event_sequence", {}},
+                {L"character_quest_tracking", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"character_quests", L"PRIMARY", L"0", L"1", L"character_id", {}},
+                {L"character_quests", L"PRIMARY", L"0", L"2", L"quest_id", {}},
+                {L"character_quests", L"PRIMARY", L"0", L"3", L"cycle_key", {}},
+                {L"character_quests", L"PRIMARY", L"0", L"4", L"accept_generation", {}},
+                {L"character_quests", L"uk_character_quests_generation", L"0", L"1", L"character_id", {}},
+                {L"character_quests", L"uk_character_quests_generation", L"0", L"2", L"quest_id", {}},
+                {L"character_quests", L"uk_character_quests_generation", L"0", L"3", L"accept_generation", {}},
+                {L"character_quests", L"ix_character_quests_live", L"1", L"1", L"character_id", {}},
+                {L"character_quests", L"ix_character_quests_live", L"1", L"2", L"status", {}},
                 {L"schema_migrations", L"PRIMARY", L"0", L"1", L"execution_id", {}}});
         }
 
@@ -676,7 +727,7 @@ namespace ActionRPG::Database
         void ValidateRoutines(const SchemaHistoryResponse& inResponse, const Deployment& inDeployment)
         {
             struct Definition { std::wstring name; std::size_t version; std::wstring access; };
-            const std::array<Definition, 17> definitions{{
+            const std::array<Definition, 22> definitions{{
                 {L"get_schema_migration_history", 0, L"READS SQL DATA"},
                 {L"login_google_account", 2, L"MODIFIES SQL DATA"},
                 {L"get_auth_account_status", 3, L"READS SQL DATA"},
@@ -693,7 +744,12 @@ namespace ActionRPG::Database
                 {L"get_item_use", 6, L"MODIFIES SQL DATA"},
                 {L"complete_item_use", 6, L"MODIFIES SQL DATA"},
                 {L"cancel_item_use", 6, L"MODIFIES SQL DATA"},
-                {L"get_item_use_schema_migration_history", 6, L"READS SQL DATA"}
+                {L"get_item_use_schema_migration_history", 6, L"READS SQL DATA"},
+                {L"emit_quest_state", 7, L"READS SQL DATA"},
+                {L"get_character_quests", 7, L"READS SQL DATA"},
+                {L"save_character_quests", 7, L"MODIFIES SQL DATA"},
+                {L"get_quest_schema_migration_history", 7, L"READS SQL DATA"},
+                {L"apply_quest_inventory", 7, L"MODIFIES SQL DATA"}
             }};
             std::set<std::wstring> seen;
             for (const auto& row : inResponse.resultSets[5])
@@ -785,7 +841,32 @@ namespace ActionRPG::Database
                 {L"cancel_item_use", L"7", L"IN", L"inRoomIncarnation", L"varchar(32)", L"ascii", L"ascii_bin"},
                 {L"cancel_item_use", L"8", L"IN", L"inExecutionHash", L"varchar(64)", L"ascii", L"ascii_bin"},
                 {L"cancel_item_use", L"9", L"IN", L"inDisposition", L"int unsigned", {}, {}},
-                {L"cancel_item_use", L"10", L"IN", L"inReason", L"varchar(64)", L"ascii", L"ascii_bin"}
+                {L"cancel_item_use", L"10", L"IN", L"inReason", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"emit_quest_state", L"1", L"IN", L"inResultCode", L"int", {}, {}},
+                {L"emit_quest_state", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"emit_quest_state", L"3", L"IN", L"inIncludeSnapshots", L"tinyint(1)", {}, {}},
+                {L"emit_quest_state", L"4", L"IN", L"inServerNowMs", L"bigint unsigned", {}, {}},
+                {L"emit_quest_state", L"5", L"IN", L"inQuestIdsJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"get_character_quests", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"get_character_quests", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"get_character_quests", L"3", L"IN", L"inOwnerToken", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"get_character_quests", L"4", L"IN", L"inOwnerGeneration", L"bigint unsigned", {}, {}},
+                {L"get_character_quests", L"5", L"IN", L"inQuestIdsJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_quests", L"1", L"IN", L"inAccountId", L"bigint unsigned", {}, {}},
+                {L"save_character_quests", L"2", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"save_character_quests", L"3", L"IN", L"inOwnerToken", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"save_character_quests", L"4", L"IN", L"inOwnerGeneration", L"bigint unsigned", {}, {}},
+                {L"save_character_quests", L"5", L"IN", L"inRequestId", L"varchar(64)", L"ascii", L"ascii_bin"},
+                {L"save_character_quests", L"6", L"IN", L"inExpectedRevision", L"bigint unsigned", {}, {}},
+                {L"save_character_quests", L"7", L"IN", L"inMode", L"varchar(16)", L"ascii", L"ascii_bin"},
+                {L"save_character_quests", L"8", L"IN", L"inOperationJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_quests", L"9", L"IN", L"inChangesJson", L"mediumtext", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_quests", L"10", L"IN", L"inProgressionJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_quests", L"11", L"IN", L"inInventoryJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"save_character_quests", L"12", L"IN", L"inQuestIdsJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"apply_quest_inventory", L"1", L"IN", L"inCharacterId", L"bigint unsigned", {}, {}},
+                {L"apply_quest_inventory", L"2", L"IN", L"inProgressionJson", L"text", L"utf8mb4", L"utf8mb4_bin"},
+                {L"apply_quest_inventory", L"3", L"IN", L"inInventoryJson", L"text", L"utf8mb4", L"utf8mb4_bin"}
             });
         }
 

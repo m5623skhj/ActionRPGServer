@@ -78,7 +78,7 @@ namespace TownServer::Domain
                 }
             }
             catch (...) { session->Stop(); return; }
-            if (!self->characterRequests.emplace(sessionId).second)
+            if (self->questRuntimes.contains(sessionId) || !self->characterRequests.emplace(sessionId).second)
             {
                 SendCharacterResult(session, inType, {{"requestId", requestId}, {"result", "Busy"},
                     {"characterId", "0"}, {"revision", "0"}});
@@ -134,16 +134,18 @@ namespace TownServer::Domain
                         }
                         else
                         {
-                            town.EnterOnStrand(session, state, request.ownerToken, requestId);
-                            entered = session->GetPlayerId() != 0;
-                            if (entered)
+                            const auto snapshot = *result.response;
+                            town.BeginQuestEntry(session, state, request.ownerToken, requestId,
+                                [weak = town.weak_from_this(), session, identity, snapshot, sessionId]
                             {
-                                auto& entry = town.players.at(session->GetPlayerId());
-                                entry.cooldownsComplete = true; entry.itemCooldowns = Persistence::CooldownsJson(*result.response);
-                                // Recreate with the entered runtime PlayerId.
-                                town.itemUseServices[sessionId] = std::make_shared<ItemUseService>(town.shared_from_this(), session,
-                                    identity, *result.response);
-                            }
+                                if (const auto owner = weak.lock())
+                                {
+                                    auto& entry = owner->players.at(session->GetPlayerId());
+                                    entry.cooldownsComplete = true; entry.itemCooldowns = Persistence::CooldownsJson(snapshot);
+                                    owner->itemUseServices[sessionId] = std::make_shared<ItemUseService>(owner, session, identity, snapshot);
+                                }
+                            });
+                            entered = true; // The admission work now includes the V7 snapshot read.
                         }
                     }
                     if (!entered)
@@ -221,6 +223,7 @@ namespace TownServer::Domain
                 inState.definitionId, progression.level);
             inEntry.progression = std::move(progression); inEntry.inventory = std::move(inventory);
             inEntry.revision = inState.revision;
+            ObserveQuestCharacter(inEntry.session->GetSessionId(), inState);
             return true;
         }
         catch (...) { return false; }
@@ -236,7 +239,7 @@ namespace TownServer::Domain
 
     void TownInstance::DrainCharacterRelease(std::uint64_t inSessionId)
     {
-        if (!deferredAdmissionReleases.contains(inSessionId) || characterWork.contains(inSessionId)) return;
+        if (!deferredAdmissionReleases.contains(inSessionId) || characterWork.contains(inSessionId) || QuestBusy(inSessionId)) return;
         const auto retry = characterReleaseRetry.find(inSessionId);
         if (retry != characterReleaseRetry.end() && retry->second > std::chrono::steady_clock::now()) return;
         const auto use = itemUseServices.find(inSessionId);
@@ -268,6 +271,7 @@ namespace TownServer::Domain
             town.characterReleaseRetry.erase(inSessionId);
             town.characterReleases.erase(inSessionId); town.deferredAdmissionReleases.erase(inSessionId);
             town.itemUseServices.erase(inSessionId);
+            town.questRuntimes.erase(inSessionId);
             town.ReleaseAdmission(inSessionId);
         });
     }

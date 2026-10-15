@@ -605,7 +605,7 @@ function Start-Server([string] $name, [string] $directory, [string[]] $arguments
     $keep = @('ACTIONRPG_ROOM_CONTROL_KEY')
     if ($name -eq 'AuthServer') { $keep = @('ACTIONRPG_AUTH_TLS_CERT','ACTIONRPG_AUTH_TLS_KEY','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_GOOGLE_CLIENT_ID','ACTIONRPG_AUTH_TOWN_REGISTRY','ACTIONRPG_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
     if ($name -eq 'TownServer') { $keep += @('ACTIONRPG_TOWN_TLS_CERT','ACTIONRPG_TOWN_TLS_KEY','ACTIONRPG_AUTH_HOST','ACTIONRPG_AUTH_CA_FILE','ACTIONRPG_TOWN_ID','ACTIONRPG_TOWN_AUTH_KEY','ACTIONRPG_TOWN_DB_CONNECTION_STRING','ACTIONRPG_DB_SCHEMA','ACTIONRPG_DB_MIGRATIONS_DIRECTORY') }
-    $payload = @{ Name = $name; Executable = (Join-Path $directory ($name + '.exe')); Directory = $directory; Arguments = $arguments; Pipe = $pipeName; ManagedEnvironment = ($script:required + @('ACTIONRPG_ROOM_CONTROL_KEY')); KeepEnvironment = $keep } | ConvertTo-Json -Compress
+    $payload = @{ Name = $name; Executable = (Join-Path $directory ($name + '.exe')); Directory = $directory; Arguments = $arguments; Pipe = $pipeName; ManagedEnvironment = ($script:required + @('ACTIONRPG_ROOM_CONTROL_KEY','ACTIONRPG_MIGRATION_CONNECTION_STRING','ACTIONRPG_PERMISSION_CONNECTION_STRING')); KeepEnvironment = $keep } | ConvertTo-Json -Compress
     $payload64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     $runner = @'
 $ErrorActionPreference = 'Stop'
@@ -733,6 +733,20 @@ try {
     Require-AbsolutePath $sqlDirectory 'ACTIONRPG_DB_MIGRATIONS_DIRECTORY'
     if (!(Test-Path -LiteralPath $sqlDirectory -PathType Container)) { Fail 'Directory required: ACTIONRPG_DB_MIGRATIONS_DIRECTORY' }
     Assert-SqlFiles $sqlDirectory
+    $script:launchStage = 'Checking Auth/Town runtime procedure permissions before build or server startup'
+    Require-File (Join-Path $root 'Tool\Database\RuntimePermissions.ps1') 'runtime permission contract'
+    . (Join-Path $root 'Tool\Database\RuntimePermissions.ps1')
+    try {
+        $verifierSource = [IO.File]::ReadAllText((Join-Path $root 'ActionRPGServer\AuthServer\Database\LoginSchemaVerifier.h'))
+        $requiredVersion = [regex]::Match($verifierSource, 'REQUIRED_SCHEMA_VERSION\s*=\s*([0-9]+)\s*;')
+        if (!$requiredVersion.Success -or [int]$requiredVersion.Groups[1].Value -ne (Get-RuntimeSchemaVersion)) {
+            Fail 'Update RuntimePermissions.ps1 with the server schema version before launch.'
+        }
+        Assert-RuntimeDatabaseAccess $env:ACTIONRPG_DB_SCHEMA $env:ACTIONRPG_DB_CONNECTION_STRING $env:ACTIONRPG_TOWN_DB_CONNECTION_STRING
+    } catch {
+        if (!$script:failureMessage) { Fail (Get-RuntimePermissionFailure $_.Exception) }
+        throw
+    }
     # This launcher starts a local Auth instance; never accidentally probe a remote one.
     if ($env:ACTIONRPG_AUTH_HOST -notmatch '^[A-Za-z0-9.-]{1,253}\z') { Fail 'Hostname or IPv4 address required: ACTIONRPG_AUTH_HOST' }
     try {

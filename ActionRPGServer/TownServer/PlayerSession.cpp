@@ -175,6 +175,17 @@ namespace TownServer::Network
             town->InventoryRequest(shared_from_this(), *type, std::move(json));
             return;
         }
+        case TownProtocol::PacketType::QuestStateRequest:
+        case TownProtocol::PacketType::QuestActionRequest:
+        {
+            std::string json;
+            if (*type == TownProtocol::PacketType::QuestStateRequest)
+            { const auto request = TownProtocol::DecodeQuestStateRequest(inPacket); if (request) json = request->json; }
+            else
+            { const auto request = TownProtocol::DecodeQuestActionRequest(inPacket); if (request) json = request->json; }
+            if (json.empty() || GetPlayerId() == 0) { Stop(); return; }
+            town->QuestRequest(shared_from_this(), *type, std::move(json)); return;
+        }
         case TownProtocol::PacketType::EnterTownRequest:
         {
             // Character identity, name and definition must originate from the owned DB row.

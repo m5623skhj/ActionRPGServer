@@ -43,6 +43,7 @@ namespace TownServer::Network
             std::function<void(std::string)> inHandler);
         void LeaveRoom(ActionRPG::RoomControlProtocol::RoomId inRoomId,
             ActionRPG::RoomControlProtocol::PlayerId inPlayerId, std::function<void()> inReleased = {});
+        void QuestContext(std::uint64_t inRoomId, std::uint64_t inPlayerId, std::function<void(std::string)> inHandler);
 
     private:
         struct PendingRelease
@@ -57,6 +58,7 @@ namespace TownServer::Network
             std::function<void(std::string)> handler;
         };
         std::unordered_map<std::uint64_t, PendingItemUse> pendingItemUses;
+        std::unordered_map<std::uint64_t, PendingItemUse> pendingQuestContexts;
         std::map<std::pair<std::uint64_t, std::uint64_t>, PendingRelease> pendingReleases;
         struct RoomServerState
         {

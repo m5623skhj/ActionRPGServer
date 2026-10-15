@@ -26,7 +26,11 @@ namespace ActionRPG::RoomControlProtocol
         RoomStarted = 10,
         UpdatePlayerProgress = 11,
         ItemUseRequest = 12,
-        ItemUseResult = 13
+        ItemUseResult = 13,
+        QuestEvents = 14,
+        QuestEventsAck = 15,
+        QuestContextRequest = 16,
+        QuestContextResult = 17
     };
 
     enum class RoomEndReason : std::uint8_t
@@ -102,6 +106,18 @@ namespace ActionRPG::RoomControlProtocol
         std::string json;
     };
     struct ItemUseResult : ItemUseRequest {};
+    struct QuestEvents { RoomId roomId{}; std::string json; };
+    struct QuestEventsAck : QuestEvents {};
+    struct QuestContextRequest { RequestId requestId{}; RoomId roomId{}; PlayerId playerId{}; };
+    struct QuestContextResult : QuestContextRequest { std::string json; };
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestEvents& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestEventsAck& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestContextRequest& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestContextResult& inPacket);
+    [[nodiscard]] std::optional<QuestEvents> DecodeQuestEvents(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<QuestEventsAck> DecodeQuestEventsAck(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<QuestContextRequest> DecodeQuestContextRequest(const std::vector<std::uint8_t>& inPacket);
+    [[nodiscard]] std::optional<QuestContextResult> DecodeQuestContextResult(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ItemUseRequest& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ItemUseResult& inPacket);
     [[nodiscard]] std::optional<ItemUseRequest> DecodeItemUseRequest(const std::vector<std::uint8_t>& inPacket);

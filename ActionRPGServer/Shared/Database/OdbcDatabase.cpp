@@ -19,8 +19,9 @@ namespace ActionRPG::Database
         constexpr std::size_t MAX_CONNECTION_COUNT = 16;
         constexpr std::size_t MAX_PENDING_REQUESTS = 4096;
         constexpr std::size_t MAX_PARAMETER_COUNT = 64;
+        constexpr std::size_t MAX_INPUT_STRING_CHARACTERS = 262144;
         constexpr std::size_t MAX_RESULT_ROWS = 4096;
-        constexpr std::size_t MAX_RESULT_SETS = 24;
+        constexpr std::size_t MAX_RESULT_SETS = 29;
         constexpr std::size_t MAX_RESULT_TRANSITIONS = 64;
         constexpr std::size_t MAX_RESULT_BYTES = 4 * 1024 * 1024;
 
@@ -257,13 +258,13 @@ namespace ActionRPG::Database
                     {
                         static_assert(sizeof(wchar_t) == sizeof(SQLWCHAR));
                         const std::size_t inputLength = value.size();
-                        if (inputLength > MAX_STRING_CHARACTERS || (!inputOnly
+                        if (inputLength > (inputOnly ? MAX_INPUT_STRING_CHARACTERS : MAX_STRING_CHARACTERS) || (!inputOnly
                             && (parameter.stringCapacity == 0 || parameter.stringCapacity > MAX_STRING_CHARACTERS
                                 || inputLength > parameter.stringCapacity)))
                             Fail(DatabaseErrorCode::InvalidProcedure, "Procedure string exceeds its binding capacity.");
                         if (!inputOnly) value.resize(parameter.stringCapacity + 1, L'\0');
                         cType = SQL_C_WCHAR;
-                        sqlType = SQL_WVARCHAR;
+                        sqlType = inputOnly && inputLength > MAX_STRING_CHARACTERS ? SQL_WLONGVARCHAR : SQL_WVARCHAR;
                         columnSize = std::max<std::size_t>(1, inputOnly ? inputLength : parameter.stringCapacity);
                         buffer = value.data();
                         bufferLength = static_cast<SQLLEN>((inputOnly ? inputLength + 1 : value.size()) * sizeof(wchar_t));

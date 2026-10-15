@@ -68,6 +68,7 @@ namespace GameRoomServer
         Keys(source, { "version", "tempoScale", "player", "reactions", "monsters" });
         Require(source.at("version") == 3, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
+        result->quests = ActionRPG::Quests::Catalog::Load(inPath.parent_path() / "Quests.json");
         result->tempo = ActionRPG::Combat::CombatTempo::Parse(source.value("tempoScale", Json(1.0)));
         const auto& player = source.at("player");
         Keys(player, { "maxHp", "maxMp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });

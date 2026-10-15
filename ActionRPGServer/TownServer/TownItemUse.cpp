@@ -79,6 +79,7 @@ namespace TownServer::Domain
         if (state.characterId != identity.characterId || state.generation != identity.generation) return false;
         snapshot = std::move(inSnapshot);
         pending = snapshot.use->state == 1 || !snapshot.use->pendingRequestId.empty();
+        owner->ObserveQuestCharacter(sessionId, snapshot.states.front());
         const auto found = owner->players.find(playerId);
         if (found != owner->players.end() && found->second.session->GetSessionId() == sessionId
             && found->second.ownerToken == identity.ownerToken && found->second.ownerGeneration == identity.generation)
@@ -100,7 +101,7 @@ namespace TownServer::Domain
         action = "Use"; stateQuery = false;
         const auto owner = town.lock(); if (!owner) return;
         const auto found = owner->players.find(playerId);
-        if (found == owner->players.end() || found->second.saving) { Publish("Busy"); return; }
+        if (found == owner->players.end() || found->second.saving || owner->QuestBusy(sessionId)) { SendBusy(replyRequestId, "Use"); return; }
         inFlight = true;
         auto request = identity; request.operation = UseOperation::Get; request.requestId = requestId;
         const auto self = shared_from_this();
@@ -271,6 +272,9 @@ namespace TownServer::Domain
     void ItemUseService::Query(std::string inRequestId, bool inInventoryState)
     {
         if (ownershipLost) return;
+        if (const auto owner = town.lock())
+            if (const auto entry = owner->players.find(playerId); entry != owner->players.end() && entry->second.saving)
+            { if (!inInventoryState) SendBusy(inRequestId, "UseStatus"); return; }
         if (inFlight) { if (!inInventoryState) SendBusy(inRequestId, "UseStatus"); return; }
         requestId = std::move(inRequestId); replyRequestId = requestId;
         action = "UseStatus"; stateQuery = inInventoryState; inFlight = true;
@@ -379,12 +383,17 @@ namespace TownServer::Domain
                 && !snapshot.states.empty() && currentSession->GetPlayerId() == 0)
             {
                 auto character = snapshot.states.front(); character.result = 0;
-                owner->EnterOnStrand(currentSession, character, identity.ownerToken, selectionId);
-                recoveringClaim = false; playerId = currentSession->GetPlayerId();
+                recoveringClaim = false;
                 if (recoveryTimer) recoveryTimer->cancel();
-                const auto entered = owner->players.find(playerId);
-                if (entered != owner->players.end())
-                { entered->second.cooldownsComplete = true; entered->second.itemCooldowns = Persistence::CooldownsJson(snapshot); }
+                owner->BeginQuestEntry(currentSession, character, identity.ownerToken, selectionId, [self = shared_from_this()]
+                {
+                    const auto owner = self->town.lock(); const auto session = self->session.lock();
+                    if (!owner || !session) return;
+                    self->playerId = session->GetPlayerId();
+                    const auto entered = owner->players.find(self->playerId);
+                    if (entered != owner->players.end())
+                    { entered->second.cooldownsComplete = true; entered->second.itemCooldowns = Persistence::CooldownsJson(self->snapshot); }
+                });
             }
             else
             {

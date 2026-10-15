@@ -1,0 +1,324 @@
+{
+  "format": "Quests",
+  "schemaVersion": 1,
+  "resetPolicy": {
+    "timezone": "UTC",
+    "dailyHour": 0,
+    "weeklyDay": "Monday",
+    "weeklyHour": 0
+  },
+  "npcs": [
+    {
+      "id": "TownGuide",
+      "name": "마을 안내소",
+      "mapId": "town_01",
+      "x": 908.35791015625,
+      "y": 1366.0780029296875
+    }
+  ],
+  "quests": [
+    {
+      "id": "Scenario.CitadelIntro",
+      "version": 1,
+      "title": "몰락한 성채 조사",
+      "description": "몰락한 성채 조사",
+      "category": "Scenario",
+      "repeat": "Once",
+      "accept": {
+        "mode": "Npc",
+        "minLevel": 1,
+        "prerequisites": [],
+        "mapIds": [
+          "town_01"
+        ],
+        "npcId": "TownGuide"
+      },
+      "complete": {
+        "mode": "NpcReport",
+        "npcId": "TownGuide"
+      },
+      "event": null,
+      "steps": [
+        {
+          "id": "Step1",
+          "objectives": [
+            {
+              "id": "TalkGuide",
+              "type": "TalkNpc",
+              "target": {
+                "npcId": "TownGuide"
+              },
+              "count": 1,
+              "description": "마을 안내소와 조사 계획 이야기하기"
+            }
+          ]
+        },
+        {
+          "id": "Step2",
+          "objectives": [
+            {
+              "id": "ReachGuardroom",
+              "type": "Reach",
+              "target": {
+                "mapId": "FallenCitadel_Guardroom"
+              },
+              "count": 1,
+              "description": "몰락한 성채 경비실에 도달하기"
+            },
+            {
+              "id": "DefeatSoldiers",
+              "type": "KillMonster",
+              "target": {
+                "monsterDataId": 2
+              },
+              "count": 2,
+              "description": "녹슨 갑옷병 처치하기"
+            }
+          ]
+        },
+        {
+          "id": "Step3",
+          "objectives": [
+            {
+              "id": "ClearCitadel",
+              "type": "ClearDungeon",
+              "target": {
+                "dungeonId": 5
+              },
+              "count": 1,
+              "description": "몰락한 성채 클리어하기"
+            }
+          ]
+        }
+      ],
+      "fixedRewards": [
+        {
+          "type": "SkillPoints",
+          "amount": 1
+        }
+      ],
+      "choiceRewards": [
+        {
+          "id": "Stone",
+          "rewards": [
+            {
+              "type": "Item",
+              "definitionId": "Stone",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "Strawberry",
+          "rewards": [
+            {
+              "type": "Item",
+              "definitionId": "UnripeStrawberry",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Scenario.CitadelReport",
+      "version": 1,
+      "title": "다음 조사를 위한 보고",
+      "description": "다음 조사를 위한 보고",
+      "category": "Scenario",
+      "repeat": "Once",
+      "accept": {
+        "mode": "Automatic",
+        "minLevel": 1,
+        "prerequisites": [
+          "Scenario.CitadelIntro"
+        ],
+        "mapIds": [
+          "town_01"
+        ],
+        "npcId": null
+      },
+      "complete": {
+        "mode": "Automatic",
+        "npcId": null
+      },
+      "event": null,
+      "steps": [
+        {
+          "id": "Step1",
+          "objectives": [
+            {
+              "id": "ReturnGuide",
+              "type": "TalkNpc",
+              "target": {
+                "npcId": "TownGuide"
+              },
+              "count": 1,
+              "description": "마을 안내소에 다음 조사 보고하기"
+            }
+          ]
+        }
+      ],
+      "fixedRewards": [
+        {
+          "type": "SkillPoints",
+          "amount": 1
+        }
+      ],
+      "choiceRewards": []
+    },
+    {
+      "id": "Normal.CitadelPatrol",
+      "version": 1,
+      "title": "일일 성채 순찰",
+      "description": "일일 성채 순찰",
+      "category": "Normal",
+      "repeat": "Daily",
+      "accept": {
+        "mode": "List",
+        "minLevel": 1,
+        "prerequisites": [],
+        "mapIds": [],
+        "npcId": null
+      },
+      "complete": {
+        "mode": "Automatic",
+        "npcId": null
+      },
+      "event": null,
+      "steps": [
+        {
+          "id": "Step1",
+          "objectives": [
+            {
+              "id": "PatrolSoldier",
+              "type": "KillMonster",
+              "target": {
+                "monsterDataId": 2
+              },
+              "count": 1,
+              "description": "녹슨 갑옷병 처치하기"
+            }
+          ]
+        }
+      ],
+      "fixedRewards": [
+        {
+          "type": "SkillPoints",
+          "amount": 1
+        },
+        {
+          "type": "Item",
+          "definitionId": "Stone",
+          "count": 1
+        }
+      ],
+      "choiceRewards": []
+    },
+    {
+      "id": "Normal.GuideSupplies",
+      "version": 1,
+      "title": "안내소 주간 물자 제출",
+      "description": "안내소 주간 물자 제출",
+      "category": "Normal",
+      "repeat": "Weekly",
+      "accept": {
+        "mode": "Npc",
+        "minLevel": 1,
+        "prerequisites": [],
+        "mapIds": [],
+        "npcId": "TownGuide"
+      },
+      "complete": {
+        "mode": "NpcReport",
+        "npcId": "TownGuide"
+      },
+      "event": null,
+      "steps": [
+        {
+          "id": "Step1",
+          "objectives": [
+            {
+              "id": "PrepareStone",
+              "type": "HoldItem",
+              "target": {
+                "itemDefinitionId": "Stone"
+              },
+              "count": 2,
+              "description": "돌멩이 2개를 준비하여 보상 수령 시 제출하기"
+            }
+          ]
+        }
+      ],
+      "fixedRewards": [
+        {
+          "type": "SkillPoints",
+          "amount": 2
+        }
+      ],
+      "choiceRewards": []
+    },
+    {
+      "id": "Event.CitadelGathering",
+      "version": 1,
+      "title": "성채 조사 행사",
+      "description": "성채 조사 행사",
+      "category": "Event",
+      "repeat": "Daily",
+      "accept": {
+        "mode": "List",
+        "minLevel": 1,
+        "prerequisites": [],
+        "mapIds": [],
+        "npcId": null
+      },
+      "complete": {
+        "mode": "Automatic",
+        "npcId": null
+      },
+      "event": {
+        "id": "CitadelGathering2026",
+        "visibility": {
+          "startUtc": "2026-10-01T00:00:00Z",
+          "endUtc": "2027-01-01T00:00:00Z"
+        },
+        "acceptance": {
+          "startUtc": "2026-10-01T00:00:00Z",
+          "endUtc": "2026-12-31T00:00:00Z"
+        },
+        "progress": {
+          "startUtc": "2026-10-01T00:00:00Z",
+          "endUtc": "2027-01-01T00:00:00Z"
+        },
+        "reward": {
+          "startUtc": "2026-10-01T00:00:00Z",
+          "endUtc": "2027-01-08T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "id": "Step1",
+          "objectives": [
+            {
+              "id": "AcquireStone",
+              "type": "AcquireItem",
+              "target": {
+                "itemDefinitionId": "Stone"
+              },
+              "count": 1,
+              "description": "보상이나 획득으로 돌멩이 새로 얻기"
+            }
+          ]
+        }
+      ],
+      "fixedRewards": [
+        {
+          "type": "Item",
+          "definitionId": "UnripeStrawberry",
+          "count": 1
+        }
+      ],
+      "choiceRewards": []
+    }
+  ]
+}

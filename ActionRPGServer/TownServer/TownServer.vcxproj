@@ -158,6 +158,7 @@
     <ClCompile Include="TownCharacters.cpp" />
     <ClCompile Include="TownInventory.cpp" />
     <ClCompile Include="TownItemUse.cpp" />
+    <ClCompile Include="TownQuests.cpp" />
     <ClCompile Include="..\AuthServer\Database\LoginSchemaVerifier.cpp" />
     <ClCompile Include="..\AuthServer\Database\SchemaHistoryProcedure.cpp" />
     <ClCompile Include="..\Shared\RoomControlProtocol.cpp" />
@@ -197,6 +198,9 @@
     <ClInclude Include="..\Shared\Inventory.h" />
     <ClInclude Include="..\Shared\CharacterRuntimeState.h" />
     <ClInclude Include="Database\CharacterStoreProcedure.h" />
+    <ClInclude Include="Database\QuestStoreProcedure.h" />
+    <ClInclude Include="..\Shared\QuestCatalog.h" />
+    <ClInclude Include="..\Shared\QuestState.h" />
     <ClInclude Include="Database\ItemUseResult.h" />
     <ClInclude Include="Database\ItemUseStoreProcedure.h" />
     <ClInclude Include="ItemUseService.h" />
@@ -206,6 +210,7 @@
   <ItemGroup>
     <None Include="Data\DungeonCatalog.json" />
     <None Include="Data\Items.json" />
+    <None Include="Data\Quests.json" />
     <None Include="Data\TownMap.json" />
     <None Include="Data\TownMapCapital.json" />
     <None Include="Data\TownMapHarbor.json" />

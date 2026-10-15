@@ -659,6 +659,80 @@ Auth에는 get_item_use_schema_migration_history의 EXECUTE를 추가한다.
 내부 emit_item_use/emit_character_state에는 runtime 직접 EXECUTE를 주지 않는다.
 이 저장소의 V6 파일 존재는 실제 DB 적용을 증명하지 않는다.
 
+## 퀘스트 진행·보상 저장 V000007
+
+V7은 소스 작성이며 실제 DB 적용을 뜻하지 않는다. 기존 V0~V6 원문/체크섬과 claim4 IN/
+3결과셋, save_character_state9 IN/1결과셋, release4 IN/1결과셋은 유지한다.
+새 Auth/Town은 head7을 요구한다. 서비스 정지 → 사용자 수동 Up → 신규 EXECUTE →
+같은 SQL·새 Auth/Town/Room 배포 순서다. 자동 DB 적용이나 GRANT는 하지 않는다.
+
+* character_quests는 PK(character_id,quest_id,cycle_key,accept_generation), 캐릭터 FK,
+  UNIQUE(character_id,quest_id,accept_generation), live 상태 인덱스를 가진다.
+  같은 주기 재수락은 새 세대 행이며 Completed/Abandoned/Expired 원문도 보존한다.
+* character_quest_tracking은 캐릭터 PK/FK와 tracking_json={trackedQuestIds:[최대3]}다.
+* character_quest_events는 PK(character_id,room_id,origin_incarnation,event_sequence),
+  캐릭터 FK와 원본 SHA256을 저장한다. 요청 ID가 달라도 같은 사건은 재적용하지 않는다.
+
+| 공개 SP | IN | 순서 |
+|---|---:|---|
+| get_character_quests | 5 | accountId,characterId,ownerToken,ownerGeneration,questIdsJson |
+| save_character_quests | 12 | 앞4개,requestId,expectedRevision,mode,operationJson,changesJson,progressionJson,inventoryJson,questIdsJson |
+
+숫자 입력은 U64, ownerToken/requestId는64자리 lowercase hex다. mode는 Progress/Inventory/Claim.
+Progress 성장·가방은 SQL NULL이며 실제 가방 쓰기를 하지 않는다. Inventory/Claim 성공은
+성장·가방 전체 snapshot을 함께 저장한다. changesJson은 upserts≤32/UTF8≤256KiB이고
+각 행은 {questId,cycleKey,state}, optional trackedQuestIds를 포함한다. questIdsJson은 현재
+catalog ASCII ID 배열(고유·정렬·≤64·UTF8≤8KiB)로 응답 Summary만 제한한다. 원본문령 hash에
+포함하지 않으며 생애 퀘스트 고유 ID 수를64로 제한하거나 과거 이력을 삭제하지 않는다.
+
+Instance 필수키는 kind/questId/cycleKey/definitionVersion/acceptGeneration/state/stageIndex/
+counters/definition/resetPolicy/acceptedAtMs/updatedAtMs/roomCursor다. counters≤8×8,
+정의 snapshot≤4KiB, canonical state_json≤8KiB다. 목표의 optional description은 정의의 일부다.
+stageIndex는 마지막 단계 완료 시 단계 개수와 같다. ID·세대·UTC ms는 JSON10진 문자열,
+정의버전·단계·카운터는 정수다. definition.id/version과 행 ID/버전이 일치해야 한다.
+같은 세대의 definition/resetPolicy/acceptedAtMs는 불변이며 재수락 세대는 모든 주기의 MAX+1.
+resetPolicy={timezone:UTC,dailyHour:0..23,weeklyDay:Monday,weeklyHour:0..23}를 수락 시 고정한다.
+Once는 once, Daily는 reset hour를 뺀 UTC 날짜, Weekly는 그 UTC 주 월요일 날짜다.
+definition.event=null 또는 id/visibility/acceptance/progress/reward이며 각 기간은
+{startUtc,endUtc}, ISO UTC20자 YYYY-MM-DDTHH:MM:SSZ의 [start,end)다. SQL은 수락·진행·보상
+해당 snapshot 기간/주기를 검증하고 수락·갱신 시각을 SQL UTC로 확정한다.
+
+공개 두 SP는 항상2결과셋이다. set0은8열1행: result_code I32,character_id U64,revision U64,
+owner_generation U64,server_now_ms U64,progression_json nullable text,inventory_json nullable text,
+tracking_json text다. get/Progress/실패 성장·가방은 NULL, Inventory/Claim 성공·동일 요청 재조회는
+현재 전체 snapshot이다. 접근 거절은 character_id=0이고 set1은 빈 결과셋이다.
+set1은3열 quest_id/cycle_key/state_json, live Instance≤16+현재catalog Summary≤64로 최대80행이다.
+Summary cycle_key는 빈 문자열이며 JSON은 {kind:Summary,completedEver:bool,lastCompletedCycle:
+string,lastAcceptGeneration:decimalString,lastState:string,lastCycleKey:string}다.
+기존 결과0/1/2/3/5/6/7, 추가12 QuestConflict/13 AlreadyCompleted/14 InvalidQuestState를 사용한다.
+
+account→character→state→receipt→quest 잠금, 기존 소유 token/generation·공유 revision을 유지한다.
+성공 이력은 character_operations의 QUEST로 원본 mode/operation/expectedRevision hash를 검증한다.
+같은 원문 재전송은 no-op/현재 snapshot, 다른 원문은 RequestConflict다. item-use Pending 중
+새 쓰기는 Busy이며 기존 receipt를 먼저 확인한다. Room operation은 action=RoomEvent와
+originIncarnation/roomId/eventSeq를 top-level에 담아 별도 영속 사건 키와 원본 hash로 검사한다.
+Claim은 기존 RewardPending→Completed 전이만 허용한다. HoldItem 제출 합산·현재 가방 재검증·
+작은 스택 우선 차감·보상 수용성은 trusted Town이 검사한다. 그 snapshot·완료·revision·receipt는
+같은 transaction에서 저장한다. 제출/공간 부족 시 미지급/RewardPending 유지이며, NPC 거리·
+파티 참여·사건 진위·아이템 조건은 Town/Room 책임이다. SQL 논리적 배치 거절은 SAVEPOINT까지
+전체 원복하고 ODBC가 모든 결과를 검증한 뒤 COMMIT한다. DB 도착 전 Room 메모리 사건의
+프로세스 유실 복구까지 보장하지 않는다. commit 후 ack·재전송·입장 전 quest 복원은 서버 계약이다.
+
+검사 get_quest_schema_migration_history는 history_format5/29결과셋/22루틴/93 IN이다.
+기존24sets 뒤 SHOW5개 순서는 emit_quest_state/get_character_quests/save_character_quests/
+get_quest_schema_migration_history/apply_quest_inventory다. 출력32768자 상한을 유지하려고
+snapshot 검증/쓰기를 private apply로 분리했다. input-only에만262144 UTF16자/큰 입력용
+ODBC wide long varchar를 사용하고 각 도메인의 UTF8 byte 제한은 별도로 유지한다.
+실제 관리자 계정으로 기존 권한을 유지하며 다음3개 EXECUTE만 추가한다. 별도 Auth/Town
+계정이면 Auth는 검사, Town은 검사와 공개2개다. private emit/apply에는 runtime 권한을 주지 않는다.
+
+    GRANT EXECUTE ON PROCEDURE actionrpg.get_quest_schema_migration_history TO 'actionrpg_auth'@'127.0.0.1';
+    GRANT EXECUTE ON PROCEDURE actionrpg.get_character_quests TO 'actionrpg_auth'@'127.0.0.1';
+    GRANT EXECUTE ON PROCEDURE actionrpg.save_character_quests TO 'actionrpg_auth'@'127.0.0.1';
+
+위 DB/user/Host는 실제 대상으로 바꾼다. V7 Up8/Down6 statements이며 Down은 퀘스트·추적·사건
+세 테이블이 모두 비었을 때만 허용한다. terminal/사건 이력 강제 삭제나 자동 repair는 없다.
+
 ## 9. 수동 Up/Down 실행 계약
 
 ### 로컬 최초 설정의 DB 준비 계약
@@ -1020,7 +1094,7 @@ Auth runtime ODBC는 기본 2연결/대기 128건, 연결 5초·쿼리 10초·�
 
 V0의 `get_schema_migration_history()`, V4의 `get_character_schema_migration_history()`, V5의 `get_inventory_schema_migration_history()`는
 같은 이름 기반 잠금을 획득해 조회하고 해제한다. 실행기는 프로시저 존재 여부로 검사 경로를
-선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V6의 get_item_use_schema_migration_history를 사용한다. 잠금 획득
+선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V7의 get_quest_schema_migration_history를 사용한다. 잠금 획득
 실패 시 SQL 오류이며 성공 플래그를 반환하지 않는다. 실행기 연결이 이미 잠금을 가진 경우 MySQL의
 재귀 잠금 횟수 중 조회가 추가한 횟수만 해제한다. V0 데이터 결과셋은 10개, V4는 11개, V5는 18개, V6는 24개이며 첫 7개는
 문자열로 캐스팅한다. 나머지는 원본 SHOW CREATE 결과다. 각 결과셋은 SQL 파일의 순서를 따른다.
@@ -1060,7 +1134,7 @@ CHECK의 `OCTET_LENGTH(subject)`는 로컬 메타데이터에서 `LENGTH(subject
 
 ROUTINE_DEFINITION은 내부 definition_utf8에서 가져오며 `_binary` 같은 문자셋 introducer가
 제거되므로 배포 원문과 직접 본문을 비교하지 않는다. 결과셋 5의 이름·보안·접근 특성을 확인하고,
-실제 본문은 결과셋 7~23(V5는 7~17, V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
+실제 본문은 결과셋 7~28(V6는 7~23, V5는 7~17, V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
 사용한다. 문자열 내용과 `_binary`를 보존하고 일반 주석·공백·식별자 표기 차이를 토큰으로 정규화한다.
 SHOW는 프로시저 안에서 결과셋을 반환할 수 있다.
 근거: [MySQL SHOW CREATE](https://dev.mysql.com/doc/refman/8.0/en/show-create-procedure.html),
@@ -1076,17 +1150,17 @@ NO_BACKSLASH_ESCAPES·ANSI_QUOTES·PIPES_AS_CONCAT은 허용하지 않는다. �
 
 AuthServer는 서비스 접속 변수와 함께 기대 DB 이름 `ACTIONRPG_DB_SCHEMA`, 배포 SQL 절대
 경로 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`를 사용한다. 새 Auth Runtime에는 login_google_account/get_auth_account_status/
-get_item_use_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
+get_quest_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
 하며 테이블 접근과 루틴 정의 조회에 필요한 범위를 실제 환경에서 검토한다. SHOW 원문은 해당
 루틴의 DEFINER이거나 SHOW_ROUTINE 등의 전체 조회 권한이 있어야 보인다. EXECUTE만 가진
-주체는 Create Procedure가 NULL일 수 있다. 열일곱 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
+주체는 Create Procedure가 NULL일 수 있다. 스물두 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
 런타임에 광범위 조회 권한을 추가하지 않고 조회 프로시저의 DEFINER 문맥에서 확인할 수 있다.
 권한 부족을 성공으로 처리하지 않는다. 도구용 주체와 런타임 주체를 분리하며 GRANT는 포함하지 않는다.
 
-마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000006과
+마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000007과
 구조를 검증한 뒤 DB 연계 기능을 활성화한다. 요구 버전은
 [LoginSchemaVerifier.h](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.h)의
-`REQUIRED_SCHEMA_VERSION=6`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
+`REQUIRED_SCHEMA_VERSION=7`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
 전체 이력과 구조 검증에 성공해야 검사한 OdbcDatabase 인스턴스에 연결된 증명을 만든다.
 다른 DB 객체나 설정 파일의 버전 플래그로 이 증명을 대체하지 않는다.
 

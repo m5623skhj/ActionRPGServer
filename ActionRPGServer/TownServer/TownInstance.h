@@ -12,6 +12,8 @@
 #include "Database/CharacterStoreProcedure.h"
 #include "ItemUseService.h"
 #include "../Shared/PlayerResourceCatalog.h"
+#include "Database/QuestStoreProcedure.h"
+#include <deque>
 
 #include <asio.hpp>
 
@@ -51,6 +53,10 @@ namespace TownServer::Domain
             TownProtocol::PacketType inType, std::string inJson);
         void InventoryRequest(std::shared_ptr<Network::PlayerSession> inSession,
             TownProtocol::PacketType inType, std::string inJson);
+        void QuestRequest(std::shared_ptr<Network::PlayerSession> inSession, TownProtocol::PacketType inType, std::string inJson);
+        void QuestEvents(ActionRPG::RoomControlProtocol::RoomId inRoomId, std::string inJson, std::function<void(bool)> inDone);
+        using QuestContextHandler = std::function<void(std::uint64_t, PlayerId, std::function<void(std::string)>)>;
+        void SetQuestContextHandler(QuestContextHandler inHandler);
         /// Server content entry points only; never accept a client-supplied acquisition/automatic consumption.
         void AcquireItem(PlayerId inPlayerId, std::string inRequestId, std::uint64_t inExpectedRevision, std::string inDefinitionId,
             std::uint32_t inCount, std::function<void(std::string)> inHandler);
@@ -116,6 +122,47 @@ namespace TownServer::Domain
 
     private:
         friend class ItemUseService;
+        struct QuestWork
+        {
+            ActionRPG::Quests::Json command, event;
+            std::string requestId;
+            std::function<void(std::string)> done;
+            std::optional<Persistence::QuestRequest> retry;
+            bool internal{}, contextReady{};
+        };
+        struct QuestRuntime
+        {
+            std::uint64_t sessionId{}, accountId{}, characterId{}, generation{}, revision{}, nowMs{};
+            std::uint64_t detachedRoomId{};
+            PlayerId playerId{};
+            std::uint32_t definitionId{};
+            std::string ownerToken;
+            std::weak_ptr<Network::PlayerSession> session;
+            ActionRPG::Quests::State state;
+            ActionRPG::Items::Inventory inventory;
+            ActionRPG::PlayerSkills::CharacterProgression progression;
+            ActionRPG::Quests::Json context;
+            std::deque<QuestWork> queue;
+            bool busy{}, loaded{};
+            double tokens{10};
+            std::chrono::steady_clock::time_point observed{}, refill{}, nextRefresh{}, nextRetry{}, lastQuery{}, lastNpc{};
+            std::set<std::string> regions;
+        };
+        const ActionRPG::Quests::Catalog questCatalog;
+        std::map<std::uint64_t, std::shared_ptr<QuestRuntime>> questRuntimes;
+        QuestContextHandler questContextHandler;
+        void BeginQuestEntry(std::shared_ptr<Network::PlayerSession> inSession, Persistence::CharacterState inState,
+            std::string inToken, std::string inRequestId, std::function<void()> inEntered);
+        void ObserveQuestCharacter(std::uint64_t inSessionId, const Persistence::CharacterState& inState);
+        bool QuestBusy(std::uint64_t inSessionId) const;
+        void QueueQuest(std::shared_ptr<QuestRuntime> inRuntime, QuestWork inWork);
+        void PumpQuest(std::shared_ptr<QuestRuntime> inRuntime);
+        void TickQuests();
+        void SendQuestState(const std::shared_ptr<QuestRuntime>& inRuntime, const std::string& inRequestId);
+        void ReplyQuest(const std::shared_ptr<QuestRuntime>& inRuntime, const std::string& inRequestId, const std::string& inResult);
+        Persistence::QuestRequest QuestIdentity(const QuestRuntime& inRuntime) const;
+        void ApplyQuestResponse(QuestRuntime& inRuntime, const Persistence::QuestResponse& inResponse);
+        std::uint64_t QuestNow(const QuestRuntime& inRuntime) const;
         static constexpr double CHAT_BURST_CAPACITY = 5.0;
         static constexpr double CHAT_REFILL_PER_SECOND = 2.0;
         struct PlayerEntry;

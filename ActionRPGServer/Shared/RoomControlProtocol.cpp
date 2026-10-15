@@ -211,7 +211,7 @@ namespace ActionRPG::RoomControlProtocol
         PacketReader reader(inPacket);
         std::uint16_t type{};
         if (!reader.ReadUInt16(type) || type < static_cast<std::uint16_t>(PacketType::RegisterRoomServer)
-            || type > static_cast<std::uint16_t>(PacketType::ItemUseResult))
+            || type > static_cast<std::uint16_t>(PacketType::QuestContextResult))
         {
             return std::nullopt;
         }
@@ -530,5 +530,54 @@ namespace ActionRPG::RoomControlProtocol
         const auto request = DecodeItemUseRequest(bytes);
         if (!request) return std::nullopt;
         return ItemUseResult{*request};
+    }
+
+    std::vector<std::uint8_t> Encode(const QuestEvents& inPacket)
+    {
+        if (inPacket.roomId == 0 || inPacket.json.empty() || inPacket.json.size() > 16384)
+            throw std::invalid_argument("Invalid quest events.");
+        PacketWriter writer(PacketType::QuestEvents); writer.WriteUInt64(inPacket.roomId); writer.WriteString(inPacket.json); return writer.Finish();
+    }
+    std::vector<std::uint8_t> Encode(const QuestEventsAck& inPacket)
+    {
+        auto bytes = Encode(static_cast<const QuestEvents&>(inPacket)); bytes[1] = static_cast<std::uint8_t>(PacketType::QuestEventsAck); return bytes;
+    }
+    std::optional<QuestEvents> DecodeQuestEvents(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket); QuestEvents packet;
+        if (!ReadExpectedType(reader, PacketType::QuestEvents) || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0
+            || !reader.ReadString(packet.json) || packet.json.empty() || packet.json.size() > 16384 || !reader.Finished()) return std::nullopt;
+        return packet;
+    }
+    std::optional<QuestEventsAck> DecodeQuestEventsAck(const std::vector<std::uint8_t>& inPacket)
+    {
+        auto bytes = inPacket; if (ReadPacketType(bytes) != PacketType::QuestEventsAck) return std::nullopt;
+        bytes[1] = static_cast<std::uint8_t>(PacketType::QuestEvents); const auto packet = DecodeQuestEvents(bytes);
+        if (!packet) return std::nullopt; return QuestEventsAck{*packet};
+    }
+    std::vector<std::uint8_t> Encode(const QuestContextRequest& inPacket)
+    {
+        PacketWriter writer(PacketType::QuestContextRequest); writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt64(inPacket.roomId); writer.WriteUInt64(inPacket.playerId); return writer.Finish();
+    }
+    std::vector<std::uint8_t> Encode(const QuestContextResult& inPacket)
+    {
+        if (inPacket.json.size() > 16384) throw std::invalid_argument("Invalid quest context.");
+        PacketWriter writer(PacketType::QuestContextResult); writer.WriteUInt64(inPacket.requestId);
+        writer.WriteUInt64(inPacket.roomId); writer.WriteUInt64(inPacket.playerId); writer.WriteString(inPacket.json); return writer.Finish();
+    }
+    std::optional<QuestContextRequest> DecodeQuestContextRequest(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket); QuestContextRequest packet;
+        if (!ReadExpectedType(reader, PacketType::QuestContextRequest) || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0 || !reader.ReadUInt64(packet.playerId) || packet.playerId == 0
+            || !reader.Finished()) return std::nullopt; return packet;
+    }
+    std::optional<QuestContextResult> DecodeQuestContextResult(const std::vector<std::uint8_t>& inPacket)
+    {
+        PacketReader reader(inPacket); QuestContextResult packet;
+        if (!ReadExpectedType(reader, PacketType::QuestContextResult) || !reader.ReadUInt64(packet.requestId) || packet.requestId == 0
+            || !reader.ReadUInt64(packet.roomId) || packet.roomId == 0 || !reader.ReadUInt64(packet.playerId) || packet.playerId == 0
+            || !reader.ReadString(packet.json) || packet.json.size() > 16384 || !reader.Finished()) return std::nullopt; return packet;
     }
 }

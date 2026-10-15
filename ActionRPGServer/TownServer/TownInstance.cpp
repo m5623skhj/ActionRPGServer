@@ -49,7 +49,8 @@ namespace TownServer::Domain
     TownInstance::TownInstance(asio::io_context& inIoContext, std::vector<TownMap> inMaps,
         DungeonCatalog inDungeonCatalog, const std::filesystem::path& inDataDirectory,
         std::shared_ptr<Database::OdbcDatabase> inDatabase)
-        : strand(asio::make_strand(inIoContext)),
+        : questCatalog(ActionRPG::Quests::Catalog::Load(inDataDirectory / "Quests.json")),
+          strand(asio::make_strand(inIoContext)),
           database(std::move(inDatabase)),
           tickTimer(strand),
           dungeonCatalog(std::move(inDungeonCatalog)),
@@ -61,6 +62,7 @@ namespace TownServer::Domain
     {
         if (!database)
             throw std::invalid_argument("TownInstance requires a DB execution service, even when disabled.");
+        questCatalog.ValidateItems(itemsCatalog);
         if (inMaps.empty())
         {
             throw std::invalid_argument("TownInstance requires at least one map.");
@@ -87,6 +89,23 @@ namespace TownServer::Domain
             {
                 throw std::invalid_argument("Duplicate town map id: " + mapId);
             }
+        }
+        for (const auto& [id, npc] : questCatalog.npcs)
+        {
+            const auto map = maps.find(npc.at("mapId").get<std::string>());
+            if (map == maps.end() || !map->second.IsPositionValid({npc.at("x").get<float>(), npc.at("y").get<float>()}))
+                throw std::invalid_argument("Quest NPC must be on a valid town position: " + id);
+        }
+        for (const auto& [id, quest] : questCatalog.definitions)
+        {
+            for (const auto& step : quest.at("steps")) for (const auto& goal : step.at("objectives"))
+                if (goal.at("type") == "Reach" && goal.at("target").contains("region"))
+                {
+                    const auto& target = goal.at("target"); const auto map = maps.find(target.at("mapId").get<std::string>());
+                    const auto& region = target.at("region");
+                    if (map != maps.end() && !map->second.IsPositionValid({region.at("x").get<float>(), region.at("y").get<float>()}))
+                        throw std::invalid_argument("Quest region center is not a valid town position.");
+                }
         }
         for (const auto& [mapId, map] : maps)
         {
@@ -166,7 +185,7 @@ namespace TownServer::Domain
             const auto found = self->players.find(inPlayerId);
             if (found == self->players.end()) return;
             auto& entry = found->second;
-            if (entry.saving || entry.itemUsePending) { self->SendSkillState(entry, "Busy"); return; }
+            if (entry.saving || entry.itemUsePending || self->QuestBusy(entry.session->GetSessionId())) { self->SendSkillState(entry, "Busy"); return; }
             // Include reserved rooms so delayed entry confirmation cannot permit a skill purchase.
             if (entry.dungeonRoomId != 0 || entry.reservedDungeonRoomId != 0)
             {
@@ -202,7 +221,8 @@ namespace TownServer::Domain
         asio::dispatch(strand, [self, inPlayerId, inLevel, handler = std::move(inHandler)]()
         {
             const auto found = self->players.find(inPlayerId);
-            if (found != self->players.end() && !found->second.saving && !found->second.itemUsePending)
+            if (found != self->players.end() && !found->second.saving && !found->second.itemUsePending
+                && !self->QuestBusy(found->second.session->GetSessionId()))
             {
                 auto& entry = found->second;
                 auto proposed = entry.progression;
@@ -1020,6 +1040,7 @@ namespace TownServer::Domain
 
     void TownInstance::Tick()
     {
+        TickQuests();
         ++serverTick;
         const auto now = std::chrono::steady_clock::now();
         std::vector<PlayerId> changedSectorPlayers;
@@ -1176,6 +1197,8 @@ namespace TownServer::Domain
             HideFromTown(playerId, playerIterator->second);
         }
         const auto& leaving = playerIterator->second;
+        if (const auto runtime = questRuntimes.find(inSessionId); runtime != questRuntimes.end())
+            runtime->second->detachedRoomId = leaving.dungeonRoomId != 0 ? leaving.dungeonRoomId : leaving.reservedDungeonRoomId;
         characterReleases[inSessionId] = { Persistence::Operation::Release, leaving.accountId,
             leaving.persistentCharacterId, leaving.ownerGeneration, 0, 0, 0, 0, {}, leaving.ownerToken };
         players.erase(playerIterator);

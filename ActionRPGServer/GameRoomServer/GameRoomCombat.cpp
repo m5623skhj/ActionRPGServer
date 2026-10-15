@@ -455,12 +455,21 @@ namespace GameRoomServer
         auto& monster = monsters.at(inMonsterId);
         auto& victim = monster.actor;
         const auto beforeHp = victim.hp;
+        // Backpressure precedes the irreversible kill; no credited fact can be discarded.
+        if (beforeHp > 0 && inDamage >= beforeHp && (questOutbox.size() >= 512
+            || questSequence == UINT64_MAX || questIncarnation.empty())) return;
         ApplyDamage(victim, inDamage, inAirborne, inAttacker ? &inAttacker->actor : nullptr,
             inHitstopSeconds, inForce, monster.position, inAttackOrigin, inAttackDirection);
         if (victim.hp < beforeHp && inAttacker)
         {
             inAttacker->lastHitSequence = ++monsterHitSequence;
             inAttacker->lastHitMonsterId = inMonsterId;
+        }
+        if (beforeHp > 0 && victim.hp == 0)
+        {
+            EmitQuest("MonsterKilled", std::to_string(monster.definition->dataId), monster.mapId,
+                QuestParticipants(monster.mapId), inMonsterId);
+            if (bosses.contains(inMonsterId)) questClearMap = monster.mapId;
         }
     }
 
@@ -1058,6 +1067,7 @@ namespace GameRoomServer
         if (clearRequested || bosses.empty() || state != State::Running) return;
         if (std::all_of(bosses.begin(), bosses.end(), [this](auto id) { return monsters.at(id).actor.hp == 0; }))
         {
+            if (!EmitQuest("DungeonCleared", std::to_string(dungeonId), questClearMap, QuestParticipants(questClearMap))) return;
             clearRequested = true;
             for (auto& [id, player] : players)
             {

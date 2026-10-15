@@ -163,6 +163,7 @@
     <ClCompile Include="GameRoomSkills.cpp" />
     <ClCompile Include="GameRoomRealtime.cpp" />
     <ClCompile Include="GameRoomItemUse.cpp" />
+    <ClCompile Include="GameRoomQuests.cpp" />
     <ClCompile Include="CombatDefinition.cpp" />
     <ClCompile Include="MonsterDefinition.cpp" />
     <ClCompile Include="main.cpp" />
@@ -180,6 +181,7 @@
     <ClInclude Include="ItemUseAction.h" />
     <ClInclude Include="..\Shared\ItemUseIdentity.h" />
     <ClInclude Include="CombatDefinition.h" />
+    <ClInclude Include="..\Shared\QuestCatalog.h" />
     <ClInclude Include="..\Shared\PlayerSkillCatalog.h" />
     <ClInclude Include="..\Shared\PlayerResourceCatalog.h" />
     <ClInclude Include="..\Shared\CombatTempo.h" />
@@ -215,6 +217,8 @@
     <Copy SourceFiles="@(DungeonDataFiles)"
           DestinationFiles="@(DungeonDataFiles-&gt;'$(OutDir)Data\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)..\TownServer\Data\Quests.json"
+          DestinationFiles="$(OutDir)Data\Quests.json" SkipUnchangedFiles="true" />
   </Target>
   <ItemGroup>
     <ProjectReference Include="..\..\External\MultiSocketRUDP\MultiSocketRUDP\MultiSocketRUDPServer\MultiSocketRUDP.vcxproj">

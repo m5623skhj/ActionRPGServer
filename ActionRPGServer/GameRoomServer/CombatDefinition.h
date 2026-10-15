@@ -4,6 +4,7 @@
 #include "../Shared/PlayerSkillCatalog.h"
 #include "../Shared/SkillTreeCatalog.h"
 #include "../Shared/CombatTempo.h"
+#include "../Shared/QuestCatalog.h"
 
 #include <filesystem>
 #include <memory>
@@ -71,6 +72,7 @@ namespace GameRoomServer
         std::unordered_map<std::uint32_t, MonsterCombatProfile> monsters;
         ActionRPG::PlayerSkills::Catalog playerSkills;
         ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
+        ActionRPG::Quests::Catalog quests;
 
         [[nodiscard]] static std::shared_ptr<const CombatDefinition> Load(
             const std::filesystem::path& inPath, const MonsterDefinition::Catalog& inMonsters);

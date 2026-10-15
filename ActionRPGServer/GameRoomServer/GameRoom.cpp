@@ -20,6 +20,7 @@ namespace GameRoomServer
         : strand(asio::make_strand(inIoContext)),
           enterTimer(strand),
           tickTimer(strand),
+          questTimer(strand),
           roomId(inRoomId),
           dungeonId(inDungeonId),
           combatSeed(inCombatSeed),
@@ -299,6 +300,7 @@ namespace GameRoomServer
             asio::error_code ignoredError;
             self->enterTimer.cancel(ignoredError);
             self->tickTimer.cancel(ignoredError);
+            self->questTimer.cancel(ignoredError);
         });
     }
 
@@ -378,7 +380,7 @@ namespace GameRoomServer
                 && self->state != State::WaitingForPlayers;
             if (resultHandler)
             {
-                resultHandler(removed, roomEmpty);
+                self->DrainQuests([resultHandler = std::move(resultHandler), removed, roomEmpty] { resultHandler(removed, roomEmpty); });
             }
         });
     }
@@ -404,7 +406,7 @@ namespace GameRoomServer
                 && self->state != State::WaitingForPlayers;
             if (resultHandler)
             {
-                resultHandler(roomEmpty);
+                self->DrainQuests([resultHandler = std::move(resultHandler), roomEmpty] { resultHandler(roomEmpty); });
             }
         });
     }
@@ -449,8 +451,8 @@ namespace GameRoomServer
             self->tickTimer.cancel(ignoredError);
             if (resultHandler)
             {
-                resultHandler(std::vector<PlayerId>(
-                    self->enteredPlayers.begin(), self->enteredPlayers.end()));
+                auto players = std::vector<PlayerId>(self->enteredPlayers.begin(), self->enteredPlayers.end());
+                self->DrainQuests([resultHandler = std::move(resultHandler), players = std::move(players)]() mutable { resultHandler(std::move(players)); });
             }
         });
     }
@@ -516,6 +518,7 @@ namespace GameRoomServer
                 self->PrepareActorTimes(TICK_SECONDS);
                 self->UpdatePlayers();
                 self->UpdateCombat(TICK_SECONDS * self->combatDefinition->tempo.scale);
+                self->ObserveQuestLocations();
                 if (self->serverTick % (TICK_RATE / SNAPSHOT_RATE) == 0 || self->clearRequested
                     || self->hitstopChanged || self->knockbackChanged) self->PublishRealtime();
                 if (self->state == State::Running && !self->clearRequested) self->ScheduleTick();
