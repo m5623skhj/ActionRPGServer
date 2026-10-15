@@ -86,6 +86,13 @@ Up 8/Down 6 statements이며 새 테이블 세 개가 모두 비어 있어야 Do
 [DownMigration.bat](../../Tool/Database/DownMigration.bat)를 실행하며, 공통 실행기는
 [Migrate.ps1](../../Tool/Database/Migrate.ps1)이다.
 
+일반 Up/Down은 스키마 확인 뒤 별도 관리자로 공개 프로시저 EXECUTE를 동기화한다.
+목록 원본은 [RuntimePermissions.ps1](../../Tool/Database/RuntimePermissions.ps1)이며 실제 Auth/Town
+계정·Host와 MySQL 인스턴스를 확인한다. 내부 emit/apply나 DB 전체 EXECUTE는 허용하지 않는다.
+권한만 누락되었다면 `UpMigration.bat -Database actionrpg -PermissionsOnly`로 재시도한다.
+이 경로는 버전 SQL·감사 행을 변경하지 않는다. `-SchemaOnly`는 별도 권한 배포가 있을 때만 사용한다.
+권한 단계 실패는 이미 완료된 스키마·일부 GRANT를 되돌리지 않으며 관리자 암호는 저장하지 않는다.
+
 Up은 모든 미적용 버전을 순서대로 최신화하고, Down은 현재 head 한 단계만 되돌린다.
 이력 기반 000000은 유지하며, 계정 테이블을 삭제하는 000001 Down은 두 테이블이 비어 있어야 한다.
 대상 스키마를 별도로 준비하거나 Up의 `-CreateDatabase`로 생성한다. DB 사용 서비스를 정지한 뒤,
@@ -95,7 +102,8 @@ Up은 모든 미적용 버전을 순서대로 최신화하고, Down은 현재 he
 `-CreateDatabase`는 MySQL 8.0.46을 확인하고 이름 기반 잠금을 잡은 후 DB가 없을 때만
 utf8mb4 / utf8mb4_0900_ai_ci로 생성한다. 그 접속에서 DB를 선택하고 기존 이력·구조 검사를
 수행한다. DB 생성은 버전 이력 이전 단계이며 후속 실패에도 DB가 남는다. 실행 주체의 CREATE
-권한이 필요하고 계정 생성·권한 부여는 별도다. 이름·접속 문자열 조건은 아래 툴 안내를 따른다.
+권한이 필요하고 계정 생성은 별도다. 공개 루틴 권한은 후속 관리자 단계에서 부여한다.
+이름·접속 문자열 조건은 아래 툴 안내를 따른다.
 
 실행 명령과 인자는 [툴 README의 DB 안내](../../Tool/README.md#db-마이그레이션)를 따른다.
 현재 버전 조회에 Up을 사용하면 대기 SQL이 적용될 수 있다. 실패나 부분 적용 시 이력을 지우거나

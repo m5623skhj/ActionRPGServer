@@ -1079,6 +1079,9 @@ try {
         $script:catalog.Add($version, [pscustomobject]@{ Name = $name; Up = (Read-SqlFile $item.FullName); Down = (Read-SqlFile (Join-Path (Join-Path $root 'Down') $item.Name)) })
     }
     Assert-Condition ($script:catalog.Count -eq 7) 'Current schema inspection supports versions 000001..000007; extend the contract with new migrations.'
+    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts) {
+        Assert-Condition ($script:catalog.Count -eq (Get-RuntimeSchemaVersion)) 'Update the runtime permission contract with the migration catalog before DB preparation.'
+    }
     for ($i = 1; $i -le $script:catalog.Count; ++$i) { Assert-Condition ($script:catalog.ContainsKey($i)) 'Migration version gap.' }
     Assert-Condition ((@(Get-ChildItem -LiteralPath (Join-Path $root 'Down') -Filter '*.sql' -File)).Count -eq $script:catalog.Count) 'Unexpected Down files.'
     Assert-Condition ((Normalize-Sql $script:catalog[1].Down.Statements[0]) -ceq 'drop table account_identities , accounts' -and

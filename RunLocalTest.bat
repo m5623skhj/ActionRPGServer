@@ -10,6 +10,10 @@ exit /b %LAUNCH_RESULT%
 
 # POWERSHELL START
 $ErrorActionPreference = 'Stop'
+# The launcher only checks runtime accounts. Privileged DB credentials belong to
+# the separate preparation process and must not reach builds, helpers or games.
+[Environment]::SetEnvironmentVariable('ACTIONRPG_MIGRATION_CONNECTION_STRING', $null, 'Process')
+[Environment]::SetEnvironmentVariable('ACTIONRPG_PERMISSION_CONNECTION_STRING', $null, 'Process')
 $root = Split-Path -Parent $env:ACTIONRPG_LOCAL_LAUNCHER
 $serverDirectory = Join-Path $root 'ActionRPGServer\x64\Debug'
 $roomDirectory = Join-Path $root 'artifacts\bin\x64\Debug'

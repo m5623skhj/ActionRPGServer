@@ -42,8 +42,15 @@ V5 적용 결과와 새 PC의 상태는 해당 대상에서 별도로 확인한�
    대상 DB 기본값은 `actionrpg`이며 서버 종료 확인에 `Y` 또는 `y`를 입력한다. 연결 환경 변수가 없으면
    64비트 MySQL Unicode 드라이버를 찾아 호스트·포트·마이그레이션 계정과 숨김 비밀번호를 받는다.
    기본값은 `127.0.0.1:3306` / `actionrpg_migrator`이며 Enter로 선택한다. 드라이버가 여러 개면 번호를 고른다.
-4. 기존 자동화는 `ACTIONRPG_MIGRATION_CONNECTION_STRING`과 아래 인자를 그대로 제공할 수 있다.
+   일반 Up/Down은 스키마 확인 후 Auth/Town 공개 프로시저 EXECUTE를 자동 동기화하고 실제 런타임
+   계정으로 검사한다. 이미 최신 버전인 Up도 권한 단계는 수행한다. 런타임 암호와 권한 관리자의
+   암호는 콘솔 숨김 입력으로 받고 저장하지 않는다. 관리자는 별도 계정이며 EXECUTE와 GRANT OPTION이 필요하다.
+4. 자동화는 `ACTIONRPG_MIGRATION_CONNECTION_STRING`과 아래 인자를 제공할 수 있다.
    암호를 파일·Git·명령 인자에 쓰지 않으며 runtime 연결 문자열을 대신 사용하지 않는다.
+   권한 단계의 Auth/Town 연결은 `ACTIONRPG_DB_CONNECTION_STRING`/`ACTIONRPG_TOWN_DB_CONNECTION_STRING`,
+   별도 관리자는 `ACTIONRPG_PERMISSION_CONNECTION_STRING`으로 전달할 수 있다. 모두 프로세스 범위의
+   보호된 환경에서 공급하며 도구가 영구 저장하지 않는다. Auth가 없으면 같은 대상의 런타임 계정·암호를 묻고,
+   Town이 없으면 Auth 계정을 공유한다. 별도 Town 계정은 해당 환경 변수로 명시한다.
 
 `-Database`를 생략하면 대상 이름을 묻는다. 기본 모드에서는 연결에서 이미 선택한 DATABASE()와 대조한다.
 Up에 `-CreateDatabase`를 주면 DB가 없을 때 생성하고 선택한 뒤 기존 마이그레이션을 이어간다.
@@ -57,7 +64,24 @@ Up에 `-CreateDatabase`를 주면 DB가 없을 때 생성하고 선택한 뒤 �
 Tool\Database\UpMigration.bat -Database actionrpg -ServicesStopped
 Tool\Database\UpMigration.bat -Database actionrpg -CreateDatabase -ServicesStopped
 Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
+Tool\Database\UpMigration.bat -Database actionrpg -PermissionsOnly -ServicesStopped
 ```
+
+권한 목록·IN 개수·버전별 검사 루틴은 [Database/RuntimePermissions.ps1](Database/RuntimePermissions.ps1)의
+`Get-RuntimeProcedures` 한 곳에서 관리한다. 새 공개 루틴·스키마 버전을 추가할 때 목록도 함께 갱신한다.
+실제 CURRENT_USER()의 사용자/Host에 프로시저별 EXECUTE만 부여하며, Auth/Town·마이그레이션·권한 관리자가
+같은 MySQL 인스턴스를 가리키는지 server_uuid로 대조한다. 내부 emit/apply, DB 전체 EXECUTE, 계정 생성,
+REVOKE는 수행하지 않는다. 이미 존재하는 다른 권한도 임의로 회수하지 않는다.
+
+권한 실패는 비정상 종료이며, 앞서 완료된 스키마·일부 GRANT는 유지된다. 스키마가 정상이라면 위의
+`-PermissionsOnly`로 권한만 다시 처리한다. 이 경로는 버전 SQL·감사 행을 변경하지 않는다.
+스키마만 관리하는 별도 배포 경로는 `-SchemaOnly`를 명시하고 권한 준비를 별도로 책임진다.
+검사·복구 옵션에는 권한 동기화를 붙이지 않으며 `-PermissionsOnly`와 함께 쓸 수 없다.
+
+`RunLocalTest.bat`은 같은 목록으로 Auth/Town 필수 호출을 서버 측 PREPARE/DEALLOCATE만 수행해
+권한·루틴 존재·인자 수를 확인한다. EXECUTE를 보내지 않으므로 로그인·인벤토리·퀘스트 본문은 실행하지 않는다.
+누락 시 계정/Host·루틴·오류 번호와 복구 명령을 보여주고 빌드·서버 기동 전에 중단한다.
+전체 스키마·감사 이력·DEFINER 준비 여부를 확정하는 Auth의 기존 검증은 그대로 유지한다.
 
 실패 이력의 구조 비교에는 Up 배치에 `-InspectOnly -InspectVersion 0`을 함께 전달한다.
 `InspectVersion`은 비교할 구조 버전(0~6)이며 실제 적용 버전을 확정하거나 이력을 승인하지 않는다.
@@ -105,7 +129,8 @@ DATABASE는 생략하거나 `-Database`와 같은 값을 넣는다. 도구는 �
 서버 버전·SQL 모드를 확인한 뒤 같은 이름 기반 잠금을 획득한다. 그 접속으로 DB 생성·선택과
 V000000→000004를 수행한다. 새 DB는 utf8mb4 / utf8mb4_0900_ai_ci이며 기존 DB의 설정은 변경하지 않는다.
 DB 생성은 버전 이력 기록 전 단계이고 암묵적으로 커밋되므로 후속 실패에도 DB가 남는다.
-자동 삭제·계정 생성·GRANT는 수행하지 않으며 Auth 계정에는 생성 권한을 주지 않는다.
+자동 삭제·계정 생성은 수행하지 않으며 Auth 계정에는 생성 권한을 주지 않는다.
+GRANT는 버전 SQL과 분리된 후속 권한 동기화 단계에서 별도 관리자로 수행한다.
 
 V5의 캐릭터/인벤토리 배포는 서비스 정지 후 수동 Up4→5, 새 검사 및 Town 공개
 프로시저 EXECUTE 부여, 동일 SQL 11개·새 Auth/Town 배포를 함께 진행한다. V0~V4 SQL과

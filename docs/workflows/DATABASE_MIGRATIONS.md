@@ -158,7 +158,8 @@ DELIMITER 처리가 필요한 CREATE PROCEDURE이며 이력 기록과 DDL 전체
 최신 버전을 수동으로 되돌리는 별도의 Down SQL만 제공한다.
 DEFINER는 생성 주체를 사용하므로 실제 적용 전에 전용 주체의 수명·최소 권한을 정해야 한다.
 AuthServer에는 필요한 프로시저 실행 권한과 향후 이력 조회 권한만 부여하며 DDL·이력 쓰기
-권한을 주지 않는다. 사용자 생성·GRANT와 서버 기동 시 자동 적용은 포함하지 않는다.
+권한을 주지 않는다. 사용자 생성과 서버 기동 시 자동 적용은 포함하지 않는다.
+공개 루틴 EXECUTE의 배포 후 동기화는 아래 9절의 별도 관리자 단계에서 처리한다.
 
 ### 계정 상태 재확인: `get_auth_account_status`
 
@@ -664,7 +665,8 @@ Auth에는 get_item_use_schema_migration_history의 EXECUTE를 추가한다.
 V7은 소스 작성이며 실제 DB 적용을 뜻하지 않는다. 기존 V0~V6 원문/체크섬과 claim4 IN/
 3결과셋, save_character_state9 IN/1결과셋, release4 IN/1결과셋은 유지한다.
 새 Auth/Town은 head7을 요구한다. 서비스 정지 → 사용자 수동 Up → 신규 EXECUTE →
-같은 SQL·새 Auth/Town/Room 배포 순서다. 자동 DB 적용이나 GRANT는 하지 않는다.
+같은 SQL·새 Auth/Town/Room 배포 순서다. 서버는 자동 DB 적용이나 GRANT를 하지 않는다.
+운영자가 실행하는 Up/Down 도구는 스키마 확인 뒤 9절의 권한 동기화를 수행한다.
 
 * character_quests는 PK(character_id,quest_id,cycle_key,accept_generation), 캐릭터 FK,
   UNIQUE(character_id,quest_id,accept_generation), live 상태 인덱스를 가진다.
@@ -723,17 +725,47 @@ Claim은 기존 RewardPending→Completed 전이만 허용한다. HoldItem 제�
 get_quest_schema_migration_history/apply_quest_inventory다. 출력32768자 상한을 유지하려고
 snapshot 검증/쓰기를 private apply로 분리했다. input-only에만262144 UTF16자/큰 입력용
 ODBC wide long varchar를 사용하고 각 도메인의 UTF8 byte 제한은 별도로 유지한다.
-실제 관리자 계정으로 기존 권한을 유지하며 다음3개 EXECUTE만 추가한다. 별도 Auth/Town
-계정이면 Auth는 검사, Town은 검사와 공개2개다. private emit/apply에는 runtime 권한을 주지 않는다.
-
-    GRANT EXECUTE ON PROCEDURE actionrpg.get_quest_schema_migration_history TO 'actionrpg_auth'@'127.0.0.1';
-    GRANT EXECUTE ON PROCEDURE actionrpg.get_character_quests TO 'actionrpg_auth'@'127.0.0.1';
-    GRANT EXECUTE ON PROCEDURE actionrpg.save_character_quests TO 'actionrpg_auth'@'127.0.0.1';
-
-위 DB/user/Host는 실제 대상으로 바꾼다. V7 Up8/Down6 statements이며 Down은 퀘스트·추적·사건
+권한은 [RuntimePermissions.ps1](../../Tool/Database/RuntimePermissions.ps1)의 공개 호출 목록으로
+동기화한다. Auth는 현재 검사와 로그인·상태 조회, Town은 검사와 캐릭터·아이템 사용·퀘스트 공개
+절차만 받는다. 기존 권한은 보존하며 private emit/apply에는 runtime 권한을 주지 않는다.
+V7 Up8/Down6 statements이며 Down은 퀘스트·추적·사건
 세 테이블이 모두 비었을 때만 허용한다. terminal/사건 이력 강제 삭제나 자동 repair는 없다.
 
 ## 9. 수동 Up/Down 실행 계약
+
+### 공개 프로시저 권한의 자동 동기화
+
+운영자가 실행하는 일반 Up/Down은 스키마·이력 검증 뒤 별도 권한 관리자로 공개 루틴 EXECUTE를
+동기화하고 실제 Auth/Town 연결로 확인한다. 버전별 검사 루틴·공개 이름·IN 개수의 원본은
+`Tool/Database/RuntimePermissions.ps1`이다. 신규 공개 호출과 버전을 추가할 때 이 계약도 갱신한다.
+SQL 마이그레이션 파일과 성공 체크섬을 편집하여 GRANT를 끼워 넣지 않는다.
+
+관리자는 대상 루틴의 EXECUTE와 GRANT OPTION이 필요하다. 관리자의 암호·연결은 숨김 입력 또는
+`ACTIONRPG_PERMISSION_CONNECTION_STRING`으로 그 실행에만 공급하고 파일·런타임 설정에 저장하지 않는다.
+Auth/Town 연결은 `ACTIONRPG_DB_CONNECTION_STRING`/`ACTIONRPG_TOWN_DB_CONNECTION_STRING`을 사용한다.
+없으면 Auth 계정·암호를 물으며 Town은 Auth를 공유한다. 별도 Town 계정은 환경 변수로 명시한다.
+모든 연결의 server_uuid와 대상 DB를 대조하며, runtime CURRENT_USER()가 알려주는 실제 사용자/Host만
+GRANT 대상으로 사용한다. 처음에는 DB 접근 권한이 없을 수 있으므로 runtime은 DB를 선택하지 않고
+신원을 확인한 뒤 GRANT 후 새 연결에서 대상 DB 접근을 확인한다.
+
+DB 전체 EXECUTE, DDL·테이블 권한, 사용자 생성, REVOKE, private emit/apply 권한은 추가하지 않는다.
+기존의 다른 권한은 자동 회수하지 않는다. 관리자·마이그레이션 계정은 런타임 계정으로 재사용하지 않는다.
+GRANT는 마이그레이션 감사 트랜잭션과 분리되며 일부 성공 뒤 실패하면 기존 스키마·GRANT는 남는다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -PermissionsOnly
+```
+
+위 경로는 서비스 정지·이력·실제 구조 확인 후 권한만 재시도하며 버전 DDL·감사 행을 변경하지 않는다.
+일반 Up은 head가 이미 최신이어도 권한을 다시 동기화한다. 스키마 전용 운영은 `-SchemaOnly`를 명시하고
+별도 권한 절차를 책임진다. InspectOnly/복구에는 권한 단계를 붙이지 않으며 옵션 혼용도 거절한다.
+권한 단계 실패는 종료 코드 1이고 스키마 실패·복구 안내와 구분한다.
+
+로컬 실행기는 같은 목록으로 실제 runtime의 서버 측 PREPARE CALL/DEALLOCATE만 수행한다.
+EXECUTE는 보내지 않아 로그인·캐릭터·인벤토리·퀘스트 프로시저 본문은 실행하지 않는다.
+권한·존재·인자 수 오류는 계정/Host·루틴·SQLSTATE/native code와 재시도 명령을 표시한다.
+전체 구조·감사 이력·DEFINER의 내부 호출 준비 확인은 Auth의 기존 검사 책임을 유지한다.
+이번 도구 수정은 정적 검토와 PowerShell 구문 분석만 수행했으며 실제 DB에 적용하지 않았다.
 
 ### 로컬 최초 설정의 DB 준비 계약
 
@@ -843,7 +875,7 @@ Tool\Database\DownMigration.bat -Database actionrpg -ServicesStopped
   DB 생성만 완료되고 비어 있다면 다음 Up은 기존 빈 스키마 절차를 따르지만, 일부 SQL이 적용됐다면
   이력·실제 구조를 조사하고 별도 복구 승인을 받는다.
 * 실행 주체에는 해당 DB의 CREATE 권한과 기존 마이그레이션·DEFINER 권한이 필요하다.
-  계정 생성·GRANT는 별도이며 Auth runtime 주체에 생성 권한을 부여하지 않는다.
+  계정 생성은 별도이며 GRANT는 후속 권한 관리 단계다. Auth runtime 주체에 생성 권한을 부여하지 않는다.
 
 ### 적용과 역변환
 
@@ -930,20 +962,21 @@ MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초
 
 1. 실제 대상 MySQL 8.0.46의 호스트·포트·스키마, 적용할 승인 SQL 배포본, 데이터 유지 조건을
    정한다. 스키마는 별도로 준비하거나 Up -CreateDatabase로 생성한다. 전용 생성 주체·runtime
-   주체·TLS/ODBC 드라이버·권한은 별도로 준비하며 실행기는 사용자를 만들거나 GRANT하지 않는다.
+   주체·TLS/ODBC 드라이버를 먼저 준비한다. 실행기는 사용자를 만들지 않으며 스키마 확인 후
+   별도 관리자로 위 공개 루틴 권한 동기화를 수행한다.
 2. Auth·Town·Room의 기존 접속을 종료하고 정지 상태를 확인한다. Auth 메모리 소유권이 사라지는
    재시작 전에 타운/룸의 이전 연결까지 종료하는 조건은 Auth 개발 계약을 따른다.
 3. 빈 신규 스키마에는 이력 테이블·기존 테이블/뷰·프로시저/함수·이벤트·트리거가 없어야 한다.
-   Up은 V000000 이력 기반을 생성한 후 000001→000002→000003→000004→000005→000006을 순서대로 적용한다.
-4. 기존 관리 DB는 아래 조회 절차로 전체 이력과 구조를 먼저 확인한다. 정상 head=1이면 2~6,
-   head=2이면 3~6, head=3이면 4~6, head=4이면 5~6, head=5이면 6, head=6이면 새 감사 행 없이 검사만 끝낸다. Down 성공으로 낮아진 head에도
+   Up은 V000000 이력 기반을 생성한 후 000001→000002→000003→000004→000005→000006→000007을 순서대로 적용한다.
+4. 기존 관리 DB는 아래 조회 절차로 전체 이력과 구조를 먼저 확인한다. 정상 head 이후의 미적용
+   버전만 V7까지 적용한다. head=7이면 새 감사 행 없이 스키마 검사와 권한 동기화를 수행한다. Down 성공으로 낮아진 head에도
    같은 규칙을 사용한다. 이력이 없는 비어 있지 않은 DB를 자동으로 기준 버전 등록하지 않는다.
 5. Up 배치를 실행한다. `-Database`가 없으면 대상 이름을, `-ServicesStopped`가 없으면 서버 종료
    확인 `Y` 또는 `y`를 입력받는다. `ACTIONRPG_MIGRATION_CONNECTION_STRING`이 없으면 설치된
    64비트 MySQL Unicode 드라이버와 호스트·포트·마이그레이션 계정·숨김 비밀번호로 TLS 연결을
    구성한다. 입력은 파일이나 환경 변수에 저장하지 않는다. 환경 변수와 두 인자를 모두 제공하면
-   기존처럼 추가 질문 없이 실행한다. 대상 host:port,
-   DB 이름, 계획, 각 버전의 성공, 마지막 `Complete. Active version: V000006.`을 확인한다.
+   권한 단계의 runtime·관리자 연결까지 공급하면 추가 질문 없이 실행한다. 대상 host:port,
+   DB 이름, 계획, 각 버전의 성공, V000007 완료와 runtime 권한 검사 성공을 확인한다.
    연결 전 확인을 마치고 표시한 계획 뒤에는 바로 SQL을 실행하며 dry-run 단계는 없다.
 6. 종료 코드 0과 최종 상태를 확인하고 동일 Up/Down/Infrastructure 파일을 Auth 배포 디렉터리에
    둔다. 종료 코드 1·중간 중단·불명확한 완료에서는 후속 서비스 배포를 진행하지 않는다.

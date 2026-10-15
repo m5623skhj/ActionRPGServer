@@ -59,21 +59,31 @@ function Assert-RuntimeDatabaseName([string]$Database) {
         Stop-RuntimePermissions 'Runtime permission setup requires an ASCII application database identifier.'
     }
 }
+function Assert-RuntimeConnectionDatabase([string]$ConnectionString, [string]$Database, [string]$Label) {
+    $builder = $null
+    try {
+        $builder = [Data.Odbc.OdbcConnectionStringBuilder]::new($ConnectionString)
+        if (!$builder.ContainsKey('DATABASE') -or [string]$builder['DATABASE'] -cne $Database) {
+            Stop-RuntimePermissions "$Label connection must explicitly select the requested application database; no GRANT was issued."
+        }
+    } finally { if ($null -ne $builder) { $builder.Clear() } }
+}
 function Invoke-RuntimeSql($Connection, [string]$Sql) {
     $command = $Connection.CreateCommand()
     try { $command.CommandText = $Sql; $command.CommandTimeout = 15; [void]$command.ExecuteNonQuery() }
     finally { $command.Dispose() }
 }
-function Get-RuntimeDatabaseIdentity($Connection, [string]$Database) {
+function Get-RuntimeDatabaseIdentity($Connection, [string]$Database, [switch]$AllowUnselected) {
     Assert-RuntimeDatabaseName $Database
     $command = $Connection.CreateCommand(); $reader = $null
     try {
         $command.CommandText = 'SELECT DATABASE(), @@server_uuid, CURRENT_USER(), USER(), @@session.sql_mode'
         $command.CommandTimeout = 15; $reader = $command.ExecuteReader()
         if (!$reader.Read() -or $reader.FieldCount -ne 5) { Stop-RuntimePermissions 'Invalid database identity result.' }
-        $selected = [string]$reader.GetValue(0); $uuid = [string]$reader.GetValue(1)
+        $selected = if ($reader.IsDBNull(0)) { '' } else { [string]$reader.GetValue(0) }
+        $uuid = [string]$reader.GetValue(1)
         $principal = [string]$reader.GetValue(2); $login = [string]$reader.GetValue(3); $mode = [string]$reader.GetValue(4)
-        if ($reader.Read() -or $reader.NextResult() -or $selected -cne $Database -or
+        if ($reader.Read() -or $reader.NextResult() -or ($selected -cne $Database -and !($AllowUnselected -and !$selected)) -or
             $uuid -cnotmatch '\A[0-9a-fA-F-]{36}\z' -or $mode -match '(^|,)(NO_BACKSLASH_ESCAPES|ANSI_QUOTES)(,|$)' -or
             $principal -cnotmatch '\A([A-Za-z0-9_.-]{1,32})@([A-Za-z0-9_.:%/-]{1,255})\z') {
             Stop-RuntimePermissions 'Database/schema/account identity is unsupported or does not match the requested target.'
@@ -82,16 +92,17 @@ function Get-RuntimeDatabaseIdentity($Connection, [string]$Database) {
         if ($login.LastIndexOf('@') -lt 1 -or $login.Substring(0, $login.LastIndexOf('@')) -cne $user) {
             Stop-RuntimePermissions 'Anonymous/proxy account mapping is unsupported; configure the intended runtime account explicitly.'
         }
-        return [pscustomobject]@{ Database = $selected; Uuid = $uuid; Principal = $principal; User = $user; HostName = $hostName }
+        return [pscustomobject]@{ Database = $Database; Uuid = $uuid; Principal = $principal; User = $user; HostName = $hostName }
     } finally { if ($null -ne $reader) { $reader.Dispose() }; $command.Dispose() }
 }
-function Open-RuntimeDatabase([string]$ConnectionString, [string]$Label) {
+function Open-RuntimeDatabase([string]$ConnectionString, [string]$Label, [switch]$WithoutDatabase) {
     $connection = $null; $builder = $null
     try {
         $builder = [Data.Odbc.OdbcConnectionStringBuilder]::new($ConnectionString)
         if ($builder.ShouldSerialize('SAVEFILE') -or $builder.ShouldSerialize('FILEDSN')) {
             Stop-RuntimePermissions 'Permission checks must not create/read connection-string files.'
         }
+        if ($WithoutDatabase -and $builder.ContainsKey('DATABASE')) { [void]$builder.Remove('DATABASE') }
         # Own the probe session, leave roles unchanged and deallocate every probe.
         $connection = [Data.Odbc.OdbcConnection]::new($builder.ConnectionString)
         $connection.Open()
@@ -127,14 +138,18 @@ function Assert-RuntimeDatabaseAccess([string]$Database, [string]$AuthConnection
     [int]$Version = (Get-RuntimeSchemaVersion), [string]$ExpectedUuid = '') {
     $auth = $null; $town = $null
     try {
-        $auth = Open-RuntimeDatabase $AuthConnectionString 'Auth runtime'
-        $authIdentity = Get-RuntimeDatabaseIdentity $auth $Database
+        Assert-RuntimeConnectionDatabase $AuthConnectionString $Database 'Auth runtime'
+        Assert-RuntimeConnectionDatabase $TownConnectionString $Database 'Town runtime'
+        $auth = Open-RuntimeDatabase $AuthConnectionString 'Auth runtime' -WithoutDatabase
+        $authIdentity = Get-RuntimeDatabaseIdentity $auth $Database -AllowUnselected
         if ($ExpectedUuid -and $authIdentity.Uuid -ine $ExpectedUuid) { Stop-RuntimePermissions 'Auth runtime targets a different MySQL instance.' }
-        $town = Open-RuntimeDatabase $TownConnectionString 'Town runtime'
-        $townIdentity = Get-RuntimeDatabaseIdentity $town $Database
+        $town = Open-RuntimeDatabase $TownConnectionString 'Town runtime' -WithoutDatabase
+        $townIdentity = Get-RuntimeDatabaseIdentity $town $Database -AllowUnselected
         if ($townIdentity.Uuid -ine $authIdentity.Uuid) { Stop-RuntimePermissions 'Auth and Town runtime accounts target different MySQL instances.' }
         Assert-RuntimeProcedureAccess $auth $authIdentity $Version 'Auth'
         Assert-RuntimeProcedureAccess $town $townIdentity $Version 'Town'
+        Invoke-RuntimeSql $auth ('USE `{0}`' -f $Database)
+        Invoke-RuntimeSql $town ('USE `{0}`' -f $Database)
         Write-Host "Runtime EXECUTE verified: Auth=$($authIdentity.Principal); Town=$($townIdentity.Principal); database=$Database. No application procedure was executed."
     } finally { if ($null -ne $town) { $town.Dispose() }; if ($null -ne $auth) { $auth.Dispose() } }
 }
@@ -169,8 +184,14 @@ function Sync-RuntimeDatabasePermissions($MigrationConnection, [string]$Database
         if ([string]::IsNullOrWhiteSpace($authText)) { $authText = Read-RuntimePermissionConnection $template 'Auth runtime (not migration/admin)' 'actionrpg_auth' $Database }
         $townText = [Environment]::GetEnvironmentVariable('ACTIONRPG_TOWN_DB_CONNECTION_STRING')
         if ([string]::IsNullOrWhiteSpace($townText)) { $townText = $authText }
-        $auth = Open-RuntimeDatabase $authText 'Auth runtime'; $authIdentity = Get-RuntimeDatabaseIdentity $auth $Database
-        $town = Open-RuntimeDatabase $townText 'Town runtime'; $townIdentity = Get-RuntimeDatabaseIdentity $town $Database
+        Assert-RuntimeConnectionDatabase $authText $Database 'Auth runtime'
+        Assert-RuntimeConnectionDatabase $townText $Database 'Town runtime'
+        # A newly created runtime account may not yet have permission to USE this schema.
+        # Authenticate without preselecting it to learn the actual matched account, then grant.
+        $auth = Open-RuntimeDatabase $authText 'Auth runtime' -WithoutDatabase
+        $authIdentity = Get-RuntimeDatabaseIdentity $auth $Database -AllowUnselected
+        $town = Open-RuntimeDatabase $townText 'Town runtime' -WithoutDatabase
+        $townIdentity = Get-RuntimeDatabaseIdentity $town $Database -AllowUnselected
         foreach ($identity in @($authIdentity,$townIdentity)) {
             if ($identity.Uuid -ine $migrationIdentity.Uuid) { Stop-RuntimePermissions 'Runtime connection targets a different MySQL instance; no GRANT was issued.' }
             if ($identity.Principal -ceq $migrationIdentity.Principal) { Stop-RuntimePermissions 'Runtime and migration accounts must be separate; no GRANT was issued.' }
