@@ -166,7 +166,6 @@ BEGIN
         VALUES (UNHEX(instanceId), inCharacterId, CONVERT(definitionId USING binary), itemCount, itemContainer, itemSlot);
         SET itemIndex = itemIndex + 1;
     END WHILE;
-    END IF;
 
 END$$
 

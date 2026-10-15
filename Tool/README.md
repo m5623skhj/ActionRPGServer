@@ -120,6 +120,12 @@ V1 전체 구조·양방향 체크섬·계정 테이블 2개의 비어 있음·�
 Tool\Database\UpMigration.bat -Database actionrpg -RecoverAccounts -ServicesStopped
 ```
 
+알려진 V7 `END IF` 문법 오류로 V7 테이블 3개만 생성됐다면 `-RecoverQuests`를 사용한다.
+V6 이력·기존 테이블 정의·V7 테이블의 빈 상태·정확한 실패/수정 체크섬을 확인한 뒤 누락된
+프로시저 5개만 생성하고 별도 복구 감사를 기록한다. 기존 FAILED 이력은 보존한다.
+상세 조건과 중간 실패 시 제한은 [V7 복구](../docs/workflows/DATABASE_MIGRATIONS.md#알려진-v000007-문법-오류의-명시적-복구)를 따른다.
+성공 후 `-PermissionsOnly`를 실행하고 수정된 Auth·SQL을 함께 배포한다.
+
 Up은 모든 미적용 버전을 순서대로 적용하고, Down은 현재 적용된 마지막 버전 하나만 되돌린다.
 공통 실행기 [Database/Migrate.ps1](Database/Migrate.ps1)이 대상 확인·잠금·정규화 SHA-256·감사 이력을
 관리한다. Up/Down 두 파일의 체크섬은 최초 적용 후 고정하며 과거 성공 기록도 삭제하지 않는다.

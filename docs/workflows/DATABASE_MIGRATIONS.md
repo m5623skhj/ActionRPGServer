@@ -837,9 +837,10 @@ Up의 `-CreateDatabase` 옵션은 대상 DB 생성·선택부터 수행하며 �
 | UpMigration.bat / DownMigration.bat | 공통 실행기에 각각 -Direction Up/Down을 전달 |
 | -Database 이름 | 1~64자; 생략하면 입력 요청(기본 actionrpg); 연결에서 선택된 DATABASE()와 정확히 대조 |
 | -CreateDatabase | Up 전용; DB가 없으면 생성하고 선택한 뒤 기존 이력·구조 검사와 적용 수행 |
-| -InspectOnly -InspectVersion 0..6 | Up 배치의 읽기 전용 진단; 지정 구조와 비교하며 실제 head/복구 성공을 확정하지 않음 |
+| -InspectOnly -InspectVersion 0..7 | Up 배치의 읽기 전용 진단; 지정 구조와 비교하며 실제 head/복구 성공을 확정하지 않음 |
 | -RecoverBootstrap | Up 전용; 완전한 V0와 초기 실패 1건을 재검증해 원본 보존 및 복구 확인 행 추가, V0에서 종료 |
 | -RecoverAccounts | Up 전용; 정상 V0 이력과 완전한 빈 V1의 첫 실패를 재검증해 복구 확인 행 추가, V1에서 종료 |
+| -RecoverQuests | Up 전용; 알려진 V7 문법 오류의 첫 실패와 V6 이력·빈 V7 테이블 3개를 검증하고 누락된 프로시저 5개만 생성 |
 | -ServicesStopped | 운영자 정지 확인; 생략하면 DB 접속 전에 Y 또는 y 입력을 요청하고 다른 응답은 중단 |
 | ACTIONRPG_MIGRATION_CONNECTION_STRING | 실행기 전용 ODBC 연결; 없으면 드라이버·호스트·포트·계정·숨김 비밀번호로 구성 |
 | ACTIONRPG_DB_CONNECTION_STRING | Auth runtime 전용 ODBC 연결; 마이그레이션 도구가 대신 사용하지 않음 |
@@ -947,10 +948,13 @@ NOT NULL 조합을 강제한다. 방향·선행 관계·성공 여부·양방향
 전체 감사 이력을 읽어 추가 검증한다. 테이블 제약만으로 유효한 버전 흐름이 증명되지는 않는다.
 
 현재 버전은 execution_id 증가 순서 전체 이력을 재생해 판단한다. 최초 행은 000000 UP 성공,
-이후 UP은 현재+1, DOWN은 현재 버전이며 0은 되돌리지 않는다. 실행 ID 간격은 허용하되 역순,
+이후 UP은 현재+1, DOWN은 현재 버전이며 0은 되돌리지 않는다. 실행 ID 간격은 허용한다.
+기존 조회 프로시저는 문자열로 변환한 `execution_id` 별칭을 정렬하므로 실행 ID가 두 자리가 되면
+`1, 10, 2` 순서로 반환될 수 있다. 실행기와 Auth는 ID 형식·범위를 확인하고 숫자 순서로 정렬한 뒤
+이력을 검증한다. 이 정렬 보정은 SQL 파일·체크섬·DB 이력을 수정하지 않으며 중복 ID도 계속 거절한다.
 중복·버전 누락·알 수 없는 버전·이름/체크섬 불일치·미복구 FAILED/RUNNING은 거절한다. 초기
-V0 FAILED 및 정상 V0 직후 첫 V1 UP FAILED 각각 바로 다음의 명시적 복구 확인 1건만
-아래 계약으로 인정한다. 실패를 걸러낸
+V0 FAILED 및 정상 V0 직후 첫 V1 UP FAILED, 알려진 구 V7 문법 오류 FAILED는 각각 바로 다음의
+명시적 복구 확인 1건만 아래 전용 계약으로 인정한다. 실패를 걸러낸
 MAX(version) 조회나 이력 삭제로 현재 버전을 계산하지 않는다. 완료 시각은 시작 시각 이후여야 한다.
 
 MySQL DDL과 이력 쓰기를 한 트랜잭션으로 롤백하지 않는다. 초기 이력 테이블 생성 직후 감사 행
@@ -1096,6 +1100,34 @@ Tool\Database\UpMigration.bat -Database actionrpg -RecoverAccounts -ServicesStop
 다른 애플리케이션 버전 실행이 있거나 복구 행이 단독/중복/잘못된 위치·시각·상태에 있으면 거절한다.
 정상 Up/Down 이후 V1 재실패에는 이 예외를 적용하지 않는다. 기존 V0 복구와 함께 존재할 수 있다.
 
+### 알려진 V000007 문법 오류의 명시적 복구
+
+초기 V7의 `apply_quest_inventory` 끝에 대응하는 IF가 없는 `END IF;`가 있었다.
+수정은 그 한 줄만 제거하며 V0~V6·V7 Down 원문은 보존한다. 실패한 V7 Up 체크섬
+`edbba43a152e1e1e8a81cf1d61611053be057f377a4837fbe5e57386451ded34`는 감사 이력에 남기고,
+수정된 Up 체크섬 `bcdd33ad3fa3f227293d5f37a92dd41e60fea24a2d53b7b1b925f8b678b86f89`를
+별도 복구 실행에 기록한다. 성공 적용된 SQL을 임의 변경하거나 다른 실패를 승인하는 경로가 아니다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -RecoverQuests
+```
+
+* 모든 DB 사용 서비스를 정지하고 기존 마이그레이션 연결·동일 이름 잠금으로 실행한다.
+  생성·진단·다른 복구·SchemaOnly·PermissionsOnly와 혼용하지 않는다.
+* V6까지의 정상 이력 바로 뒤에 알려진 구 V7 체크섬의 첫 UP FAILED 한 건만 있어야 한다.
+  V7 테이블 3개가 모두 존재하고 비어 있으며 V7 프로시저 5개는 모두 없어야 한다.
+  V6 구조와 전체 12개 테이블의 컬럼·제약·인덱스도 검증한다. 전체 객체 수는 테이블 12개,
+  루틴 17개, 이벤트/트리거 0개여야 한다. 조건이 다르면 감사 추가·DDL 전에 중단한다.
+* `create_character_quests_recovery`를 새 RUNNING 실행으로 기록한 뒤 수정된 프로시저 5개만
+  생성한다. 테이블 재생성·데이터 삭제·기존 FAILED 감사 수정은 하지 않는다.
+* 전체 V7 구조·프로시저 정의·입력·객체 수·기존 감사 불변을 검증한 뒤 새 실행을 SUCCEEDED로
+  완료한다. 도구와 새 Auth는 바로 이어진 이 정확한 체크섬/이름/시각의 복구 조합만 인정한다.
+  생성 도중 실패하면 새 실행은 FAILED 또는 RUNNING으로 남을 수 있다. 자동 재시도나 일반 Up
+  재실행을 하지 말고 남은 상태를 조사한다.
+* 성공 시 V000007에서 종료하며 GRANT는 수행하지 않는다. 별도로
+  `UpMigration.bat -Database actionrpg -PermissionsOnly`를 실행한다. 수정된 Auth를 다시 빌드하고
+  수정된 SQL 배포본도 함께 갱신해야 런타임이 복구 이력과 새 체크섬을 검증할 수 있다.
+
 ### 일반 Down과 미지원 실패 복구
 
 Down도 관련 서비스를 정지하고 같은 대상·파일·이력·구조 검사를 거친 뒤 현재 head 한 단계만
@@ -1111,7 +1143,7 @@ Down도 관련 서비스를 정지하고 같은 대상·파일·이력·구조 �
 첫 테이블만 생성된 중단 상태가 가능하다. 도구는 정상 성공 기록이 생길 때까지 대기 SQL을 건너뛰지 않는다.
 
 체크섬 불일치는 승인된 배포 원문을 대조하고 코드/SQL 배포 실수를 확인한다. 이력의 체크섬을 현재
-파일에 맞춰 덮어쓰지 않는다. 위 초기 V0/V1 복구 조합을 제외한 FAILED/RUNNING은 일반 Up/Down을
+파일에 맞춰 덮어쓰지 않는다. 위 초기 V0/V1 및 알려진 V7 복구 조합을 제외한 FAILED/RUNNING은 일반 Up/Down을
 계속 차단한다. 자동 repair/resume이나 다른 버전의 복구 기능은 없으며, 원인·부분 적용 상태·데이터
 유지 조건을 근거로 별도의 복구 SQL과 이력 처리 계약을 승인받아야 한다. 이 소스 변경만으로
 실제 DB 복구/SQL 적용을 수행한 것은 아니다.

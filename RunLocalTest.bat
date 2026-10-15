@@ -3,7 +3,7 @@ setlocal
 set "ACTIONRPG_LOCAL_LAUNCHER=%~f0"
 set "LOCAL_POWERSHELL=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if defined PROCESSOR_ARCHITEW6432 set "LOCAL_POWERSHELL=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
-"%LOCAL_POWERSHELL%" -NoProfile -Command "$source = [IO.File]::ReadAllText($env:ACTIONRPG_LOCAL_LAUNCHER); & ([scriptblock]::Create($source.Substring($source.LastIndexOf('# POWERSHELL START'))))"
+"%LOCAL_POWERSHELL%" -NoProfile -ExecutionPolicy RemoteSigned -Command "$source = [IO.File]::ReadAllText($env:ACTIONRPG_LOCAL_LAUNCHER); & ([scriptblock]::Create($source.Substring($source.LastIndexOf('# POWERSHELL START'))))"
 set "LAUNCH_RESULT=%ERRORLEVEL%"
 pause
 exit /b %LAUNCH_RESULT%

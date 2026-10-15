@@ -9,6 +9,7 @@ param(
     [ValidateRange(0, 7)][int]$InspectVersion,
     [switch]$RecoverBootstrap,
     [switch]$RecoverAccounts,
+    [switch]$RecoverQuests,
     [switch]$PermissionsOnly,
     [switch]$SchemaOnly
 )
@@ -21,6 +22,9 @@ $script:lockName = $null
 $script:ownsLock = $false
 $script:warningSeen = $false
 $script:stage = 'local file validation'
+$script:legacyQuestUpHash = 'edbba43a152e1e1e8a81cf1d61611053be057f377a4837fbe5e57386451ded34'
+$script:repairedQuestUpHash = 'bcdd33ad3fa3f227293d5f37a92dd41e60fea24a2d53b7b1b925f8b678b86f89'
+$script:questRecoveryDownHash = '1ad4b4f3af92fffc62d2deeb08c2d90ef52145e86a4e7a84ab36fd2051f1b4e4'
 
 function Assert-Condition([bool]$Condition, [string]$Message) {
     if (-not $Condition) {
@@ -370,6 +374,18 @@ function Get-Snapshot {
     $format = if ($quest) { '5' } elseif ($itemUse) { '4' } elseif ($inventory) { '3' } elseif ($expanded) { '2' } else { '1' }
     Assert-Condition ($header[0] -ceq $format -and $header[1] -ceq 'sha256-utf8-lf-v1' -and
         $header[2] -ceq $Database -and $header[3] -match '^8\.0\.46(?:$|[-+])' -and $header[4] -notmatch 'MariaDB') 'Unsupported target/inspection format.'
+    # Published routines sort the CHAR alias execution_id (1, 10, 2). Normalize
+    # transport order here without changing deployed SQL/checksums or audit rows.
+    $auditRows = $snapshot.Sets[1].Rows
+    foreach ($auditRow in $auditRows) {
+        [uint64]$execution = 0
+        Assert-Condition ($auditRow[0] -cmatch '^[1-9][0-9]*$' -and
+            [uint64]::TryParse($auditRow[0], [ref]$execution)) 'Invalid audit execution identifier.'
+    }
+    $auditRows.Sort([System.Comparison[object]]{
+        param($left, $right)
+        return ([uint64]$left[0]).CompareTo([uint64]$right[0])
+    })
     return $snapshot
 }
 
@@ -380,6 +396,8 @@ function Get-Head($Snapshot) {
     $head = 0
     $bootstrapFailureFinished = $null
     $accountsFailureFinished = $null
+    $questsFailureFinished = $null
+    $hasQuestHistory = $false
     $hasApplicationHistory = $false
     for ($i = 0; $i -lt $rows.Count; ++$i) {
         $row = $rows[$i]
@@ -392,17 +410,40 @@ function Get-Head($Snapshot) {
             [string]::CompareOrdinal($row[8], $row[7]) -ge 0) 'Failed, unfinished, or invalid audit; inspect before repair.'
         $previousId = $id
         if ($null -ne $bootstrapFailureFinished) {
-            Assert-Condition ($i -eq 1 -and $version -eq 0 -and $row[2] -ceq 'migration_history_recovery' -and
-                $row[3] -ceq 'UP' -and $row[4] -ceq $script:bootstrap.Hash -and $null -eq $row[5] -and
-                $row[6] -ceq 'SUCCEEDED' -and [string]::CompareOrdinal($row[7], $bootstrapFailureFinished) -ge 0) 'Invalid/missing bootstrap recovery confirmation.'
+            $checks = [ordered]@{
+                position = ($i -eq 1)
+                version = ($version -eq 0)
+                name = ($row[2] -ceq 'migration_history_recovery')
+                direction = ($row[3] -ceq 'UP')
+                up_checksum = ($row[4] -ceq $script:bootstrap.Hash)
+                down_checksum = ($null -eq $row[5])
+                state = ($row[6] -ceq 'SUCCEEDED')
+                started_at = ([string]::CompareOrdinal($row[7], $bootstrapFailureFinished) -ge 0)
+            }
+            $invalidChecks = @($checks.Keys | Where-Object { -not $checks[$_] })
+            Assert-Condition ($invalidChecks.Count -eq 0) ('Invalid/missing bootstrap recovery confirmation. Failed checks: ' +
+                ($invalidChecks -join ', ') + '; row_index=' + $i + '; audit=' +
+                (ConvertTo-Json -InputObject $row -Compress) + '; expected_up_checksum=' + $script:bootstrap.Hash +
+                '; failed_finished_at=' + $bootstrapFailureFinished)
             $bootstrapFailureFinished = $null
             continue
         }
         if ($null -ne $accountsFailureFinished) {
             $file = $script:catalog[1]
-            Assert-Condition ($version -eq 1 -and $row[2] -ceq 'create_login_accounts_recovery' -and
-                $row[3] -ceq 'UP' -and $row[4] -ceq $file.Up.Hash -and $row[5] -ceq $file.Down.Hash -and
-                $row[6] -ceq 'SUCCEEDED' -and [string]::CompareOrdinal($row[7], $accountsFailureFinished) -ge 0) 'Invalid/missing account-table recovery confirmation.'
+            $checks = [ordered]@{
+                version = ($version -eq 1)
+                name = ($row[2] -ceq 'create_login_accounts_recovery')
+                direction = ($row[3] -ceq 'UP')
+                up_checksum = ($row[4] -ceq $file.Up.Hash)
+                down_checksum = ($row[5] -ceq $file.Down.Hash)
+                state = ($row[6] -ceq 'SUCCEEDED')
+                started_at = ([string]::CompareOrdinal($row[7], $accountsFailureFinished) -ge 0)
+            }
+            $invalidChecks = @($checks.Keys | Where-Object { -not $checks[$_] })
+            Assert-Condition ($invalidChecks.Count -eq 0) ('Invalid/missing account-table recovery confirmation. Failed checks: ' +
+                ($invalidChecks -join ', ') + '; row_index=' + $i + '; audit=' +
+                (ConvertTo-Json -InputObject $row -Compress) + '; expected_up_checksum=' + $file.Up.Hash +
+                '; expected_down_checksum=' + $file.Down.Hash + '; failed_finished_at=' + $accountsFailureFinished)
             $accountsFailureFinished = $null
             $hasApplicationHistory = $true
             $head = 1
@@ -417,8 +458,29 @@ function Get-Head($Snapshot) {
             } else { Assert-Condition ($row[6] -ceq 'SUCCEEDED') 'Unfinished/invalid bootstrap audit.' }
             continue
         }
+        if ($null -ne $questsFailureFinished) {
+            $file = $script:catalog[7]
+            Assert-Condition ($version -eq 7 -and $row[2] -ceq 'create_character_quests_recovery' -and
+                $row[3] -ceq 'UP' -and $row[4] -ceq $script:repairedQuestUpHash -and
+                $row[4] -ceq $file.Up.Hash -and $row[5] -ceq $script:questRecoveryDownHash -and
+                $row[5] -ceq $file.Down.Hash -and $row[6] -ceq 'SUCCEEDED' -and
+                [string]::CompareOrdinal($row[7], $questsFailureFinished) -ge 0) 'Invalid/missing V7 recovery confirmation; inspect before repair.'
+            $questsFailureFinished = $null
+            $head = 7
+            continue
+        }
         Assert-Condition ($version -gt 0 -and $script:catalog.ContainsKey($version)) 'Unknown/missing migration version.'
         $file = $script:catalog[$version]
+        if ($version -eq 7 -and $head -eq 6 -and -not $hasQuestHistory -and
+            $row[2] -ceq $file.Name -and $row[3] -ceq 'UP' -and $row[6] -ceq 'FAILED' -and
+            $row[4] -ceq $script:legacyQuestUpHash -and $row[5] -ceq $script:questRecoveryDownHash -and
+            $file.Up.Hash -ceq $script:repairedQuestUpHash -and $file.Down.Hash -ceq $script:questRecoveryDownHash) {
+            Assert-Condition ($i + 1 -lt $rows.Count) 'Known V7 SQL failure requires explicit -RecoverQuests; no recovery confirmation exists.'
+            $questsFailureFinished = $row[8]
+            $hasQuestHistory = $true
+            continue
+        }
+        if ($version -eq 7) { $hasQuestHistory = $true }
         Assert-Condition ($row[2] -ceq $file.Name -and $row[4] -ceq $file.Up.Hash -and $row[5] -ceq $file.Down.Hash) 'Migration name/checksum mismatch.'
         if (-not $hasApplicationHistory -and $head -eq 0 -and $version -eq 1 -and
             $row[3] -ceq 'UP' -and $row[6] -ceq 'FAILED') {
@@ -438,6 +500,7 @@ function Get-Head($Snapshot) {
     }
     Assert-Condition ($null -eq $bootstrapFailureFinished) 'Missing bootstrap recovery confirmation.'
     Assert-Condition ($null -eq $accountsFailureFinished) 'Missing account-table recovery confirmation.'
+    Assert-Condition ($null -eq $questsFailureFinished) 'Missing V7 recovery confirmation.'
     return $head
 }
 
@@ -455,10 +518,11 @@ function Assert-Rows($Actual, $Expected, [string]$Label) {
     }
 }
 
-function Assert-Structure($Snapshot, [int]$Head) {
+function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
+    Assert-Condition (-not $TablesOnly -or ($RecoverQuests -and $Head -eq 7)) 'Table-only verification is restricted to V7 recovery.'
     Assert-Condition ($Head -ge 0 -and $Head -le 7) 'Update the schema inspection contract before adding schema versions.'
-    $resultCount = if ($Head -ge 7) { 29 } elseif ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
-    $format = if ($Head -ge 7) { '5' } elseif ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
+    $resultCount = if ($TablesOnly) { 5 } elseif ($Head -ge 7) { 29 } elseif ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
+    $format = if ($TablesOnly) { '4' } elseif ($Head -ge 7) { '5' } elseif ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
     Assert-Condition ($Snapshot.Sets.Count -eq $resultCount -and $Snapshot.Sets[0].Rows[0][0] -ceq $format) 'Inspector/version mismatch.'
     $columns = [System.Collections.Generic.List[object]]::new()
     $constraints = [System.Collections.Generic.List[object]]::new()
@@ -691,6 +755,7 @@ function Assert-Structure($Snapshot, [int]$Head) {
         (ConvertTo-Json -InputObject $orderedColumns -Compress -Depth 4)) 'Columns/order/defaults/engine mismatch.'
     Assert-Rows $actualConstraints $constraints 'Constraints'
     Assert-Rows $Snapshot.Sets[4].Rows $indexes 'Indexes'
+    if ($TablesOnly) { return }
     $routines = [System.Collections.Generic.List[object]]::new()
     $parameters = [System.Collections.Generic.List[object]]::new()
     $files = @($script:bootstrap)
@@ -920,6 +985,90 @@ WHERE other.execution_id IS NULL AND failed.execution_id = ? AND failed.version 
     Write-Host 'Recovery complete. Active version: V000000. Original FAILED audit preserved; run a separate normal Up to apply V000001..V000007.'
 }
 
+function Assert-QuestRecoveryObjects([int]$ExpectedRoutines) {
+    Assert-Lock
+    $counts = Read-Sets 'SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()), (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE()), (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()), (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE())'
+    Assert-Condition ($counts.Sets.Count -eq 1 -and $counts.Sets[0].Columns -eq 4 -and
+        $counts.Sets[0].Rows.Count -eq 1) 'Invalid V7 recovery object inventory.'
+    $count = $counts.Sets[0].Rows[0]
+    Assert-Condition ($count[0] -ceq '12' -and $count[1] -ceq ([string]$ExpectedRoutines) -and
+        $count[2] -ceq '0' -and $count[3] -ceq '0') 'Unexpected V7 recovery objects; no DDL replay is allowed.'
+    Assert-Condition ((Read-Scalar 'SELECT NOT EXISTS (SELECT 1 FROM character_quests) AND NOT EXISTS (SELECT 1 FROM character_quest_tracking) AND NOT EXISTS (SELECT 1 FROM character_quest_events)') -ceq '1') 'V7 recovery refused: quest data exists.'
+}
+
+# Only the known malformed V7, after its three CREATE TABLE statements, can
+# resume. Existing V6 data/tables and all prior audit rows remain untouched.
+function Invoke-QuestsRecovery {
+    $script:stage = 'V7 recovery verification'
+    $file = $script:catalog[7]
+    Assert-Condition ($file.Up.Hash -ceq $script:repairedQuestUpHash -and
+        $file.Down.Hash -ceq $script:questRecoveryDownHash -and $file.Up.Statements.Count -eq 8) 'V7 recovery requires the pinned corrected deployment SQL.'
+    $snapshot = Get-Snapshot
+    $rows = $snapshot.Sets[1].Rows
+    Assert-Condition ($rows.Count -ge 2) 'V7 recovery requires a verified V6 prefix and the known V7 failure.'
+    $prefixRows = [System.Collections.Generic.List[object]]::new()
+    for ($index = 0; $index -lt $rows.Count - 1; ++$index) { $prefixRows.Add($rows[$index]) }
+    $prefix = [pscustomobject]@{ Sets = @($null, [pscustomobject]@{ Rows = $prefixRows }) }
+    Assert-Condition ((Get-Head $prefix) -eq 6) 'V7 recovery requires a verified V6 prefix.'
+    foreach ($prior in $prefixRows) { Assert-Condition ($prior[1] -cne '7') 'V7 recovery is limited to the first V7 attempt.' }
+    $failed = $rows[$rows.Count - 1]
+    Assert-Condition ($failed[0] -cmatch '^[1-9][0-9]*$' -and
+        [uint64]$failed[0] -gt [uint64]$prefixRows[$prefixRows.Count - 1][0] -and
+        $failed[1] -ceq '7' -and $failed[2] -ceq $file.Name -and $failed[3] -ceq 'UP' -and
+        $failed[4] -ceq $script:legacyQuestUpHash -and $failed[5] -ceq $script:questRecoveryDownHash -and
+        $failed[6] -ceq 'FAILED') 'Not the known initial V7 SQL failure; inspect before repair.'
+    Assert-RecoveryAuditTime $failed
+    Assert-Structure $snapshot 6
+    Assert-QuestRecoveryObjects 17
+
+    # Reuse the three read-only metadata SELECTs from the pinned V7 inspector.
+    # They cover all twelve tables, including the existing V7 tables, before DDL.
+    $tableSets = [System.Collections.Generic.List[object]]::new()
+    $tableSets.Add($snapshot.Sets[0]); $tableSets.Add($snapshot.Sets[1])
+    $patterns = @(
+        '(?s)\bSELECT CAST\(c\.TABLE_NAME AS CHAR.*?ORDER BY c\.TABLE_NAME, c\.ORDINAL_POSITION;',
+        '(?s)\bSELECT CAST\(t\.TABLE_NAME AS CHAR.*?ORDER BY t\.TABLE_NAME, t\.CONSTRAINT_NAME, k\.ORDINAL_POSITION;',
+        '(?s)\bSELECT CAST\(TABLE_NAME AS CHAR.*?ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX;'
+    )
+    $widths = @(9, 11, 6)
+    for ($index = 0; $index -lt $patterns.Count; ++$index) {
+        $queries = [regex]::Matches($file.Up.Statements[7], $patterns[$index])
+        Assert-Condition ($queries.Count -eq 1) 'V7 table inspection SQL mismatch.'
+        $metadata = Read-Sets $queries[0].Value
+        Assert-Condition ($metadata.Sets.Count -eq 1 -and $metadata.Sets[0].Columns -eq $widths[$index]) 'Invalid V7 table inspection result.'
+        $tableSets.Add($metadata.Sets[0])
+    }
+    Assert-Structure ([pscustomobject]@{ Sets = $tableSets }) 7 -TablesOnly
+    Assert-Condition ((Read-Scalar 'SELECT UTC_TIMESTAMP(6) >= CAST(? AS DATETIME(6))' @($failed[8].Substring(0, 26).Replace('T', ' '))) -ceq '1') 'V7 recovery clock precedes the failed attempt.'
+    Write-Host "Plan: preserve FAILED V7 execution $($failed[0]) and the three verified empty tables; create only five missing procedures using corrected SQL."
+    [uint64]$recoveryId = 0
+    try {
+        Assert-Lock
+        $script:stage = 'V7 recovery audit start'
+        $recoveryId = Start-Audit 7 'create_character_quests_recovery' 'UP' $file.Up.Hash $file.Down.Hash
+        for ($index = 3; $index -lt $file.Up.Statements.Count; ++$index) {
+            $script:stage = "V7 recovery statement $($index + 1)"
+            Assert-Lock
+            [void](Invoke-Write $file.Up.Statements[$index])
+        }
+        $script:stage = 'V7 recovery final structure verification'
+        $verified = Get-Snapshot
+        Assert-Structure $verified 7
+        Assert-QuestRecoveryObjects 22
+        Assert-Condition ($verified.Sets[1].Rows.Count -eq $rows.Count + 1) 'Unexpected V7 recovery audit count.'
+        for ($index = 0; $index -lt $rows.Count; ++$index) {
+            Assert-Condition ((ConvertTo-Json -InputObject $verified.Sets[1].Rows[$index] -Compress) -ceq
+                (ConvertTo-Json -InputObject $rows[$index] -Compress)) 'V7 recovery changed existing history; inspect before proceeding.'
+        }
+        Complete-Audit $recoveryId 'SUCCEEDED'
+        Assert-Condition ((Get-Head (Get-Snapshot)) -eq 7) 'V7 recovery head mismatch.'
+        Write-Host 'Recovery complete. Active version: V000007. Original FAILED audit preserved; run a separate -PermissionsOnly to synchronize runtime grants.'
+    } catch {
+        if ($recoveryId -gt 0) { try { Complete-Audit $recoveryId 'FAILED' } catch {} }
+        throw
+    }
+}
+
 function Invoke-AccountsRecovery {
     $script:stage = 'account-table recovery verification'
     $snapshot = Get-Snapshot
@@ -1046,21 +1195,25 @@ try {
     Assert-Condition ($Database.Length -ge 1 -and $Database.Length -le 64) 'Database name must contain 1..64 characters.'
     Assert-Condition (-not $PermissionsOnly.IsPresent -or ($Direction -eq 'Up' -and -not $SchemaOnly.IsPresent -and
         -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent -and -not $RecoverBootstrap.IsPresent -and
-        -not $RecoverAccounts.IsPresent)) '-PermissionsOnly requires Up without creation, inspection, recovery or -SchemaOnly.'
+        -not $RecoverAccounts.IsPresent -and -not $RecoverQuests.IsPresent)) '-PermissionsOnly requires Up without creation, inspection, recovery or -SchemaOnly.'
     Assert-Condition (-not $SchemaOnly.IsPresent -or (-not $InspectOnly.IsPresent -and
-        -not $RecoverBootstrap.IsPresent -and -not $RecoverAccounts.IsPresent)) '-SchemaOnly cannot be combined with inspection or recovery.'
-    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts) { Assert-RuntimeDatabaseName $Database }
+        -not $RecoverBootstrap.IsPresent -and -not $RecoverAccounts.IsPresent -and -not $RecoverQuests.IsPresent)) '-SchemaOnly cannot be combined with inspection or recovery.'
+    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts -and !$RecoverQuests) { Assert-RuntimeDatabaseName $Database }
     if (-not $ServicesStopped.IsPresent) {
         Write-Host "Requested direction: $Direction / database: $Database"
         $confirmation = Read-Host 'Stop all Auth/Town/Room and other DB-using services. Type Y or y to confirm'
         Assert-Condition ($confirmation -ieq 'Y') 'Cancelled: DB-using services must be stopped; no database connection was opened.'
     }
     Assert-Condition (-not $RecoverAccounts.IsPresent -or ($Direction -eq 'Up' -and -not $RecoverBootstrap.IsPresent -and
-        -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverAccounts requires Up without other recovery, creation or inspection options.'
+        -not $RecoverQuests.IsPresent -and -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverAccounts requires Up without other recovery, creation or inspection options.'
     Assert-Condition (-not $RecoverBootstrap.IsPresent -or ($Direction -eq 'Up' -and
-        -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverBootstrap requires Up without -CreateDatabase or -InspectOnly.'
+        -not $RecoverAccounts.IsPresent -and -not $RecoverQuests.IsPresent -and
+        -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverBootstrap requires Up without other recovery, creation or inspection options.'
+    Assert-Condition (-not $RecoverQuests.IsPresent -or ($Direction -eq 'Up' -and
+        -not $RecoverAccounts.IsPresent -and -not $RecoverBootstrap.IsPresent -and
+        -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverQuests requires Up without other recovery, creation or inspection options.'
     Assert-Condition (-not $InspectOnly.IsPresent -or ($Direction -eq 'Up' -and -not $CreateDatabase.IsPresent)) '-InspectOnly requires Up without -CreateDatabase.'
-    Assert-Condition ($PSBoundParameters.ContainsKey('InspectVersion') -eq $InspectOnly.IsPresent) 'Supply -InspectOnly and -InspectVersion 0..6 together; the comparison version is not an active-version claim.'
+    Assert-Condition ($PSBoundParameters.ContainsKey('InspectVersion') -eq $InspectOnly.IsPresent) 'Supply -InspectOnly and -InspectVersion 0..7 together; the comparison version is not an active-version claim.'
     Assert-Condition (-not $CreateDatabase.IsPresent -or $Direction -eq 'Up') '-CreateDatabase is only supported with Up.'
     if ($CreateDatabase) {
         Assert-Condition ($Database -cmatch '\A[a-z][a-z0-9_]{0,63}\z' -and
@@ -1079,7 +1232,7 @@ try {
         $script:catalog.Add($version, [pscustomobject]@{ Name = $name; Up = (Read-SqlFile $item.FullName); Down = (Read-SqlFile (Join-Path (Join-Path $root 'Down') $item.Name)) })
     }
     Assert-Condition ($script:catalog.Count -eq 7) 'Current schema inspection supports versions 000001..000007; extend the contract with new migrations.'
-    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts) {
+    if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts -and !$RecoverQuests) {
         Assert-Condition ($script:catalog.Count -eq (Get-RuntimeSchemaVersion)) 'Update the runtime permission contract with the migration catalog before DB preparation.'
     }
     for ($i = 1; $i -le $script:catalog.Count; ++$i) { Assert-Condition ($script:catalog.ContainsKey($i)) 'Migration version gap.' }
@@ -1177,6 +1330,11 @@ try {
         Invoke-AccountsRecovery
         return
     }
+    if ($RecoverQuests) {
+        Assert-Condition ($hasHistory -ceq '1') 'V7 recovery requires existing migration infrastructure; nothing was created.'
+        Invoke-QuestsRecovery
+        return
+    }
     if ($hasHistory -ceq '0') {
         Assert-Condition (-not $PermissionsOnly.IsPresent) 'Permissions-only requires an existing verified schema; run normal Up first.'
         Assert-Condition ($Direction -eq 'Up') 'Unmanaged schema: Down requires a verified migration history.'
@@ -1228,7 +1386,7 @@ try {
         $exception = $exception.InnerException
     }
     $operation = if ($PermissionsOnly -or $script:stage.StartsWith('runtime permissions')) { 'Permission preparation' }
-        elseif ($InspectOnly) { 'Inspection' } elseif ($RecoverBootstrap -or $RecoverAccounts) { 'Recovery' } else { 'Migration' }
+        elseif ($InspectOnly) { 'Inspection' } elseif ($RecoverBootstrap -or $RecoverAccounts -or $RecoverQuests) { 'Recovery' } else { 'Migration' }
     [Console]::Error.WriteLine("$operation stopped at $script:stage. $detail")
     if ($CreateDatabase) { [Console]::Error.WriteLine('Any successfully created database remains; database creation is not rolled back or recorded as a versioned migration.') }
     if ($script:stage.StartsWith('runtime permissions')) {

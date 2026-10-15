@@ -236,6 +236,7 @@ Google secret은 ID와 짝지어 클라이언트 환경에만 전달되고 로�
 | 드라이버 대입 시 `PSObject`를 `String`으로 변환할 수 없음 | 목록의 실제 Name을 문자열로 변환하고 `.set_Driver([string]...)` 사용. 빈 번호나 드라이버 버전 숫자만 입력하지 않음 |
 | 비밀번호 입력에서 멈춤·자격 증명 창이 안 보임 | 별도 `Get-Credential` 창 대신 위 예제와 실행기의 `Read-Host -AsSecureString` 사용. 콘솔에서 숨김 입력 후 Enter |
 | `Migrate.ps1` 실행 정책 오류 | 배치는 자식 PowerShell에 `-ExecutionPolicy RemoteSigned`를 지정함. 상위 조직 정책 또는 다운로드 파일 차단 여부를 확인 |
+| 실행 전 runtime procedure permissions 단계에서 `PSSecurityException` / `0x80070005` | 실행기도 해당 PowerShell 프로세스에 `-ExecutionPolicy RemoteSigned`를 지정해야 `RuntimePermissions.ps1`을 불러올 수 있음. 최신 `RunLocalTest.bat`으로 재실행. 시스템·사용자 영구 실행 정책은 변경하지 않음. 계속 차단되면 조직 정책·파일 차단 여부 확인 |
 | `GRANT` 오류 1410: user 생성 불가 | 대상 `'사용자'@'호스트'` 계정을 먼저 생성. MySQL 8에서 GRANT를 계정 생성 대신 사용하지 않음 |
 | V0/V1 `Constraints mismatch` | 최신 실행기와 Auth 소스 사용. MySQL CHECK 메타데이터의 문자열 escape와 `OCTET_LENGTH`/`LENGTH` 표기 차이를 비교 단계에서만 정규화. 이미 FAILED가 남았다면 아래 진단·복구 절차로 이동 |
 | private settings directory에서 `PrivilegeNotHeldException` | 최신 실행기는 생성 시 ACL을 적용하고 검증함. 기존 디렉터리의 소유자·허용 주체를 확인하며 관리자 실행이나 전체 사용자 접근 허용으로 우회하지 않음 |
@@ -276,6 +277,10 @@ Get-CimInstance Win32_Process -Filter "Name = 'ActionRPGClient.exe'" |
 **최초 V1 실패·빈 계정 테이블**은 승인된 `-RecoverAccounts` 계약이 있다. 원래 FAILED 행을 유지하고
 확인 행을 추가하며, 성공 후 별도의 일반 Up을 실행한다. 이 옵션은 새 PC 설치의 정규 단계가 아니며
 불완전한 구조·다른 실패·데이터가 있는 상태에는 적용하지 않는다. 대상과 조건을 검토한 후 진행한다.
+별도로 알려진 V7 `END IF` 문법 오류는 V6 정상 이력과 빈 V7 테이블 3개·프로시저 0개 상태에만
+`-RecoverQuests`를 제공한다. 수정된 SQL과 새 Auth를 함께 배포하고,
+[V7 전용 복구 조건](DATABASE_MIGRATIONS.md#알려진-v000007-문법-오류의-명시적-복구)을 따른다.
+복구 성공 후 `-PermissionsOnly`로 런타임 권한을 준비한다. V7 실패 행을 직접 수정하지 않는다.
 전체 조건과 명령은 [초기 V0 복구](DATABASE_MIGRATIONS.md#초기-v000000-전용-명시적-복구)와
 [초기 V1 복구](DATABASE_MIGRATIONS.md#초기-v000001-전용-명시적-복구)에 있다.
 

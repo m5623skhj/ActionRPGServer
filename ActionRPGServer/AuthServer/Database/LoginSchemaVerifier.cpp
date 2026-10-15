@@ -146,20 +146,38 @@ namespace ActionRPG::Database
 
         void ValidateHistory(const SchemaHistoryResponse& inResponse, const Deployment& inDeployment)
         {
+            constexpr auto LEGACY_QUEST_UP_HASH = L"edbba43a152e1e1e8a81cf1d61611053be057f377a4837fbe5e57386451ded34";
+            constexpr auto REPAIRED_QUEST_UP_HASH = L"bcdd33ad3fa3f227293d5f37a92dd41e60fea24a2d53b7b1b925f8b678b86f89";
+            constexpr auto QUEST_RECOVERY_DOWN_HASH = L"1ad4b4f3af92fffc62d2deeb08c2d90ef52145e86a4e7a84ab36fd2051f1b4e4";
+            // Published routines ORDER BY the CHAR execution_id alias (1, 10, 2).
+            // Sort validated numeric IDs without changing deployment checksums.
+            struct AuditEntry
+            {
+                std::uint64_t execution;
+                const SchemaHistoryRow* row;
+            };
+            std::vector<AuditEntry> history;
+            history.reserve(inResponse.resultSets[1].size());
+            for (const auto& row : inResponse.resultSets[1])
+                history.push_back({Number(Required(row, 0)), &row});
+            std::sort(history.begin(), history.end(), [](const auto& left, const auto& right)
+                { return left.execution < right.execution; });
             std::uint64_t lastExecution = 0;
             std::uint64_t head = 0;
             bool bootstrapped = false;
             std::optional<std::wstring> bootstrapFailureFinished;
             std::optional<std::wstring> accountsFailureFinished;
+            std::optional<std::wstring> questsFailureFinished;
+            bool hasQuestHistory = false;
             bool hasApplicationHistory = false;
-            for (const auto& row : inResponse.resultSets[1])
+            for (const auto& entry : history)
             {
-                const auto execution = Number(Required(row, 0));
+                const auto& row = *entry.row;
+                const auto execution = entry.execution;
                 const auto version = Number(Required(row, 1));
                 if (execution <= lastExecution || version >= inDeployment.size()) InvalidSchema();
                 lastExecution = execution;
                 const auto& migration = inDeployment[version];
-                if (Required(row, 4) != migration.upChecksum || row[5] != migration.downChecksum) InvalidSchema();
                 const auto& started = Required(row, 7);
                 const auto& finished = Required(row, 8);
                 ValidateTime(started);
@@ -167,8 +185,32 @@ namespace ActionRPG::Database
                 if (finished < started) InvalidSchema();
                 const auto& direction = Required(row, 3);
                 const auto& state = Required(row, 6);
+                if (questsFailureFinished)
+                {
+                    if (version != 7 || Required(row, 2) != L"create_character_quests_recovery" || direction != L"UP"
+                        || state != L"SUCCEEDED" || started < *questsFailureFinished
+                        || Required(row, 4) != REPAIRED_QUEST_UP_HASH || Required(row, 4) != migration.upChecksum
+                        || Required(row, 5) != QUEST_RECOVERY_DOWN_HASH || row[5] != migration.downChecksum) InvalidSchema();
+                    questsFailureFinished.reset();
+                    head = 7;
+                    continue;
+                }
+                // A single known malformed V7 is permitted only with an immediate
+                // successful recovery bound to the corrected deployment checksum.
+                if (bootstrapped && !bootstrapFailureFinished && !accountsFailureFinished && !hasQuestHistory
+                    && head == 6 && version == 7 && Required(row, 2) == migration.name && direction == L"UP"
+                    && state == L"FAILED" && Required(row, 4) == LEGACY_QUEST_UP_HASH
+                    && Required(row, 5) == QUEST_RECOVERY_DOWN_HASH && migration.upChecksum == REPAIRED_QUEST_UP_HASH
+                    && migration.downChecksum && *migration.downChecksum == QUEST_RECOVERY_DOWN_HASH)
+                {
+                    questsFailureFinished = finished;
+                    hasQuestHistory = true;
+                    continue;
+                }
+                if (version == 7) hasQuestHistory = true;
+                if (Required(row, 4) != migration.upChecksum || row[5] != migration.downChecksum) InvalidSchema();
                 // Initial V0/V1 failures require an immediate, checksum-bound
-                // confirmation. Later failures and all unfinished attempts block.
+                // confirmation. Other failures and all unfinished attempts block.
                 if (bootstrapFailureFinished)
                 {
                     if (version != 0 || Required(row, 2) != L"migration_history_recovery" || direction != L"UP"
@@ -212,7 +254,7 @@ namespace ActionRPG::Database
                     else InvalidSchema();
                 }
             }
-            if (!bootstrapped || bootstrapFailureFinished || accountsFailureFinished
+            if (!bootstrapped || bootstrapFailureFinished || accountsFailureFinished || questsFailureFinished
                 || head != VerifiedLoginSchema::REQUIRED_SCHEMA_VERSION) InvalidSchema();
         }
 
