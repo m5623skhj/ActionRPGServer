@@ -10,10 +10,17 @@
   "npcs": [
     {
       "id": "TownGuide",
-      "name": "마을 안내소",
+      "name": "퀘스트 게시판",
       "mapId": "town_01",
-      "x": 908.35791015625,
-      "y": 1366.0780029296875
+      "x": 720.0,
+      "y": 1360.0
+    },
+    {
+      "id": "GuildClerk",
+      "name": "길드 접수원",
+      "mapId": "town_01",
+      "x": 1100.0,
+      "y": 1360.0
     }
   ],
   "quests": [
@@ -49,7 +56,7 @@
                 "npcId": "TownGuide"
               },
               "count": 1,
-              "description": "마을 안내소와 조사 계획 이야기하기"
+              "description": "퀘스트 게시판에서 조사 계획 확인하기"
             }
           ]
         },
@@ -154,7 +161,7 @@
                 "npcId": "TownGuide"
               },
               "count": 1,
-              "description": "마을 안내소에 다음 조사 보고하기"
+              "description": "퀘스트 게시판에 다음 조사 보고하기"
             }
           ]
         }
