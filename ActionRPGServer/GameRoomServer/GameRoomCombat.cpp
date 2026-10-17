@@ -120,7 +120,7 @@ namespace GameRoomServer
     bool GameRoom::IsShotFacingLocked(const PlayerState& inPlayer)
     {
         return inPlayer.itemUseElapsedSeconds < inPlayer.itemUseDurationSeconds || inPlayer.shotPhase != ShotPhase::None
-            || (inPlayer.shotCount > 0 && inPlayer.shotCount < MAX_SHOTS && inPlayer.shotInputRemainingSeconds > 0);
+            || (inPlayer.shotCount > 0 && inPlayer.shotCount < inPlayer.maxBasicAttacks && inPlayer.shotInputRemainingSeconds > 0);
     }
 
     // Reset the combo without clearing queued actions or the per-jump shot limit.
@@ -130,6 +130,8 @@ namespace GameRoomServer
         inPlayer.pendingShots = inPlayer.shotCount = 0;
         inPlayer.shotSeconds = inPlayer.shotInputRemainingSeconds = 0;
         inPlayer.airAttack = false;
+        inPlayer.meleeHitApplied = false;
+        inPlayer.meleeHitIds.clear();
     }
 
     // Inputs express intent only. Position, HP, attack timing and hit targets belong to the strand.
@@ -172,9 +174,9 @@ namespace GameRoomServer
                         {
                             result.accepted = 1;
                         }
-                        else if (player.bufferedActions.size() < MAX_SHOTS + 1
-                            && (inInput.action == 2 || (comboShots + player.pendingShots + reservedShots < MAX_SHOTS
-                                && (!airborne || player.airShotCount + player.pendingShots + reservedShots < MAX_SHOTS))))
+                        else if (player.bufferedActions.size() < player.maxBasicAttacks + 1
+                            && (inInput.action == 2 || (comboShots + player.pendingShots + reservedShots < player.maxBasicAttacks
+                                && (!airborne || player.airShotCount + player.pendingShots + reservedShots < player.maxBasicAttacks))))
                         {
                             player.bufferedActions.push_back({ inInput.action, inInput.facingLeft != 0, ACTION_BUFFER_SECONDS });
                             result.accepted = 1;
@@ -226,7 +228,8 @@ namespace GameRoomServer
             * definition->second.slide.distancePerRunSpeedSeconds / slide.durationSeconds;
         slide.damage = static_cast<std::uint32_t>(std::clamp(
             static_cast<double>(definition->second.attackPower) * BuffMultiplier(inPlayer, "damageMultiplier")
-                * SLIDE_DAMAGE_COEFFICIENT, 1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+                * (definition->second.melee ? definition->second.melee->dash.damageRatio : SLIDE_DAMAGE_COEFFICIENT),
+            1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
         slide.force = definition->second.slide.force;
         slide.airborne = definition->second.slide.airborne;
         inPlayer.sequence = inInput.moveSequence;
@@ -281,7 +284,20 @@ namespace GameRoomServer
         }
         const float hitStart = std::max(before, slide.hitStartSeconds);
         const float hitEnd = std::min(slide.seconds, slide.hitEndSeconds);
-        if (hitStart <= hitEnd && hitStart < slide.hitEndSeconds)
+        const auto& character = combatDefinition->characters.at(inPlayer.characterId);
+        if (character.melee)
+        {
+            const auto& strike = character.melee->dash;
+            if (!slide.meleeHitApplied && before <= strike.hitSeconds && slide.seconds >= strike.hitSeconds)
+            {
+                slide.meleeHitApplied = true;
+                const float acceptedSeconds = slide.seconds - before;
+                const float fraction = acceptedSeconds > 0 ? (strike.hitSeconds - before) / acceptedSeconds : 0;
+                HitMelee(inPlayer, strike, { tickStart.x + (inPlayer.position.x - tickStart.x) * fraction,
+                    tickStart.y + (inPlayer.position.y - tickStart.y) * fraction }, slide.hitIds);
+            }
+        }
+        else if (hitStart <= hitEnd && hitStart < slide.hitEndSeconds)
         {
             const float acceptedSeconds = slide.seconds - before;
             const auto pointAt = [&](float inSeconds) -> DungeonPoint
@@ -316,7 +332,8 @@ namespace GameRoomServer
             const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
             const auto fraction = ProjectileHitFraction(inStart, 0, inEnd, 0, monster.position,
                 combatDefinition->hitRadius + profile.hitRadius,
-                monster.actor.height - combatDefinition->bodyHeight, monster.actor.height + profile.bodyHeight);
+                monster.actor.height - combatDefinition->characters.at(inPlayer.characterId).bodyHeight,
+                monster.actor.height + profile.bodyHeight);
             if (!fraction || (!inIncludeEnd && *fraction >= 1.0f)) continue;
             const DungeonPoint contact{ inStart.x + (inEnd.x - inStart.x) * *fraction,
                 inStart.y + (inEnd.y - inStart.y) * *fraction };
@@ -348,6 +365,7 @@ namespace GameRoomServer
             inPlayer.shotPhase = ShotPhase::None;
         if (inAction == 1)
         {
+            if (combatDefinition->characters.at(inPlayer.characterId).melee) return TryQueueMelee(inPlayer, inFacingLeft);
             // A just-landed air attack is cancelled by UpdateShots before buffered ground input runs.
             if (inPlayer.shotPhase != ShotPhase::None && inPlayer.airAttack
                 && !inPlayer.jumpPreparing && inPlayer.actor.height == 0) return false;
@@ -383,6 +401,120 @@ namespace GameRoomServer
         else return false;
         // Keep held movement intent; the active phase decides when it may move again.
         return true;
+    }
+
+    // A queued strike belongs to this combo, never to a new combo after the four-hit limit.
+    bool GameRoom::TryQueueMelee(PlayerState& inPlayer, bool inFacingLeft)
+    {
+        const bool airborne = inPlayer.jumpPreparing || inPlayer.actor.height > 0;
+        if (inPlayer.shotPhase != ShotPhase::None && inPlayer.airAttack != airborne) return false;
+        const bool continuing = inPlayer.shotInputRemainingSeconds > 0 && inPlayer.airAttack == airborne;
+        if (inPlayer.shotPhase == ShotPhase::None && !continuing) inPlayer.shotCount = 0;
+        if (inPlayer.shotCount + inPlayer.pendingShots >= inPlayer.maxBasicAttacks
+            || (airborne && inPlayer.airShotCount + inPlayer.pendingShots >= inPlayer.maxBasicAttacks)) return false;
+        if (inPlayer.shotPhase == ShotPhase::None)
+        {
+            if (!continuing) inPlayer.facingLeft = inFacingLeft;
+            inPlayer.airAttack = airborne;
+        }
+        ++inPlayer.pendingShots;
+        if (inPlayer.shotPhase == ShotPhase::None) StartMelee(inPlayer);
+        return true;
+    }
+
+    void GameRoom::StartMelee(PlayerState& inPlayer)
+    {
+        --inPlayer.pendingShots;
+        ++inPlayer.shotCount;
+        ++inPlayer.shotSequence;
+        if (inPlayer.airAttack) ++inPlayer.airShotCount;
+        inPlayer.shotPhase = ShotPhase::Prepare;
+        inPlayer.shotSeconds = 0;
+        inPlayer.shotInputRemainingSeconds = SHOT_INPUT_SECONDS;
+        inPlayer.meleeHitApplied = false;
+        inPlayer.meleeHitIds.clear();
+    }
+
+    /** Consume hit/end boundaries in action time, including a tick crossing the hit instant.
+     * Each strike has one hit event and its own target set. Hitstop freezes the remainder;
+     * all timers, queued inputs and hit sets are owned by the room strand.
+     */
+    void GameRoom::UpdateMelee(PlayerState& inPlayer, float inDeltaSeconds)
+    {
+        const auto& melee = *combatDefinition->characters.at(inPlayer.characterId).melee;
+        if (inPlayer.jumpPreparing) return;
+        for (unsigned transition = 0; transition < MAX_TRANSITIONS_PER_TICK
+            && inDeltaSeconds > 0 && inPlayer.shotPhase != ShotPhase::None; ++transition)
+        {
+            const auto& strike = inPlayer.airAttack ? melee.air : melee.ground.at(inPlayer.shotCount - 1);
+            const float fireEnd = strike.durationSeconds - strike.recoverSeconds;
+            float elapsed = inPlayer.shotSeconds + (inPlayer.shotPhase == ShotPhase::Prepare ? 0
+                : inPlayer.shotPhase == ShotPhase::Fire ? strike.prepareSeconds : fireEnd);
+            const float boundary = inPlayer.meleeHitApplied ? strike.durationSeconds : strike.hitSeconds;
+            const float distance = std::max(0.0f, boundary - elapsed);
+            const float step = std::min(inDeltaSeconds, distance);
+            elapsed = step >= distance ? boundary : elapsed + step;
+            inDeltaSeconds -= step;
+            inPlayer.shotPhase = elapsed < strike.prepareSeconds ? ShotPhase::Prepare
+                : elapsed < fireEnd ? ShotPhase::Fire : ShotPhase::Recover;
+            inPlayer.shotSeconds = elapsed - (inPlayer.shotPhase == ShotPhase::Prepare ? 0
+                : inPlayer.shotPhase == ShotPhase::Fire ? strike.prepareSeconds : fireEnd);
+            if (!inPlayer.meleeHitApplied && elapsed >= strike.hitSeconds)
+            {
+                inPlayer.meleeHitApplied = true;
+                HitMelee(inPlayer, strike, inPlayer.position, inPlayer.meleeHitIds);
+                if (inPlayer.actor.hitstopRemainingSeconds > 0) return;
+            }
+            if (elapsed >= strike.durationSeconds)
+            {
+                inPlayer.shotPhase = ShotPhase::None;
+                inPlayer.shotSeconds = 0;
+                inPlayer.shotInputRemainingSeconds = SHOT_INPUT_SECONDS;
+                if (inPlayer.pendingShots > 0 && inPlayer.shotCount < inPlayer.maxBasicAttacks)
+                    StartMelee(inPlayer);
+                else if (inPlayer.shotCount >= inPlayer.maxBasicAttacks) ResetShotState(inPlayer);
+            }
+        }
+    }
+
+    // Facing-aligned melee box in X/height, cylinder depth and four-unit map visibility.
+    void GameRoom::HitMelee(PlayerState& inPlayer, const MeleeStrikeDefinition& inStrike,
+        DungeonPoint inOrigin, std::unordered_set<std::uint64_t>& inHitIds)
+    {
+        const auto found = monsterIdsByMap.find(inPlayer.mapId);
+        if (found == monsterIdsByMap.end()) return;
+        const auto& character = combatDefinition->characters.at(inPlayer.characterId);
+        const float sign = inPlayer.facingLeft ? -1.0f : 1.0f;
+        const float bottom = inPlayer.actor.height + inStrike.bottom;
+        const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+        const auto damage = inPlayer.slide.active ? inPlayer.slide.damage : static_cast<std::uint32_t>(std::clamp(
+            static_cast<double>(character.attackPower) * inStrike.damageRatio * BuffMultiplier(inPlayer, "damageMultiplier"),
+            1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+        for (const auto id : found->second)
+        {
+            auto& monster = monsters.at(id);
+            const auto& profile = combatDefinition->monsters.at(monster.definition->dataId);
+            const float along = (monster.position.x - inOrigin.x) * sign;
+            if (monster.actor.hp == 0 || inHitIds.contains(id) || along < -profile.hitRadius
+                || along > inStrike.reach + profile.hitRadius
+                || std::abs(monster.position.y - inOrigin.y) > inStrike.depthRadius + profile.hitRadius
+                || monster.actor.height + profile.bodyHeight < bottom
+                || monster.actor.height > bottom + inStrike.height) continue;
+            const float distance = Distance(inOrigin, monster.position);
+            const int steps = std::max(1, static_cast<int>(std::ceil(distance / 4)));
+            bool visible = true;
+            for (int step = 0; step <= steps && visible; ++step)
+            {
+                const float fraction = static_cast<float>(step) / steps;
+                visible = DungeonDefinition::Movable(map, { inOrigin.x + (monster.position.x - inOrigin.x) * fraction,
+                    inOrigin.y + (monster.position.y - inOrigin.y) * fraction });
+            }
+            if (!visible) continue;
+            inHitIds.insert(id);
+            ApplyMonsterDamage(id, damage, inStrike.airborne, &inPlayer, inStrike.hitstopSeconds,
+                inStrike.force, inOrigin, { sign, 0 });
+            monster.actionStarted = monster.actionComplete = false;
+        }
     }
 
     // The room strand owns this bounded FIFO; each key expires independently after 250 ms.
@@ -924,6 +1056,11 @@ namespace GameRoomServer
             return;
         }
         if (inPlayer.shotPhase == ShotPhase::None) return;
+        if (combatDefinition->characters.at(inPlayer.characterId).melee)
+        {
+            UpdateMelee(inPlayer, inDeltaSeconds);
+            return;
+        }
         if (inPlayer.jumpPreparing) return;
         inPlayer.shotSeconds += inDeltaSeconds;
         const float duration = inPlayer.shotPhase == ShotPhase::Prepare ? combatDefinition->shotPrepareSeconds
@@ -1088,6 +1225,11 @@ namespace GameRoomServer
             for (auto& [id, player] : players)
             {
                 StopSlide(player); CancelHitstop(player.actor); ResetKnockback(player.actor);
+                if (combatDefinition->characters.at(player.characterId).melee)
+                {
+                    ResetShotState(player);
+                    player.bufferedActions.clear();
+                }
             }
             for (auto& [id, monster] : monsters) { CancelHitstop(monster.actor); ResetKnockback(monster.actor); }
             if (clearHandler) clearHandler(roomId);

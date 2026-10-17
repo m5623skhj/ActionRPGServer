@@ -938,3 +938,12 @@ Room fact는 별도의 incarnation/roomId/sequence 식별자로 중복 반영을
 신규 돌멩이 획득 행사다. 마을 안내소는 실제 town_01 진입 위치를 사용하며
 무료 초기 아이템·자동 지급·새 이미지 자산은 추가하지 않았다.
 새 코드와 DB 계약은 정적으로 대조했다. 빌드·실행·DB 적용 및 실제 플레이 검증은 수행하지 않았다.
+
+### Character4 여성 검사 등록
+
+Town/Room PlayerSkills.characters에 Character4/dataId4를 추가한다. 생성 요청의 기존
+characterDefinitionId(1..1000000)와 카탈로그 허용 목록, DB의 양수 definition ID 제약으로 처리한다.
+새 DB 마이그레이션·SP 스킬·아이템은 필요하지 않다. 현재 SkillTrees는 스킬별 노드 목록이며
+캐릭터별 필수 노드가 없으므로 새 검사 노드를 임의로 추가하지 않는다. 빈 skillLevels 진행 상태도 유효하다.
+Room은 Combat.json 캐릭터별 근접4연격·공중·대시 정의를 사용하며 상세 상태 계약은
+[전투 프로토콜](../GameRoomServer/COMBAT_PROTOCOL.md#character4-여성-검사-기본-전투)을 따른다.

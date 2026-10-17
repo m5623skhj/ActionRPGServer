@@ -579,3 +579,56 @@ Town은 수락 전에 Room strand의 sequence·위치 barrier를 조회하여 �
 outbox는 메모리이므로 DB 확정 전 프로세스 장애로 잃은 사실의 자동 복구는 보장하지 않는다.
 DB에 확정된 보상·처치는 요청 receipt와 Room fact 식별자로 중복 반영을 막는다.
 이번 구현은 정적 대조만 수행했으며 서버 실행·DB 적용·실제 전투 검증은 하지 않았다.
+
+### Character4 여성 검사 기본 전투
+
+Character4/dataId4를 Town/Room PlayerSkills.characters에 등록한다. 캐릭터 생성의 기존 허용 목록과
+definitionId 검증을 사용하며 DB 구조·SP 스킬·아이템을 추가하지 않는다. 기존1~3의 투사체·5연사·
+슬라이딩은 유지한다. 검사 공격력20/HR0, HP/MP·이동·점프 기본값과 tempoScale=.7을 사용한다.
+Combat.json의 캐릭터별 bodyHeight는 기본값96, Character4는170이다. 렌더 캔버스나 PNG의 크기가 아니다.
+
+DungeonWorld.combatRules.meleeDefinitions는 검사 정의 배열이다. 각 항목은 characterId, maxCombo=4,
+bodyHeight, ground[4], air, dash다. 각 공격 정의에는 motionId, durationSeconds, prepareSeconds,
+hitSeconds, recoverSeconds, reach, depthRadius, bottom, height, damageRatio, force, hitType,
+hitstopSeconds가 있다. 모든 타이밍은 전투초이며 실제 재생은 .7 템포를 함께 적용한다.
+
+| 공격 | motionId | duration | prepare | hit | recover |
+|---|---|---:|---:|---:|---:|
+| 1타 횡베기 | attack1 | .34 | .185 | .185 | .08 |
+| 2타 올려베기 | attack2 | .305 | .110 | .110 | .08 |
+| 3타 내려베기 | attack3 | .295 | .105 | .105 | .08 |
+| 4타 회전 횡베기 | attack4 | .48 | .250 | .250 | .08 |
+| 공중 내려베기 | airAttack | .36 | .10 | .125 | .14 |
+| 대시 횡베기 | dashAttack | .40 | .13 | .13 | .08 |
+
+새 입력/바이너리 tail 없이 v3 action=1 기본공격, action=2 점프, action=3 대시를 재사용한다.
+Character4에 한해 CombatState JSON 및 실시간 레코드의 shotCount는 현재 1-based 타수(1~4),
+shotSequence는 실제 각 타 시작 시 증가하는 번호다. shotPhase/shotSeconds는 현재 단계/단계 내
+경과 시간이다. Prepare 구간은 [0,prepare), Fire는 [prepare,duration-recover), Recover는 나머지다.
+애니메이션 누적 시간은 Prepare에서 shotSeconds, Fire에서 prepare+shotSeconds,
+Recover에서 duration-recover+shotSeconds로 복원한다. None은 비활성이고 4타 정상 종료 시 카운트가0으로 초기화된다.
+airAttack=true이면 타수 대신 단일 공중 내려베기 모션을 쓴다. 공중에도 같은 최대4회/점프 한도를
+적용하며 총구·투사체·총격용 상승/반동은 발생하지 않는다. 착지하면 남은 공중 타격·예약은 취소한다.
+DungeonWorld.players의 입장 확정 player에도 characterId를 제공하며 기존 SKL1/JSON 외형 식별을 유지한다.
+
+예약된 다음 타는 현재 타의 전체 duration 종료 뒤 시작한다. 기존 250ms FIFO, 입력 시퀀스,
+최대 예약 수, 피격·아이템·스킬·점프 검증을 재사용한다. 현재 타수+예약+FIFO의 공격 수는4 이하이며
+연계 방향은 고정한다. 검사 Recover는 다음 타 예약 유무와 관계없이 이동을 허용하며 다음 Prepare에서
+다시 멈춘다. 이동 입력으로 공격 단계를 None으로 바꾸지 않아 회복 프레임을 duration 끝까지 유지한다.
+총 캐릭터의 Recover 이동은 기존 pendingShots=0 조건을 유지한다. 점프/스킬의 명시적 회복 취소도
+기존 조건을 유지한다. 서버 내부 예약 수를 보내지 않아도 검사 회복 이동을 예측할 수 있다. 종료 후 기존 .4전투초
+연계 유예를 사용하고 히트스톱에서는 공격·버퍼 시간을 진행하지 않는다.
+
+대시는 기존 run+attack의 이동 의도/맵 epoch/충돌 검증과 slideActive/slideSequence/slideSeconds/
+slideDurationSeconds를 재사용한다. Character4의 slideDefinitions.motionId는 dashAttack이다.
+기존 이동 계수1.25는 유지한다. 검사 대시는 slide의 접촉 구간 대신 .13초 순간에 승인된 이동 경로를
+보간해 근접 베기 판정을 한 번 낸다. 그 시점 전에 벽/출입구로 막히면 타격하지 않는다.
+대시 피해는 기존처럼 시작 시 버프를 반영해 고정한다. slide의 hitStartRatio/hitEndRatio는 총 캐릭터의
+접촉 판정용이며 검사 대시의 실제 타격 시각은 melee.dash.hitSeconds다.
+
+각 타는 reach140/depthRadius40의 방향 정렬 상자와 몬스터 실린더를 비교한다. 지상·대시 높이는
+플레이어 높이+[0,170], 공중 내려베기는 높이+[-100,170]이다. 타별 대상 집합으로 중복을 막고
+동일 맵·생존·4단위 벽 가시성을 확인한다. 기본/공중 피해는 공격력×1×버프, Force24/히트스톱0,
+대시는 Force40/히트스톱.18로 기존 총격·슬라이딩 수치를 재사용한다. HR·피격/사망·퀘스트/EXP는
+공통 ApplyMonsterDamage 경로를 사용한다. 한 틱이 타격 시점을 넘어가도 hit/end 경계를 순서대로 소비한다.
+정의는 불변 공유하고 상태·예약·타격 집합은 룸 strand가 소유한다. 빌드·게임 실행 검증은 수행하지 않았다.

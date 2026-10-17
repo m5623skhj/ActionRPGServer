@@ -14,6 +14,10 @@
     {
       "id": "Character3",
       "dataId": 3
+    },
+    {
+      "id": "Character4",
+      "dataId": 4
     }
   ],
   "skills": [

@@ -55,6 +55,7 @@ namespace GameRoomServer
             { "projectileSpeed", combatDefinition->projectileSpeed }, { "maxShots", 5 }
         };
         auto& slideDefinitions = dungeonWorld["combatRules"]["slideDefinitions"] = nlohmann::json::array();
+        auto& meleeDefinitions = dungeonWorld["combatRules"]["meleeDefinitions"] = nlohmann::json::array();
         std::vector<std::uint32_t> characterIds;
         for (const auto& [id, character] : combatDefinition->characters) characterIds.push_back(id);
         std::sort(characterIds.begin(), characterIds.end());
@@ -66,6 +67,14 @@ namespace GameRoomServer
                 { "distancePerRunSpeedSeconds", character.slide.distancePerRunSpeedSeconds },
                 { "hitStartRatio", character.slide.hitStartRatio }, { "hitEndRatio", character.slide.hitEndRatio },
                 { "hitRecovery", character.hitRecovery }, { "hitstopSeconds", character.slide.hitstopSeconds } });
+            if (character.melee)
+            {
+                auto melee = character.melee->source;
+                melee["characterId"] = id;
+                melee["maxCombo"] = character.melee->ground.size();
+                melee["bodyHeight"] = character.bodyHeight;
+                meleeDefinitions.push_back(std::move(melee));
+            }
         }
         // Create monsters once per dungeon instance; map transfers preserve their IDs and HP.
         std::uint64_t nextMonsterId = 1;
@@ -146,9 +155,11 @@ namespace GameRoomServer
             player.worldReady = true;
             player.directionX = inInput.directionX;
             player.directionY = inInput.directionY;
-            // Movement may leave recovery after the last shot, never preparation/fire.
+            // Guns may leave recovery. Melee keeps the full recovery pose while allowing
+            // the same recovery movement below; movement alone never cuts a combo frame.
             if (player.actor.hitstopRemainingSeconds == 0 && (inInput.directionX != 0 || inInput.directionY != 0)
-                && player.shotPhase == ShotPhase::Recover && player.pendingShots == 0)
+                && player.shotPhase == ShotPhase::Recover && player.pendingShots == 0
+                && !self->combatDefinition->characters.at(player.characterId).melee)
                 player.shotPhase = ShotPhase::None;
             if (!player.skill && !player.slide.active && player.actor.hitstopRemainingSeconds == 0
                 && !self->IsShotFacingLocked(player) && player.actor.reaction == Reaction::None
@@ -185,7 +196,8 @@ namespace GameRoomServer
             if (player.slide.active) { UpdateSlide(player, actionDelta); continue; }
             if (player.actor.hp == 0 || player.actor.reaction != Reaction::None
                 || player.skill || (player.shotPhase != ShotPhase::None
-                    && !(player.shotPhase == ShotPhase::Recover && player.pendingShots == 0))) continue;
+                    && !(player.shotPhase == ShotPhase::Recover && (player.pendingShots == 0
+                        || combatDefinition->characters.at(player.characterId).melee)))) continue;
             const auto& map = dungeonWorld.at("maps").at(player.mapId);
             float dx = static_cast<float>(player.directionX), dy = static_cast<float>(player.directionY);
             if (std::chrono::steady_clock::now() - player.lastInput > std::chrono::seconds(1)) dx = dy = 0;
@@ -333,8 +345,11 @@ namespace GameRoomServer
                 self->players.at(inPlayerId).characterId = inCharacterId;
                 self->players.at(inPlayerId).actor.hitRecovery = self->combatDefinition->characters.at(inCharacterId).hitRecovery;
                 auto& player = self->players.at(inPlayerId);
+                const auto& definition = self->combatDefinition->characters.at(inCharacterId);
+                player.maxBasicAttacks = definition.melee ? static_cast<std::uint32_t>(definition.melee->ground.size()) : 5;
                 player.mp = player.maxMp = self->combatDefinition->characters.at(inCharacterId).maxMp;
                 auto& spawn = self->dungeonWorld["players"][std::to_string(inPlayerId)];
+                spawn["characterId"] = inCharacterId;
                 spawn["mp"] = player.mp ? nlohmann::json(*player.mp) : nlohmann::json(nullptr);
                 spawn["maxMp"] = spawn["mp"];
                 // The accepted character may override MP; its initial world must agree with snapshots.

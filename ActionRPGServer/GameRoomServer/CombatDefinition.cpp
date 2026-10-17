@@ -56,6 +56,31 @@ namespace GameRoomServer
             Require(value >= inMin && value <= inMax, "Invalid combat integer.");
             return static_cast<std::uint32_t>(value);
         }
+
+        MeleeStrikeDefinition MeleeStrike(const Json& inValue)
+        {
+            Keys(inValue, { "motionId", "durationSeconds", "prepareSeconds", "hitSeconds", "recoverSeconds",
+                "reach", "depthRadius", "bottom", "height", "damageRatio", "force", "hitType", "hitstopSeconds" });
+            MeleeStrikeDefinition result;
+            result.motionId = inValue.at("motionId").get<std::string>();
+            Require(ActionRPG::PlayerSkills::Catalog::IsId(result.motionId), "Invalid melee motion ID.");
+            result.durationSeconds = Number(inValue.at("durationSeconds"), 0.05, 2);
+            result.prepareSeconds = Number(inValue.at("prepareSeconds"), 0.001, 2);
+            result.hitSeconds = Number(inValue.at("hitSeconds"), 0.001, 2);
+            result.recoverSeconds = Number(inValue.at("recoverSeconds"), 0.001, 2);
+            Require(result.prepareSeconds < result.durationSeconds - result.recoverSeconds
+                && result.hitSeconds >= result.prepareSeconds
+                && result.hitSeconds < result.durationSeconds - result.recoverSeconds, "Invalid melee timing.");
+            result.reach = Number(inValue.at("reach"), 1, 500);
+            result.depthRadius = Number(inValue.at("depthRadius"), 1, 100);
+            result.bottom = Number(inValue.at("bottom"), -1000, 1000);
+            result.height = Number(inValue.at("height"), 1, 1000);
+            result.damageRatio = Number(inValue.at("damageRatio"), 0.01, 100);
+            result.force = Force(inValue.at("force"));
+            result.airborne = Airborne(inValue.at("hitType"));
+            result.hitstopSeconds = NonnegativeFloat(inValue.at("hitstopSeconds"));
+            return result;
+        }
     }
 
     std::shared_ptr<const CombatDefinition> CombatDefinition::Load(
@@ -167,7 +192,7 @@ namespace GameRoomServer
             && !characters.empty() && characters.size() <= 256, "Every character needs one combat definition.");
         for (const auto& character : characters)
         {
-            Keys(character, { "characterId", "attackPower", "hitRecovery", "slide", "maxMp" });
+            Keys(character, { "characterId", "attackPower", "hitRecovery", "slide", "maxMp", "bodyHeight", "melee" });
             const auto characterId = Integer(character.at("characterId"), 1, 1000000);
             Require(result->playerSkills.characterIds.contains("Character" + std::to_string(characterId)),
                 "Combat definition references an unknown character.");
@@ -186,6 +211,25 @@ namespace GameRoomServer
                     < definition.slide.durationSeconds * definition.slide.hitEndRatio, "Invalid slide hit window.");
             Require(ActionRPG::PlayerSkills::Catalog::IsId(definition.slide.motionId), "Invalid slide motion ID.");
             definition.maxMp = resources.Get(characterId).maxMp;
+            definition.bodyHeight = Number(character.value("bodyHeight", Json(result->bodyHeight)), 1, 1000);
+            if (character.contains("melee"))
+            {
+                const auto& melee = character.at("melee");
+                Keys(melee, { "ground", "air", "dash" });
+                Require(melee.at("ground").is_array() && melee.at("ground").size() == 4, "Melee requires four combo strikes.");
+                MeleeDefinition value;
+                for (const auto& strike : melee.at("ground")) value.ground.push_back(MeleeStrike(strike));
+                value.air = MeleeStrike(melee.at("air")); value.dash = MeleeStrike(melee.at("dash"));
+                Require(value.dash.durationSeconds == definition.slide.durationSeconds
+                    && value.dash.motionId == definition.slide.motionId && value.dash.force == definition.slide.force
+                    && value.dash.airborne == definition.slide.airborne
+                    && value.dash.hitstopSeconds == definition.slide.hitstopSeconds, "Melee dash differs from movement definition.");
+                value.source = melee;
+                for (const auto& strike : value.ground) (void)result->tempo.RealDurationSeconds(strike.hitstopSeconds);
+                (void)result->tempo.RealDurationSeconds(value.air.hitstopSeconds);
+                (void)result->tempo.RealDurationSeconds(value.dash.hitstopSeconds);
+                definition.melee = std::move(value);
+            }
             Require(result->characters.emplace(characterId, std::move(definition)).second, "Duplicate combat character.");
         }
         (void)result->tempo.RealDurationSeconds(result->shotHitstopSeconds);

@@ -133,7 +133,7 @@ namespace GameRoomServer
         };
         struct SlideState
         {
-            bool active{};
+            bool active{}, meleeHitApplied{};
             std::uint32_t sequence{}, damage{};
             float seconds{}, durationSeconds{}, directionX{}, directionY{}, speed{}, hitstopSeconds{};
             float hitStartSeconds{}, hitEndSeconds{};
@@ -165,6 +165,9 @@ namespace GameRoomServer
             std::optional<std::uint32_t> mp, maxMp;
             std::uint64_t lastHitSequence{}, lastHitMonsterId{};
             std::uint32_t actionSequence{}, shotCount{}, pendingShots{}, airShotCount{};
+            std::uint32_t maxBasicAttacks{ 5 };
+            bool meleeHitApplied{};
+            std::unordered_set<std::uint64_t> meleeHitIds;
             std::uint32_t shotSequence{}, jumpSequence{};
             ShotPhase shotPhase{ ShotPhase::None };
             float shotSeconds{}, jumpSeconds{};
@@ -248,6 +251,11 @@ namespace GameRoomServer
         void EnterNode(MonsterState& inMonster, const std::string& inNodeId);
         bool AdvanceNode(MonsterState& inMonster, const std::string& inTrigger);
         void UpdateShots(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds);
+        bool TryQueueMelee(PlayerState& inPlayer, bool inFacingLeft);
+        void StartMelee(PlayerState& inPlayer);
+        void UpdateMelee(PlayerState& inPlayer, float inDeltaSeconds);
+        void HitMelee(PlayerState& inPlayer, const MeleeStrikeDefinition& inStrike, DungeonPoint inOrigin,
+            std::unordered_set<std::uint64_t>& inHitIds);
         [[nodiscard]] static bool IsShotFacingLocked(const PlayerState& inPlayer);
         static void ResetShotState(PlayerState& inPlayer);
         bool TryQueueAction(PlayerState& inPlayer, std::uint8_t inAction, bool inFacingLeft);

@@ -14,7 +14,21 @@
     "characters": [
       { "characterId": 1, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "hitStartRatio": 0.225, "hitEndRatio": 0.5, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } },
       { "characterId": 2, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "hitStartRatio": 0.225, "hitEndRatio": 0.5, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } },
-      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "hitStartRatio": 0.225, "hitEndRatio": 0.5, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } }
+      { "characterId": 3, "attackPower": 20, "hitRecovery": 0, "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "hitStartRatio": 0.225, "hitEndRatio": 0.5, "motionId": "slide", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" } },
+      {
+        "characterId": 4, "attackPower": 20, "hitRecovery": 0, "bodyHeight": 170,
+        "slide": { "durationSeconds": 0.4, "distancePerRunSpeedSeconds": 1.25, "hitStartRatio": 0.325, "hitEndRatio": 0.5, "motionId": "dashAttack", "hitstopSeconds": 0.18, "force": 40, "hitType": "Normal" },
+        "melee": {
+          "ground": [
+            { "motionId": "attack1", "durationSeconds": 0.34, "prepareSeconds": 0.185, "hitSeconds": 0.185, "recoverSeconds": 0.08, "reach": 140, "depthRadius": 40, "bottom": 0, "height": 170, "damageRatio": 1, "force": 24, "hitType": "Normal", "hitstopSeconds": 0 },
+            { "motionId": "attack2", "durationSeconds": 0.305, "prepareSeconds": 0.11, "hitSeconds": 0.11, "recoverSeconds": 0.08, "reach": 140, "depthRadius": 40, "bottom": 0, "height": 170, "damageRatio": 1, "force": 24, "hitType": "Normal", "hitstopSeconds": 0 },
+            { "motionId": "attack3", "durationSeconds": 0.295, "prepareSeconds": 0.105, "hitSeconds": 0.105, "recoverSeconds": 0.08, "reach": 140, "depthRadius": 40, "bottom": 0, "height": 170, "damageRatio": 1, "force": 24, "hitType": "Normal", "hitstopSeconds": 0 },
+            { "motionId": "attack4", "durationSeconds": 0.48, "prepareSeconds": 0.25, "hitSeconds": 0.25, "recoverSeconds": 0.08, "reach": 140, "depthRadius": 40, "bottom": 0, "height": 170, "damageRatio": 1, "force": 24, "hitType": "Normal", "hitstopSeconds": 0 }
+          ],
+          "air": { "motionId": "airAttack", "durationSeconds": 0.36, "prepareSeconds": 0.1, "hitSeconds": 0.125, "recoverSeconds": 0.14, "reach": 140, "depthRadius": 40, "bottom": -100, "height": 270, "damageRatio": 1, "force": 24, "hitType": "Normal", "hitstopSeconds": 0 },
+          "dash": { "motionId": "dashAttack", "durationSeconds": 0.4, "prepareSeconds": 0.13, "hitSeconds": 0.13, "recoverSeconds": 0.08, "reach": 140, "depthRadius": 40, "bottom": 0, "height": 170, "damageRatio": 1, "force": 40, "hitType": "Normal", "hitstopSeconds": 0.18 }
+        }
+      }
     ]
   },
   "reactions": { "hitStunSeconds": 0.25, "knockbackSeconds": 0.18, "downSeconds": 0.5, "riseSeconds": 0.35 },

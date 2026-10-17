@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace GameRoomServer
 {
@@ -47,12 +48,29 @@ namespace GameRoomServer
         float hitStartRatio{}, hitEndRatio{};
     };
 
+    struct MeleeStrikeDefinition
+    {
+        std::string motionId;
+        float durationSeconds{}, prepareSeconds{}, hitSeconds{}, recoverSeconds{};
+        float reach{}, depthRadius{}, bottom{}, height{}, damageRatio{}, force{}, hitstopSeconds{};
+        bool airborne{};
+    };
+
+    struct MeleeDefinition
+    {
+        std::vector<MeleeStrikeDefinition> ground;
+        MeleeStrikeDefinition air, dash;
+        nlohmann::json source;
+    };
+
     struct CharacterCombatDefinition
     {
         std::uint32_t attackPower{};
         float hitRecovery{};
         SlideDefinition slide;
         std::optional<std::uint32_t> maxMp;
+        float bodyHeight{};
+        std::optional<MeleeDefinition> melee;
     };
 
     struct CombatDefinition
