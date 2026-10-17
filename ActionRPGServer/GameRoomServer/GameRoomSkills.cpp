@@ -34,6 +34,19 @@ namespace GameRoomServer
                     const auto definition = self->combatDefinition->playerSkills.skills.find(input.skillId);
                     if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
                         && player.actor.reaction == Reaction::None && player.actor.hitstopRemainingSeconds == 0
+                        && player.skill && player.skill->id == input.skillId && input.facingLeft <= 1
+                        && definition != self->combatDefinition->playerSkills.skills.end() && definition->second.at("type") == "area")
+                    {
+                        auto& cast = *player.skill;
+                        const auto& execution = definition->second.at("execution");
+                        const float step = execution.at("tapSpeedStep").get<float>();
+                        const float maximum = execution.at("maxTapSpeed").get<float>();
+                        if (cast.playbackRate < maximum)
+                            cast.playbackRate = std::min(maximum, 1.0f + ++cast.tapCount * step);
+                        result.accepted = 1; // Same cast: retain hit cursor, facing, sequence and cooldown.
+                    }
+                    else if (self->state == State::Running && !self->clearRequested && player.actor.hp > 0
+                        && player.actor.reaction == Reaction::None && player.actor.hitstopRemainingSeconds == 0
                         && !player.skill && !player.jumpPreparing && !player.slide.active
                         && player.itemUseElapsedSeconds >= player.itemUseDurationSeconds
                         && (player.shotPhase == ShotPhase::None
@@ -79,7 +92,8 @@ namespace GameRoomServer
 
     /**
      * Process every active frame overlapping the actor's action time, including short frames.
-     * Each cast hits a monster once. Zero-time startup is allowed only when explicitly requested.
+     * Direct casts hit each monster once; area casts drain every due pulse exactly once.
+     * Room strand ownership serializes tap inputs and damage; no cross-thread state is shared.
      */
     void GameRoom::UpdateSkills(PlayerId inPlayerId, PlayerState& inPlayer, float inDeltaSeconds, bool inStarting)
     {
@@ -95,7 +109,8 @@ namespace GameRoomServer
         const auto& execution = skill.at("execution");
         const auto type = skill.at("type").get<std::string>();
         const float before = cast.seconds;
-        cast.seconds += inDeltaSeconds;
+        cast.seconds += inDeltaSeconds * cast.playbackRate;
+        inPlayer.lastSkillSeconds = cast.seconds;
         const float sign = cast.facingLeft ? -1.0f : 1.0f;
         if (!cast.eventApplied && cast.seconds >= ActionRPG::PlayerSkills::Catalog::FrameStartSeconds(
             variant, variant.at("eventFrame").get<std::uint32_t>()))
@@ -186,6 +201,50 @@ namespace GameRoomServer
                     ApplyMonsterDamage(id, damage, execution.at("hitType") == "Airborne", &inPlayer,
                         execution.at("hitstopSeconds").get<float>(), execution.at("force").get<float>(),
                         inPlayer.position, { sign, 0 });
+                    monster.actionStarted = monster.actionComplete = false;
+                }
+            }
+        }
+        if (type == "area")
+        {
+            const auto count = execution.at("hitCount").get<std::uint32_t>();
+            const double start = ActionRPG::PlayerSkills::Catalog::FrameStartSeconds(variant,
+                variant.at("eventFrame").get<std::uint32_t>());
+            const double end = ActionRPG::PlayerSkills::Catalog::FrameStartSeconds(variant,
+                variant.at("endFrame").get<std::uint32_t>() + 1);
+            const double interval = (end - start) / count;
+            const float radius = execution.at("radius").get<float>();
+            const auto found = monsterIdsByMap.find(inPlayer.mapId);
+            // Drain every crossed pulse. The room strand serializes inputs and damage.
+            while (cast.nextAreaHit < count && cast.seconds >= start + cast.nextAreaHit * interval)
+            {
+                ++cast.nextAreaHit;
+                if (found == monsterIdsByMap.end()) continue;
+                for (const auto id : found->second)
+                {
+                    auto& monster = monsters.at(id);
+                    if (monster.actor.hp == 0) continue;
+                    const float dx = monster.position.x - inPlayer.position.x;
+                    const float dy = monster.position.y - inPlayer.position.y;
+                    const float length = std::hypot(dx, dy);
+                    if (length > radius) continue;
+                    const auto& map = dungeonWorld.at("maps").at(inPlayer.mapId);
+                    const int steps = std::max(1, static_cast<int>(std::ceil(length / 4)));
+                    bool visible = true;
+                    for (int index = 1; index <= steps && visible; ++index)
+                    {
+                        const float t = static_cast<float>(index) / steps;
+                        visible = DungeonDefinition::Movable(map,
+                            { inPlayer.position.x + dx * t, inPlayer.position.y + dy * t });
+                    }
+                    if (!visible) continue;
+                    const auto damage = static_cast<std::uint32_t>(std::clamp(
+                        combatDefinition->characters.at(inPlayer.characterId).attackPower
+                            * execution.at("damageRatio").get<double>() * BuffMultiplier(inPlayer, "damageMultiplier"),
+                        1.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+                    ApplyMonsterDamage(id, damage, execution.at("hitType") == "Airborne", &inPlayer,
+                        execution.at("hitstopSeconds").get<float>(), execution.at("force").get<float>(),
+                        inPlayer.position, { length > 0 ? dx / length : sign, length > 0 ? dy / length : 0.0f });
                     monster.actionStarted = monster.actionComplete = false;
                 }
             }

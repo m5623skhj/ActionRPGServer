@@ -1,6 +1,6 @@
 # Shared by the explicit DB preparation tool and the read-only launcher preflight.
 # Dot-sourcing only defines functions. Never execute an application CALL here.
-function Get-RuntimeSchemaVersion { return 7 }
+function Get-RuntimeSchemaVersion { return 8 }
 
 function Get-RuntimeProcedures([int]$Version, [ValidateSet('Auth','Town')][string]$Role) {
     if ($Version -lt 0 -or $Version -gt (Get-RuntimeSchemaVersion)) {
@@ -8,7 +8,7 @@ function Get-RuntimeProcedures([int]$Version, [ValidateSet('Auth','Town')][strin
     }
     $inspectors = @('get_schema_migration_history','get_schema_migration_history','get_schema_migration_history',
         'get_schema_migration_history','get_character_schema_migration_history','get_inventory_schema_migration_history',
-        'get_item_use_schema_migration_history','get_quest_schema_migration_history')
+        'get_item_use_schema_migration_history','get_quest_schema_migration_history','get_experience_schema_migration_history')
     $rows = [ordered]@{}
     $rows[$inspectors[$Version]] = 0
     if ($Role -eq 'Auth') {

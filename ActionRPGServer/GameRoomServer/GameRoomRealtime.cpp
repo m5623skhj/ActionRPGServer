@@ -214,6 +214,13 @@ namespace GameRoomServer
             writeKnockback(id, monsters.at(id).actor);
             if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         }
+        writer.value.append("RPD1", 4); writer.Integer(playerCount, 2);
+        for (const auto& [id, player] : players)
+        {
+            if (player.mapId != inMapId || !enteredPlayers.contains(id) || !player.worldReady) continue;
+            writer.Integer(id, 8); writer.Integer(player.skillSequence, 4);
+            writer.Float(player.skill ? player.skill->playbackRate : 1.0f);
+        }
         if (writer.value.size() > MAX_REALTIME_BYTES) return nullptr;
         auto frame = std::make_shared<RealtimeFrame>();
         frame->mapId = inMapId; frame->payload = std::move(writer.value);

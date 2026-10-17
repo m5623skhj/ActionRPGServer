@@ -731,6 +731,64 @@ ODBC wide long varchar를 사용하고 각 도메인의 UTF8 byte 제한은 별�
 V7 Up8/Down6 statements이며 Down은 퀘스트·추적·사건
 세 테이블이 모두 비었을 때만 허용한다. terminal/사건 이력 강제 삭제나 자동 repair는 없다.
 
+## 경험치와 성장 전용 저장 V000008
+
+V8은 소스 계약이며 실제 적용 결과는 별도로 확인한다. V0~V7 원문/체크섬은 유지한다.
+characters.experience는 BIGINT UNSIGNED NOT NULL DEFAULT0이며 실행 주체의 ALTER 권한이 필요하다.
+기존 캐릭터의 레벨,
+사용/미사용 SP, 습득 스킬은 재계산하지 않고 현재 레벨 내 경험치만0으로 시작한다.
+create_character의 기존6 IN은 그대로이며 경험치 열을 생략한 INSERT는 기본0을 사용한다.
+
+성장 JSON은 level(정수)/skillPoints(정수)/skillLevels(객체)/experience(정규10진 문자열)4키다.
+experience는 0 또는 선행0 없는 양수이며 U64 MAX 이내여야 한다. 부호·공백·소수·JSON number·
+범위 초과를 거절한 뒤 unsigned로 변환한다. 성장 수치/경험치 곡선/몬스터·클리어 보상/
+파티 분배/레벨 상승 SP는 서버 데이터·정책 책임이며 SQL에 공식을 중복 하드코딩하지 않는다.
+
+공개 get_character_quests5 IN/save_character_quests12 IN/legacy save9 IN/claim·release 입력과
+공개 결과셋·열 순서는 유지한다. 저장과 성공 응답의 nullable 계약은 다음과 같다.
+
+| mode | progression_json | inventory_json | 쓰기 |
+|---|---|---|---|
+| Progress | NULL | NULL | 퀘스트 진행만 |
+| Growth | 필수/현재 성장4키 | NULL | 성장·퀘스트, 가방/스킬 행 재작성 없음 |
+| Inventory / Claim | 필수/현재 성장4키 | 필수/현재 가방 | 성장·스킬·가방·퀘스트 |
+
+Growth에서는 skillLevels가 현재 DB와 같은지 확인하고 characters의 level/SP/experience만
+갱신한다. 순수 Progress와 get 응답은 성장·가방 둘 다NULL이다. 실패는 기존처럼 양쪽NULL이다.
+private emit_quest_state의 셋째 인자는 inSnapshotMode INT(0없음/1성장만/2성장+가방)로 바뀐다.
+같은 요청 receipt 재전송과 다른 요청 ID의 동일 Room 사건 성공도 Growth이면 성장만 반환한다.
+legacy save_character_state는 가방 필수 계약을 유지하면서 같은 private 검증/갱신 helper를 쓴다.
+emit_character_state와 list_characters도 experience를 문자열로 생성하므로 claim·목록·아이템
+사용의 성장 반환도4키가 된다. 구버전3키 전용 parser와 혼용하지 않는다.
+
+MonsterKilled/DungeonCleared의 원본 Room 고유 사건과 QUEST receipt를 재사용한다.
+한 캐릭터의 처치/클리어 퀘스트 진행·경험치·여러 레벨 상승·SP·잔여 경험치·revision은 같은
+ODBC transaction이다. 퀘스트 경험치는 Claim 제출 아이템·보상·Completed 전이와 함께 저장한다.
+XP가 있는 사건을 퀘스트 변경0건이라는 이유로 Progress/no-op 처리하지 않는다.
+모드는 최초 신뢰 사건/수혜자/보상 정책으로 안정적으로 결정하고 재전송 시 원본 보상값을
+다시 계산해 hash를 바꾸지 않는다. 이미 처리된 V7 사건에 새 XP를 덧붙여 재지급하지 않는다.
+overflow는 부분 지급 없이 거절하며 SQL은 제안 성장 snapshot의 범위와 소유권/이력을 검증한다.
+DB 도착 전 Room 메모리 outbox의 프로세스 유실까지 복구한다는 보장은 추가하지 않는다.
+
+교체6루틴은 emit_character_state/list_characters/save_character_state/apply_quest_inventory/
+emit_quest_state/save_character_quests다. 신규 get_experience_schema_migration_history는
+history_format6/30결과셋/23루틴/93 IN이며 기존29결과셋 뒤 새 검사 SHOW를 덧붙인다.
+내부 emit 인자 타입/이름, 새 열 DEFAULT0/ordinal과 각 루틴 원문도 Auth와 도구가 함께 검사한다.
+출력 문자열32768자 및 입력 전용 상한은 그대로 두고 ODBC 결과셋 한도만30으로 바꾼다.
+
+신규 검사 EXECUTE와 재생성된 공개 list_characters/save_character_state/save_character_quests
+EXECUTE를 다시 부여해야 한다. RuntimePermissions.ps1의 head8 목록이 일반 수동 Up/Down 또는
+PermissionsOnly의 기존 권한 동기화·실제 runtime PREPARE 검사에 사용된다. SchemaOnly 사용자는
+권한을 별도 준비한다. runtime에 private emit/apply나 DB 전체 EXECUTE를 추가하지 않는다.
+기존 claim/release/get_character_quests는 교체하지 않으므로 권한 재생성 대상이 아니다.
+
+V8 Up/Down은 각14 statements다. Down은 characters/quest 이력을 잠근 뒤 비0 experience가
+하나라도 있거나, live Active/ReadyToReport/RewardPending snapshot의 fixed/choice 보상에
+Experience가 있으면 감사 시작/DDL 전에 거절한다. 허용될 때만0인 경험치 열을 제거하고 교체
+6루틴을 정확한 V7 호환 원문으로 복원한다. 레벨·SP·스킬·퀘스트·사건·요청 이력을 회수/삭제하지
+않으며 강제 초기화/repair 옵션은 없다. DB 사용 서비스를 정지한 동일 배포에서 수행한다.
+실제 MySQL 적용/ODBC 실행/기능 테스트는 이 정적 수정으로 검증되지 않는다.
+
 ## 9. 수동 Up/Down 실행 계약
 
 ### 공개 프로시저 권한의 자동 동기화
@@ -1128,6 +1186,52 @@ Tool\Database\UpMigration.bat -Database actionrpg -RecoverQuests
   `UpMigration.bat -Database actionrpg -PermissionsOnly`를 실행한다. 수정된 Auth를 다시 빌드하고
   수정된 SQL 배포본도 함께 갱신해야 런타임이 복구 이력과 새 체크섬을 검증할 수 있다.
 
+### 변경 없는 Up 실패의 검증과 재시도
+
+DDL 전 현재 마이그레이션 계정의 `CURRENT_USER()`와 활성 역할을 기준으로 필요한 권한을 검사한다.
+`SHOW GRANTS ... USING`으로 활성 역할을 포함하고 전역·DB·테이블·프로시저 범위와 부분 권한 회수를
+고려한다. 새 프로시저의 DEFINER가 계속 사용할 SELECT/INSERT/UPDATE/DELETE/EXECUTE는 해당 DB
+범위로 요구한다. 기존 계정에 ALTER가 없으면 V8 감사 쓰기 전에 중단한다. ALTER TABLE에는
+ALTER 외 CREATE·INSERT도 필요하다. 누락 권한과 해당 마이그레이션 계정용 GRANT 제안을 출력하며
+자동 실행하지 않는다. 런타임 계정 권한을 확대하는 기능이 아니다.
+[MySQL 권한](https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html),
+[역할을 포함한 SHOW GRANTS](https://dev.mysql.com/doc/refman/8.0/en/show-grants.html).
+
+로컬 SQL 분리 후 프로시저의 BEGIN/END, IF, CASE, 반복문 블록을 검사한다. 이전 V7처럼 고립된
+END IF는 DB 연결 전에 거절한다. 이는 MySQL 문법 전체를 검증하는 파서가 아니다. 실행 시에는
+`[UP V000008 1/14] ALTER TABLE characters`처럼 문장 번호와 객체명을 표시하고, 실패하면
+SQLSTATE와 native_code 및 고정된 원인 분류를 출력한다. 원문 SQL/드라이버 메시지/비밀번호는 출력하지 않는다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -Status
+Tool\Database\UpMigration.bat -Database actionrpg -Plan
+Tool\Database\UpMigration.bat -Database actionrpg -Recover
+```
+
+* `-Status`: 기존 검사 프로시저 호출 없이 감사 테이블과 information_schema를 직접 조회한다.
+  프로시저가 일부 없더라도 감사·객체 목록을 볼 수 있다. 감사 테이블이 없으면 무관리 상태로 표시한다.
+* `-Plan`: 동일 서비스 정지 확인·대상 검증·이름 잠금 아래 이력/실제 구조/권한을 확인한다.
+  DDL·감사 INSERT/UPDATE·GRANT가 없는 사전 검사이며, 빈 기존 DB에서는 초기 구축 계획을 확인한다.
+  `DownMigration.bat -Plan`도 지원하나 데이터 삭제 조건 검사의 성공을 보장하지 않는다.
+* `-Recover`: 다음 Up의 마지막 FAILED 한 건에 한해 모든 이전 이력·양방향 배포 체크섬·실패 완료
+  시각을 검증한다. 실제 테이블/인덱스/제약/루틴/인자가 이전 성공 버전과 일치해야 하며 추가 객체,
+  트리거·이벤트가 없어야 한다. 원문은 CREATE 정의·DROP PROCEDURE·기본값0 BIGINT UNSIGNED
+  열 추가만 허용한다. 임의 DML·테이블 삭제·변경을 구조 검사만으로 승인하지 않는다.
+  숨겨진 객체를 0개로 오인하지 않도록 복구 사전 검사에는 해당 DB의 TRIGGER/EVENT 권한도 요구한다.
+  MySQL에서는 이 조회 권한이 생성·변경 권한과 분리되지 않으므로 전용 마이그레이션 계정에만
+  관리자가 검토해 부여한다. [트리거 가시성](https://dev.mysql.com/doc/refman/8.0/en/show-triggers.html).
+* 검증과 전체 대기 버전의 권한 검사 후 원래 FAILED를 보존하고 같은 버전/체크섬의
+  `<name>_unchanged_recovery` UP/SUCCEEDED 행 한 건을 추가한다. 도구와 Auth는 FAILED 바로 다음의
+  일치하는 확인 행만 인정하며, 확인 자체로 head를 올리지 않는다. 이후 원래 SQL의 정상 Up을 새
+  감사 실행으로 적용하고 런타임 공개 EXECUTE 동기화까지 이어간다. 수정된 Auth 소스도 함께 배포한다.
+* RUNNING, 부분 DDL, 다른 체크섬, Down 실패는 거절한다. 초기 V0/V1 및 알려진 구 V7 문법 오류는
+  기존 전용 복구 계약을 사용한다. 이 옵션들은 서로 혼용할 수 없다. 확인 행만 추가된 뒤 연결이 끊겨도
+  다음 실행은 확인된 이전 head에서 정상 Up을 시작한다. 실패 행을 지우거나 SUCCEEDED로 바꾸지 않는다.
+
+예를 들어 V7 정상 뒤 V8 FAILED가 있지만 experience 열/새 검사 루틴이 없고 V7 전체 구조와 동일하면
+`-Plan`으로 권한 및 복구 가능성을 확인한 뒤 `-Recover` 한 번으로 정상 Up과 권한 준비를 진행한다.
+단순히 experience 열이 없다는 사실만으로 복구를 승인하지 않는다. 실제 DB 실행 결과는 운영자가 확인한다.
+
 ### 일반 Down과 미지원 실패 복구
 
 Down도 관련 서비스를 정지하고 같은 대상·파일·이력·구조 검사를 거친 뒤 현재 head 한 단계만
@@ -1143,8 +1247,8 @@ Down도 관련 서비스를 정지하고 같은 대상·파일·이력·구조 �
 첫 테이블만 생성된 중단 상태가 가능하다. 도구는 정상 성공 기록이 생길 때까지 대기 SQL을 건너뛰지 않는다.
 
 체크섬 불일치는 승인된 배포 원문을 대조하고 코드/SQL 배포 실수를 확인한다. 이력의 체크섬을 현재
-파일에 맞춰 덮어쓰지 않는다. 위 초기 V0/V1 및 알려진 V7 복구 조합을 제외한 FAILED/RUNNING은 일반 Up/Down을
-계속 차단한다. 자동 repair/resume이나 다른 버전의 복구 기능은 없으며, 원인·부분 적용 상태·데이터
+파일에 맞춰 덮어쓰지 않는다. 위 전용 복구 및 명시적 변경 없는 실패 확인을 제외한 FAILED/RUNNING은
+일반 Up/Down을 계속 차단한다. 부분 적용의 임의 repair/resume은 제공하지 않으며 원인·부분 적용 상태·데이터
 유지 조건을 근거로 별도의 복구 SQL과 이력 처리 계약을 승인받아야 한다. 이 소스 변경만으로
 실제 DB 복구/SQL 적용을 수행한 것은 아니다.
 
@@ -1159,7 +1263,7 @@ Auth runtime ODBC는 기본 2연결/대기 128건, 연결 5초·쿼리 10초·�
 
 V0의 `get_schema_migration_history()`, V4의 `get_character_schema_migration_history()`, V5의 `get_inventory_schema_migration_history()`는
 같은 이름 기반 잠금을 획득해 조회하고 해제한다. 실행기는 프로시저 존재 여부로 검사 경로를
-선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V7의 get_quest_schema_migration_history를 사용한다. 잠금 획득
+선택한 뒤 head별 형식·구조·원문을 대조한다. 새 Auth는 V8의 get_experience_schema_migration_history를 사용한다. 잠금 획득
 실패 시 SQL 오류이며 성공 플래그를 반환하지 않는다. 실행기 연결이 이미 잠금을 가진 경우 MySQL의
 재귀 잠금 횟수 중 조회가 추가한 횟수만 해제한다. V0 데이터 결과셋은 10개, V4는 11개, V5는 18개, V6는 24개이며 첫 7개는
 문자열로 캐스팅한다. 나머지는 원본 SHOW CREATE 결과다. 각 결과셋은 SQL 파일의 순서를 따른다.
@@ -1199,7 +1303,7 @@ CHECK의 `OCTET_LENGTH(subject)`는 로컬 메타데이터에서 `LENGTH(subject
 
 ROUTINE_DEFINITION은 내부 definition_utf8에서 가져오며 `_binary` 같은 문자셋 introducer가
 제거되므로 배포 원문과 직접 본문을 비교하지 않는다. 결과셋 5의 이름·보안·접근 특성을 확인하고,
-실제 본문은 결과셋 7~28(V6는 7~23, V5는 7~17, V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
+실제 본문은 결과셋 7~29(V7은 7~28, V6는 7~23, V5는 7~17, V4는 7~10, V0는 7~9)의 Create Procedure에서 인용된 DEFINER와 헤더를 제외한 BEGIN~END를
 사용한다. 문자열 내용과 `_binary`를 보존하고 일반 주석·공백·식별자 표기 차이를 토큰으로 정규화한다.
 SHOW는 프로시저 안에서 결과셋을 반환할 수 있다.
 근거: [MySQL SHOW CREATE](https://dev.mysql.com/doc/refman/8.0/en/show-create-procedure.html),
@@ -1215,17 +1319,17 @@ NO_BACKSLASH_ESCAPES·ANSI_QUOTES·PIPES_AS_CONCAT은 허용하지 않는다. �
 
 AuthServer는 서비스 접속 변수와 함께 기대 DB 이름 `ACTIONRPG_DB_SCHEMA`, 배포 SQL 절대
 경로 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`를 사용한다. 새 Auth Runtime에는 login_google_account/get_auth_account_status/
-get_quest_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
+get_experience_schema_migration_history의 EXECUTE가 필요하며 테이블 직접 읽기/쓰기·DDL·감사 쓰기를 부여하지 않는다. DEFINER는 지속적으로 유효해야
 하며 테이블 접근과 루틴 정의 조회에 필요한 범위를 실제 환경에서 검토한다. SHOW 원문은 해당
 루틴의 DEFINER이거나 SHOW_ROUTINE 등의 전체 조회 권한이 있어야 보인다. EXECUTE만 가진
-주체는 Create Procedure가 NULL일 수 있다. 스물두 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
+주체는 Create Procedure가 NULL일 수 있다. 스물세 루틴의 DEFINER를 같은 전용 생성 주체로 유지하면
 런타임에 광범위 조회 권한을 추가하지 않고 조회 프로시저의 DEFINER 문맥에서 확인할 수 있다.
 권한 부족을 성공으로 처리하지 않는다. 도구용 주체와 런타임 주체를 분리하며 GRANT는 포함하지 않는다.
 
-마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000007과
+마이그레이션을 끝낸 뒤 필요한 SQL 파일을 함께 배포하고 AuthServer가 실제 현재 버전 000008과
 구조를 검증한 뒤 DB 연계 기능을 활성화한다. 요구 버전은
 [LoginSchemaVerifier.h](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.h)의
-`REQUIRED_SCHEMA_VERSION=7`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
+`REQUIRED_SCHEMA_VERSION=8`이며 [검증 구현](../../ActionRPGServer/AuthServer/Database/LoginSchemaVerifier.cpp)은
 전체 이력과 구조 검증에 성공해야 검사한 OdbcDatabase 인스턴스에 연결된 증명을 만든다.
 다른 DB 객체나 설정 파일의 버전 플래그로 이 증명을 대체하지 않는다.
 

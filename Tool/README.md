@@ -30,7 +30,7 @@ Tool\PacketGenerate.bat --check
 DB 개요와 버전 SQL 구성은 [계정 DB README](../ActionRPGServer/Database/README.md)를 참조한다.
 
 현재 구현은 MySQL 8.0.46 / InnoDB, 64비트 Windows PowerShell 5.1 / System.Data.Odbc의
-수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000007이며 실제 DB
+수동 실행기다. 서버 기동 시 자동으로 실행하지 않는다. SQL 파일 최신 버전은 000008이며 실제 DB
 직전 확인 결과는 2026-10-08 로컬 V000004 적용 성공과 새 검사 EXECUTE 확인이다.
 V5 적용 결과와 새 PC의 상태는 해당 대상에서 별도로 확인한다. 처음 구성하는 경우 [새 PC 설정·트러블슈팅](../docs/workflows/LOCAL_DEVELOPMENT_SETUP.md)의
 계정 생성·권한·대화형 마이그레이션 안내부터 따른다.
@@ -76,7 +76,27 @@ REVOKE는 수행하지 않는다. 이미 존재하는 다른 권한도 임의로
 권한 실패는 비정상 종료이며, 앞서 완료된 스키마·일부 GRANT는 유지된다. 스키마가 정상이라면 위의
 `-PermissionsOnly`로 권한만 다시 처리한다. 이 경로는 버전 SQL·감사 행을 변경하지 않는다.
 스키마만 관리하는 별도 배포 경로는 `-SchemaOnly`를 명시하고 권한 준비를 별도로 책임진다.
-검사·복구 옵션에는 권한 동기화를 붙이지 않으며 `-PermissionsOnly`와 함께 쓸 수 없다.
+읽기 전용 검사와 전용 V0/V1/V7 복구는 권한 동기화를 하지 않는다. 새 `-Recover`는 검증 후 일반 Up과
+권한 동기화까지 이어간다. 이 옵션들은 `-PermissionsOnly`와 함께 쓸 수 없다.
+
+일반 실행 전에는 현재 계정과 활성 역할의 권한을 검사한다. 누락 권한이 있으면 DDL·감사 쓰기 전에
+중단하고 실제 사용자/Host 및 관리자가 검토할 마이그레이션 계정용 GRANT를 출력한다. 자동 부여하지 않는다.
+로컬 SQL 블록 검사와 실행 문장별 버전·번호·객체명, SQLSTATE·MySQL 오류코드도 제공한다.
+문자열 값·연결 문자열·원문 드라이버 오류는 출력하지 않는다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -Status
+Tool\Database\UpMigration.bat -Database actionrpg -Plan
+Tool\Database\UpMigration.bat -Database actionrpg -Recover
+```
+
+`-Status`는 검사 프로시저 없이 감사 이력과 객체 목록을 직접 조회한다. `-Plan`은 이력·구조·권한과
+변경 없는 실패의 복구 가능성을 읽기 전용으로 확인한다. 두 명령은 DDL·감사 기록·GRANT를 하지 않는다.
+`-Recover`는 다음 Up(V2 이상)의 마지막 FAILED 뒤 실제 구조가 이전 성공 버전과 완전히 같을 때만
+`<원래이름>_unchanged_recovery` 확인 행을 추가하고 일반 Up을 재시도한다. 원래 FAILED는 보존하며
+확인 행 자체는 적용 버전을 올리지 않는다. 부분 적용·추가 객체·RUNNING·체크섬 불일치는 거절한다.
+수정된 Auth도 함께 빌드·배포해야 이 확인 이력을 인식한다. 상세 조건은
+[변경 없는 실패 복구](../docs/workflows/DATABASE_MIGRATIONS.md#변경-없는-up-실패의-검증과-재시도)를 따른다.
 
 `RunLocalTest.bat`은 같은 목록으로 Auth/Town 필수 호출을 서버 측 PREPARE/DEALLOCATE만 수행해
 권한·루틴 존재·인자 수를 확인한다. EXECUTE를 보내지 않으므로 로그인·인벤토리·퀘스트 본문은 실행하지 않는다.
@@ -84,7 +104,7 @@ REVOKE는 수행하지 않는다. 이미 존재하는 다른 권한도 임의로
 전체 스키마·감사 이력·DEFINER 준비 여부를 확정하는 Auth의 기존 검증은 그대로 유지한다.
 
 실패 이력의 구조 비교에는 Up 배치에 `-InspectOnly -InspectVersion 0`을 함께 전달한다.
-`InspectVersion`은 비교할 구조 버전(0~6)이며 실제 적용 버전을 확정하거나 이력을 승인하지 않는다.
+`InspectVersion`은 비교할 구조 버전(0~8)이며 실제 적용 버전을 확정하거나 이력을 승인하지 않는다.
 이 경로는 기존 DB·이력 테이블·검사 프로시저가 있어야 하며 `-CreateDatabase`와 함께 쓸 수 없다.
 같은 전용 연결·서비스 정지 확인·잠금을 사용해 감사 행과 CHECK 원문/정규화 실제 값/기대값을 출력한다.
 DB 생성, 버전 SQL, 감사 행 INSERT/UPDATE/DELETE는 수행하지 않으며 실패 이력을 그대로 유지한다.
@@ -148,16 +168,25 @@ V6 배포 계약은 head6다. V6 원장·4개 사용 절차·검사와 교체 cl
 검사는 24결과셋/17루틴/68 IN이며 V6 Down은 terminal을 포함해 원장이 비어 있을 때만 허용한다.
 V0~V5 SQL/해시는 변경하지 않는다. 실제 DB 적용은 사용자 수동 절차다.
 
-현재 신규 배포는 **V7/head7**을 요구한다. 퀘스트·추적·사건 이력과 공개 get/save,
+V7 배포는 **head7**을 요구한다. 퀘스트·추적·사건 이력과 공개 get/save,
 새 get_quest_schema_migration_history(29 sets/22 routines/93 IN)를 함께 배포한다.
 신규 공개2개와 검사 EXECUTE만 추가하고 private helper 권한은 주지 않는다.
 V7 Down은 새 테이블3개가 모두 비어 있을 때만 허용한다. 실제 적용은 사용자 수동 절차다.
 
+현재 신규 배포는 **V8/head8**이며 경험치 문자열과 Growth 저장을 추가한다.
+검사는 get_experience_schema_migration_history의30 sets/23 routines/93 IN이다.
+RuntimePermissions.ps1이 새 검사 및 교체 list/save/quest save 공개 권한을 동기화한다.
+private helper는 제외한다. Up/Down은 각14 statements이며 비0 XP 또는 live Experience
+보상 snapshot이 있으면 Down을 거절한다. V0~V7 원문과 V7 실패 복구 핀은 보존한다.
+
 | 현재 상태/명령 | 실제 동작 |
 |---|---|
-| DB 없음 + Up -CreateDatabase | DB 생성 → 000000 이력 기반 → 000001~000007 적용 |
-| 빈 스키마 + Up | 000000 이력 기반 → 000001~000005 계정·캐릭터·인벤토리 → 000006 사용 원장·쿨타임 → 000007 퀘스트 |
-| 정상 관리 DB + Up | 현재 head 다음부터 000007까지 적용; 이미 7이면 검사만 수행 |
+| DB 없음 + Up -CreateDatabase | DB 생성 → 000000 이력 기반 → 000001~000008 적용 |
+| 빈 스키마 + Up | 000000 이력 기반 → 000001~000005 계정·캐릭터·인벤토리 → 000006 사용 원장·쿨타임 → 000007 퀘스트 → 000008 경험치·성장 |
+| 정상 관리 DB + Up | 현재 head 다음부터 000008까지 적용; 이미 8이면 스키마 검사 후 권한 단계 수행 |
+| Up -Status / -Plan | 감사·객체 직접 조회 / 구조·권한·복구 가능성 읽기 전용 확인 |
+| 변경 없는 다음 Up FAILED + Up -Recover | 실패 보존·이전 버전 구조 확인·별도 확인 행 추가 후 일반 Up과 권한 동기화 |
+| head=8 + Down | XP가 전부0이고 live Experience 보상 snapshot이 없을 때만 경험치 열과 V8 루틴을 V7 계약으로 복원 |
 | head=7 + Down | 퀘스트·추적·사건 이력이 전부 비어 있을 때만 V7 삭제; 기존 인벤토리·사용 계약 보존 |
 | head=6 + Down | 사용 원장이 전부 비어 있을 때만 삭제하고 V5 claim/save/release 복원; 인벤토리 보존 |
 | head=5 + Down | 신규 상태·아이템·요청 테이블이 모두 비어 있을 때만 V5 테이블/루틴 삭제; V4 캐릭터/스킬 유지 |
@@ -170,9 +199,9 @@ V7 Down은 새 테이블3개가 모두 비어 있을 때만 허용한다. 실제
 | 비어 있지 않은 무관리 DB, 미복구 FAILED/RUNNING, 이름/체크섬/구조 불일치 | 중단; 자동 기준 버전 등록·repair·부분 SQL 재실행 없음 |
 
 출력의 host:port/DB, 적용 계획, 마지막 Active version과 종료 코드를 확인한다. 계획을 표시한 뒤
-바로 실행하며 추가 확인 프롬프트는 없다. 성공은 종료 코드 0, 오류는 1이다. 현재는 000001~000007
-계약만 지원한다. 진단은 별도의 Inspection 결과를 출력하며 임의 목표 버전 적용, 자동 Status 판정,
-dry-run, force 데이터 삭제 옵션은 없다.
+바로 실행하며 추가 확인 프롬프트는 없다. 성공은 종료 코드 0, 오류는 1이다. 현재는 000001~000008
+계약만 지원한다. 읽기 전용 Status/Plan은 적용 성공을 뜻하지 않는다. 임의 목표 버전 적용이나
+force 데이터 삭제 옵션은 없다.
 새 버전은 실행기·Auth 실제 구조 검증 계약도 함께 갱신해야 한다.
 
 실패 시 실제 객체와 감사 이력을 확인하고 별도 복구를 협의한다. 실패 이력을 지우거나 부분 적용 SQL을
@@ -180,7 +209,7 @@ dry-run, force 데이터 삭제 옵션은 없다.
 다른 MySQL 버전·다른 DBMS 및 자동 데이터 이관은 지원하지 않는다.
 
 성공 후 같은 Up/Down/Infrastructure SQL을 `ACTIONRPG_DB_MIGRATIONS_DIRECTORY`의 절대
-경로에 배포하고, Auth의 기대 스키마 `ACTIONRPG_DB_SCHEMA`를 맞춘다. Auth 실제 head=7 검증
+경로에 배포하고, Auth의 기대 스키마 `ACTIONRPG_DB_SCHEMA`를 맞춘다. Auth 실제 head=8 검증
 성공 후 타운/룸을 연결한다. 서버 상세는 [Auth 개발 계약](../ActionRPGServer/AuthServer/DEVELOPMENT.md),
 스키마·현재 버전 조회·권한·실패 복구는
 [DB 마이그레이션 사용 및 규칙](../docs/workflows/DATABASE_MIGRATIONS.md#9-수동-updown-실행-계약)을 따른다.

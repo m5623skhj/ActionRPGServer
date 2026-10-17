@@ -71,6 +71,61 @@
         ]
       },
       "air": null
+    },
+    {
+      "id": "Character1.Barrage",
+      "name": "난사",
+      "characterId": "Character1",
+      "type": "area",
+      "input": {
+        "command": [
+          "Down",
+          "Z"
+        ],
+        "maxStepSeconds": 0.35
+      },
+      "cooldownSeconds": 8,
+      "execution": {
+        "damageRatio": 1,
+        "radius": 300,
+        "hitCount": 20,
+        "tapSpeedStep": 0.02,
+        "maxTapSpeed": 1.2,
+        "force": 0,
+        "hitType": "Normal",
+        "hitstopSeconds": 0
+      },
+      "ground": {
+        "motionId": "barrage",
+        "frameCount": 20,
+        "fps": 13.333333333333334,
+        "frameDurationsSeconds": [
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075,
+          0.075
+        ],
+        "durationSeconds": 1.5,
+        "eventFrame": 0,
+        "endFrame": 19
+      },
+      "air": null
     }
   ]
 }

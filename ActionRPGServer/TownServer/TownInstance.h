@@ -248,6 +248,7 @@ namespace TownServer::Domain
         bool EnterDungeonOnStrand(PlayerId inPlayerId, ActionRPG::RoomControlProtocol::RoomId inRoomId);
         void HideFromTown(PlayerId inPlayerId, PlayerEntry& inEntry);
         void SendSkillState(PlayerEntry& inEntry, const std::string& inResult);
+        void SendExperienceState(PlayerEntry& inEntry);
         void NotifyProgression(PlayerId inPlayerId, const PlayerEntry& inEntry);
         void ProcessTransition(PlayerId inPlayerId, PlayerEntry& inEntry);
         bool TransferMap(PlayerId inPlayerId, PlayerEntry& inEntry,

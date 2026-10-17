@@ -143,6 +143,7 @@ namespace ActionRPG::Quests
                 for (const auto& row : rows)
                 {
                     if (row.at("type") == "Item") { Rules::Keys(row, {"type", "definitionId", "count"}); Id(row.at("definitionId")); Rules::Integer(row.at("count"), 1, 1000000); }
+                    else if (row.at("type") == "Experience") { Rules::Keys(row, {"type", "amount"}); Rules::Require(Decimal(row.at("amount"), false) > 0, "Invalid quest experience reward."); }
                     else { Rules::Require(row.at("type") == "SkillPoints", "Unsupported reward economy."); Rules::Keys(row, {"type", "amount"}); Rules::Integer(row.at("amount"), 1, 1000000); }
                 }
             };

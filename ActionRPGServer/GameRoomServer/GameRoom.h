@@ -125,6 +125,8 @@ namespace GameRoomServer
             float seconds{};
             std::unordered_set<std::uint64_t> hitIds;
             std::uint32_t skillLevel{};
+            std::uint32_t nextAreaHit{}, tapCount{};
+            float playbackRate{ 1.0f };
         };
         struct ActiveBuff
         {

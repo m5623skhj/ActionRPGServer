@@ -154,6 +154,7 @@ namespace TownProtocol
     [[nodiscard]] std::vector<std::uint8_t> Encode(const SessionStatus& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestStatePage& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const QuestActionResult& inPacket);
+    [[nodiscard]] std::vector<std::uint8_t> Encode(const ExperienceState& inPacket);
     [[nodiscard]] std::optional<QuestStateRequest> DecodeQuestStateRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::optional<QuestActionRequest> DecodeQuestActionRequest(const std::vector<std::uint8_t>& inPacket);
     [[nodiscard]] std::vector<std::uint8_t> Encode(const ChatRequest& inPacket);

@@ -182,7 +182,7 @@ namespace ActionRPG::PlayerSkills
                 Require(IsId(id) && result.characterIds.contains(character) && !result.skills.contains(id), "Invalid skill reference/ID.");
                 const auto name = skill.at("name").get<std::string>();
                 Require(!name.empty() && name.size() <= 320, "Invalid skill name.");
-                Require(type == "direct" || type == "projectile" || type == "buff", "Unsupported skill type.");
+                Require(type == "direct" || type == "projectile" || type == "buff" || type == "area", "Unsupported skill type.");
                 Keys(skill.at("input"), { "command", "maxStepSeconds" });
                 const auto& command = skill.at("input").at("command");
                 Require(command.is_array() && !command.empty() && command.size() <= 16, "Invalid command.");
@@ -208,14 +208,23 @@ namespace ActionRPG::PlayerSkills
                     if (!execution.contains("force")) execution["force"] = 0.0;
                     if (!execution.contains("hitType")) execution["hitType"] = "Normal";
                     if (type == "direct") Keys(execution, { "damage", "depthRadius", "hitstopSeconds", "force", "hitType" });
+                    else if (type == "area") Keys(execution, { "damageRatio", "radius", "hitCount", "tapSpeedStep", "maxTapSpeed", "hitstopSeconds", "force", "hitType" });
                     else Keys(execution, { "damage", "speed", "radius", "range", "hitstopSeconds", "force", "hitType" });
                     (void)NonnegativeFloat(execution.at("hitstopSeconds"));
                     Number(execution.at("force"), 0, 500);
                     (void)NonnegativeFloat(execution.at("force"));
                     Require(execution.at("hitType") == "Normal" || execution.at("hitType") == "Airborne", "Invalid hit type.");
-                    Integer(execution.at("damage"), 1, 1000000);
+                    if (type == "area")
+                    {
+                        Number(execution.at("damageRatio"), 0.01, 100);
+                        Number(execution.at("radius"), 0.1, 500);
+                        Integer(execution.at("hitCount"), 1, 64);
+                        Number(execution.at("tapSpeedStep"), 0.001, 0.2);
+                        Number(execution.at("maxTapSpeed"), 1, 1.2);
+                    }
+                    else Integer(execution.at("damage"), 1, 1000000);
                     if (type == "direct") Number(execution.at("depthRadius"), 0.1, 500);
-                    else
+                    else if (type == "projectile")
                     {
                         Number(execution.at("speed"), 1, 4000); Number(execution.at("radius"), 0.1, 100);
                         Number(execution.at("range"), 1, 10000);

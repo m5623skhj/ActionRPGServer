@@ -85,11 +85,17 @@ namespace TownServer::Domain
             && found->second.ownerToken == identity.ownerToken && found->second.ownerGeneration == identity.generation)
         {
             auto state = snapshot.states.front(); state.result = 0;
+            const auto previousGrowth = found->second.progression;
             if (!owner->ApplyCharacterState(found->second, state)) return false;
             found->second.itemUsePending = pending;
             found->second.cooldownsComplete = true;
             found->second.itemCooldowns = Persistence::CooldownsJson(snapshot);
             owner->NotifyProgression(playerId, found->second);
+            const auto& growth = found->second.progression;
+            if (previousGrowth.level != growth.level || previousGrowth.experience != growth.experience)
+                owner->SendExperienceState(found->second);
+            if (previousGrowth.level != growth.level || previousGrowth.skillPoints != growth.skillPoints
+                || previousGrowth.skillLevels != growth.skillLevels) owner->SendSkillState(found->second, "State");
         }
         return true;
     }

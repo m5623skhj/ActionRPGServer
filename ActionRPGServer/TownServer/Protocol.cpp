@@ -442,6 +442,11 @@ namespace TownProtocol
     { return EncodeJsonPacket(PacketType::QuestStatePage, inPacket.json); }
     std::vector<std::uint8_t> Encode(const QuestActionResult& inPacket)
     { return EncodeJsonPacket(PacketType::QuestActionResult, inPacket.json); }
+    std::vector<std::uint8_t> Encode(const ExperienceState& inPacket)
+    {
+        if (inPacket.json.size() > 4096) throw std::invalid_argument("Experience state exceeds packet limit.");
+        return EncodeJsonPacket(PacketType::ExperienceState, inPacket.json);
+    }
     std::optional<QuestStateRequest> DecodeQuestStateRequest(const std::vector<std::uint8_t>& inPacket)
     { if (inPacket.size() > 2052) return {}; return DecodeJsonPacket<QuestStateRequest>(inPacket, PacketType::QuestStateRequest); }
     std::optional<QuestActionRequest> DecodeQuestActionRequest(const std::vector<std::uint8_t>& inPacket)

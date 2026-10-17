@@ -939,6 +939,29 @@ Room fact는 별도의 incarnation/roomId/sequence 식별자로 중복 반영을
 무료 초기 아이템·자동 지급·새 이미지 자산은 추가하지 않았다.
 새 코드와 DB 계약은 정적으로 대조했다. 빌드·실행·DB 적용 및 실제 플레이 검증은 수행하지 않았다.
 
+## 경험치 상태와 V8 성장 저장
+
+Town TCP 57번 `ExperienceState`는 기존 문자열 프레이밍의 JSON 응답(최대 4KiB)이다.
+필드는 characterId(영속 캐릭터 ID 문자열), revision(U64 문자열), level(U32),
+experience(U64 문자열), requiredExperience(U64 문자열), atMaxLevel(bool)이다.
+일반 상태는 0<=experience<requiredExperience이며 requiredExperience>0이다.
+기존 기술 지원 상한 1,000,000에서는 atMaxLevel=true, experience="0", requiredExperience="0"다.
+클라이언트는 선택 영속 ID·revision으로 오래된 응답을 거르며 캐릭터 전환 시 HUD 상태를 초기화한다.
+
+입장/재접속 완료·EXP 또는 level 변경 commit 후 push하고 기존 SkillStateRequest에도 응답한다.
+매 처치에 skillTrees/playerSkills 전체를 다시 보내지 않으며 level/SP/학습 스킬이 바뀔 때만
+전체 SkillState를 갱신한다. Room 실시간 바이너리 레코드는 이 기능 때문에 변경하지 않는다.
+
+CharacterProgression.json schemaVersion=2의 experienceBase/experiencePerLevel은 U64 문자열이다.
+다중 레벨 상승은 등차수열 비용 합·이진 탐색으로 계산하고 잔여 EXP를 유지한다. EXP 합계·SP overflow는
+부분 반영 없이 거절하며 상한 도달 시 초과 EXP는 버린다. 기존 캐릭터의 level/SP는 V8에서 보존한다.
+
+V8 Growth 모드는 progression 필수·inventory NULL이며 가방/학습 스킬을 재저장하지 않는다.
+기존 5-IN get/12-IN quest save/9-IN character save 공개 서명을 유지한다. 성장만 반환한 응답도
+검증하며, Room 사건 원문 영수증으로 퀘스트·성장·revision·요청 영수증을 한 트랜잭션에 반영한다.
+신규 EXP 필드 없는 과거 Room 사건은 Progress로 처리하며 보상을 소급하지 않는다.
+소유권과 충돌 검사는 기존 캐릭터 큐·Town strand·generation/revision에 귀속한다.
+
 ### Character4 여성 검사 등록
 
 Town/Room PlayerSkills.characters에 Character4/dataId4를 추가한다. 생성 요청의 기존
@@ -947,3 +970,7 @@ characterDefinitionId(1..1000000)와 카탈로그 허용 목록, DB의 양수 de
 캐릭터별 필수 노드가 없으므로 새 검사 노드를 임의로 추가하지 않는다. 빈 skillLevels 진행 상태도 유효하다.
 Room은 Combat.json 캐릭터별 근접4연격·공중·대시 정의를 사용하며 상세 상태 계약은
 [전투 프로토콜](../GameRoomServer/COMBAT_PROTOCOL.md#character4-여성-검사-기본-전투)을 따른다.
+
+퀘스트 EXP는 {"type":"Experience","amount":"25"}처럼 문자열 금액이다. 기존 SkillPoints.amount는
+정수이며 Item 형식은 그대로다. Scenario.CitadelIntro만 version=2로 갱신하고 이미 수락한 version=1
+정의 snapshot은 유지한다. 제출·아이템·SP·EXP 보상은 Claim 트랜잭션에서 함께 확정한다.

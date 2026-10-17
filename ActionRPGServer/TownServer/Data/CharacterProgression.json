@@ -1,7 +1,9 @@
 {
   "format": "CharacterProgression",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "initialLevel": 1,
   "initialSkillPoints": 0,
-  "skillPointsPerLevel": 200
+  "skillPointsPerLevel": 200,
+  "experienceBase": "100",
+  "experiencePerLevel": "50"
 }

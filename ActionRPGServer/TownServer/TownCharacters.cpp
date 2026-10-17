@@ -218,6 +218,7 @@ namespace TownServer::Domain
                 || inState.definitionId != inEntry.player.GetCharacterId() || inState.name != inEntry.player.GetName()
                 || inState.revision < inEntry.revision) return false;
             auto progression = ActionRPG::PlayerSkills::CharacterProgression::Parse(Json::parse(inState.progression));
+            if (!progressionPolicy.Normalized(progression)) return false;
             skillTrees.ValidateProgression(playerSkills, progression, inState.definitionId);
             auto inventory = ActionRPG::Items::Inventory::Parse(Json::parse(inState.inventory), itemsCatalog,
                 inState.definitionId, progression.level);

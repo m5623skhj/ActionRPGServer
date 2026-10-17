@@ -26,10 +26,11 @@ Google 토큰이나 이메일은 현재 계정 스키마에 저장하지 않는�
 | 000005 | [V000005__create_character_inventory_persistence.sql](Migrations/MySQL/V000005__create_character_inventory_persistence.sql) | 캐릭터 소유권·인벤토리·중복 요청과 저장/복원 프로시저 |
 | 000006 | [V000006__create_item_use_ledger.sql](Migrations/MySQL/V000006__create_item_use_ledger.sql) | 사용 예약·확정·취소·영속 쿨타임·Pending 복구 |
 | 000007 | [V000007__create_character_quests.sql](Migrations/MySQL/V000007__create_character_quests.sql) | 퀘스트 진행·추적·기간·보상 원자 저장과 사건 중복 방지 |
+| 000008 | [V000008__create_character_experience.sql](Migrations/MySQL/V000008__create_character_experience.sql) | 경험치·레벨·SP와 퀘스트 진행의 원자적 성장 저장 |
 
 역변환 SQL은 [Migrations/MySQL/Down](Migrations/MySQL/Down)에 있다. 파일 최신 버전은
-000007이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 신규 요구 head는
-**7**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
+000008이며, [Auth 검증 계약](../AuthServer/Database/LoginSchemaVerifier.h)의 신규 요구 head는
+**8**이다. Auth는 기동 시 전체 적용 이력·실제 구조·배포 SQL을 대조하고 로그인·입장 기능의
 준비 여부를 결정한다. 2026-10-08 로컬 DB는 V4 적용 성공과 런타임 검사 권한을 조회로 확인했다.
 V5의 실제 적용 결과는 적용 단계에서 별도로 확인하며, 다른 대상 DB의 버전을 추정하지 않는다.
 
@@ -74,6 +75,15 @@ private emit_quest_state/apply_quest_inventory에는 runtime 권한을 주지 �
 Up 8/Down 6 statements이며 새 테이블 세 개가 모두 비어 있어야 Down이 가능하다.
 완료·포기·만료·사건 이력을 강제로 지우지 않는다. 실제 적용은 사용자 수동 절차다.
 
+V8은 characters.experience U64 열을 기본0으로 추가하고 기존 레벨·SP·스킬은 보존한다.
+성장 JSON은 기존3키와 experience 정규10진 문자열의4키다. Growth 모드는 가방/스킬을
+다시 쓰지 않고 성장·퀘스트·Room 사건과 요청 이력을 같은 transaction에 저장한다.
+head8/history_format6/23루틴/93 IN/30결과셋이며 공개 입력·결과 열 개수는 유지한다.
+교체 공개 list_characters/save_character_state/save_character_quests의 EXECUTE를 다시 맞추고
+새 get_experience_schema_migration_history 권한을 추가한다. 기존 권한 도구가 이 목록을 사용한다.
+V8 Up/Down은 각14 statements이며 경험치가 남거나 live Experience 보상 snapshot이 있으면
+Down을 거절한다. 실제 적용·서버 실행 검증은 수행하지 않았으며 사용자가 수동 적용한다.
+
 ## 수동 적용
 
 로컬 최초 설정의 DB 입력·64비트 ODBC 준비·보호 저장·실제 대상 검증은
@@ -108,6 +118,9 @@ utf8mb4 / utf8mb4_0900_ai_ci로 생성한다. 그 접속에서 DB를 선택하�
 실행 명령과 인자는 [툴 README의 DB 안내](../../Tool/README.md#db-마이그레이션)를 따른다.
 현재 버전 조회에 Up을 사용하면 대기 SQL이 적용될 수 있다. 실패나 부분 적용 시 이력을 지우거나
 SQL을 재실행하지 말고 상세 문서의 조회·복구 절차를 따른다.
+읽기 전용 조회는 `-Status`, 구조·권한 사전 검사는 `-Plan`을 사용한다. 변경 없는 다음 Up 실패는
+`-Recover`로 이전 성공 버전 전체 구조와 배포 체크섬을 검증한 뒤 실패를 보존하고 일반 Up을 재시도한다.
+부분 적용·RUNNING은 거절하며, 성공하면 런타임 권한 준비까지 이어간다. 새 확인 이력은 수정된 Auth도 필요하다.
 
 ## 상세 문서
 

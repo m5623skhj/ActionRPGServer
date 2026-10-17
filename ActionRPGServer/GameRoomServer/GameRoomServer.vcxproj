@@ -182,6 +182,7 @@
     <ClInclude Include="..\Shared\ItemUseIdentity.h" />
     <ClInclude Include="CombatDefinition.h" />
     <ClInclude Include="..\Shared\QuestCatalog.h" />
+    <ClInclude Include="..\Shared\ExperienceRewards.h" />
     <ClInclude Include="..\Shared\PlayerSkillCatalog.h" />
     <ClInclude Include="..\Shared\PlayerResourceCatalog.h" />
     <ClInclude Include="..\Shared\CombatTempo.h" />

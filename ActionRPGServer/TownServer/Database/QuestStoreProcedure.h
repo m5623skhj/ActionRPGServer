@@ -45,7 +45,7 @@ namespace TownServer::Persistence
             std::string previous;
             for (const auto& id : projection) { Id(id); const auto current = id.get<std::string>(); if (!previous.empty() && current <= previous) Invalid(); previous = current; }
             if (!req.save) { parameters.AddInput(Wide(req.questIdsJson)); return; }
-            if (!ActionRPG::Items::IsHexId(req.requestId, 64) || (req.mode != "Progress" && req.mode != "Inventory" && req.mode != "Claim")
+            if (!ActionRPG::Items::IsHexId(req.requestId, 64) || (req.mode != "Progress" && req.mode != "Growth" && req.mode != "Inventory" && req.mode != "Claim")
                 || req.operationJson.empty() || req.operationJson.size() > 2048 || req.changesJson.size() > 256 * 1024) Invalid();
             const auto changes = Json::parse(req.changesJson);
             Rules::Keys(changes, {"upserts"}, {"trackedQuestIds"});
@@ -55,8 +55,9 @@ namespace TownServer::Persistence
                 Rules::Keys(row, {"questId", "cycleKey", "state"}); State::ValidateInstance(row.at("state"));
                 if (row.at("questId") != row.at("state").at("questId") || row.at("cycleKey") != row.at("state").at("cycleKey")) Invalid();
             }
-            if ((req.mode == "Progress") != (!req.progression && !req.inventory)) Invalid();
-            if (req.mode != "Progress" && (!req.progression || !req.inventory)) Invalid();
+            if (req.mode == "Progress" && (req.progression || req.inventory)) Invalid();
+            if (req.mode == "Growth" && (!req.progression || req.inventory)) Invalid();
+            if ((req.mode == "Inventory" || req.mode == "Claim") && (!req.progression || !req.inventory)) Invalid();
             if ((req.progression && req.progression->size() > 32768) || (req.inventory && req.inventory->size() > 32768)) Invalid();
             parameters.AddInput(Wide(req.requestId)); parameters.AddInput(req.revision); parameters.AddInput(Wide(req.mode));
             parameters.AddInput(Wide(req.operationJson)); parameters.AddInput(Wide(req.changesJson));
@@ -101,10 +102,14 @@ namespace TownServer::Persistence
         void ValidateResults(std::size_t sets, std::size_t rows, const QuestResponse& response) const override
         {
             if (sets != 2 || !response.headerRead || rows != response.rows + 1) Invalid();
-            if (response.progression.has_value() != response.inventory.has_value()) Invalid();
+            if (response.inventory && !response.progression) Invalid();
+            if (req.mode != "Growth" && response.progression.has_value() != response.inventory.has_value()) Invalid();
+            if (req.mode == "Growth" && response.inventory) Invalid();
             if ((response.result == 0 || response.result == 3 || response.result == 13)
                 && (response.characterId != req.characterId || response.generation != req.generation)) Invalid();
-            if (response.result == 0 && req.save && req.mode != "Progress" && (!response.progression || !response.inventory)) Invalid();
+            if (response.result == 0 && req.save && req.mode == "Growth" && !response.progression) Invalid();
+            if (response.result == 0 && req.save && (req.mode == "Inventory" || req.mode == "Claim")
+                && (!response.progression || !response.inventory)) Invalid();
             if ((!req.save || req.mode == "Progress") && (response.progression || response.inventory)) Invalid();
             std::size_t active{}; for (const auto& [key, state] : response.quests.instances) if (ActionRPG::Quests::State::Live(state)) ++active;
             if (active > ActionRPG::Quests::MAX_ACTIVE || response.quests.summaries.size() > 64) Invalid();

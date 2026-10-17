@@ -26,7 +26,7 @@
   "quests": [
     {
       "id": "Scenario.CitadelIntro",
-      "version": 1,
+      "version": 2,
       "title": "몰락한 성채 조사",
       "description": "몰락한 성채 조사",
       "category": "Scenario",
@@ -99,6 +99,10 @@
         }
       ],
       "fixedRewards": [
+        {
+          "type": "Experience",
+          "amount": "25"
+        },
         {
           "type": "SkillPoints",
           "amount": 1

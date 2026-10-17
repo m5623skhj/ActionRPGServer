@@ -1363,6 +1363,7 @@ namespace GameRoomServer
                 record["skillActive"] = player.skill.has_value();
                 record["skillAirborne"] = player.lastSkillAirborne;
                 record["skillSeconds"] = player.lastSkillSeconds;
+                record["skillPlaybackRate"] = player.skill ? player.skill->playbackRate : 1.0f;
                 record["level"] = player.progression.level;
                 record["skillPoints"] = player.progression.skillPoints;
                 record["skillLevels"] = player.progression.skillLevels;

@@ -98,12 +98,15 @@ namespace TownServer::Domain
                     status = Persistence::ResultName(state.result);
                     if (state.result == 0)
                     {
-                        const auto previousGrowth = entry.progression.ToJson();
+                        const auto previousGrowth = entry.progression;
                         if (!town.ApplyCharacterState(entry, state)) status = "InvalidStoredState";
                         else
                         {
                             town.NotifyProgression(inPlayerId, entry);
-                            if (previousGrowth != entry.progression.ToJson()) town.SendSkillState(entry, "State");
+                            if (previousGrowth.level != entry.progression.level || previousGrowth.experience != entry.progression.experience)
+                                town.SendExperienceState(entry);
+                            if (previousGrowth.level != entry.progression.level || previousGrowth.skillPoints != entry.progression.skillPoints
+                                || previousGrowth.skillLevels != entry.progression.skillLevels) town.SendSkillState(entry, "State");
                         }
                     }
                     else if (state.result == 3 && state.characterId == entry.persistentCharacterId
@@ -111,7 +114,12 @@ namespace TownServer::Domain
                     {
                         auto latest = state; latest.result = 0;
                         if (!town.ApplyCharacterState(entry, latest)) status = "InvalidStoredState";
-                        else town.NotifyProgression(inPlayerId, entry);
+                        else
+                        {
+                            town.NotifyProgression(inPlayerId, entry);
+                            town.SendExperienceState(entry);
+                            town.SendSkillState(entry, "State");
+                        }
                     }
                     if (state.result == 5 || state.result == 1) failedSession = entry.session;
                 }

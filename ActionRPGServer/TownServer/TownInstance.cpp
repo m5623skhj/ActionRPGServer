@@ -157,13 +157,31 @@ namespace TownServer::Domain
             progressionChangedHandler(roomId, inPlayerId, RuntimeState(inEntry).dump());
     }
 
+    // Called only on the town strand for an admitted, committed character snapshot.
+    void TownInstance::SendExperienceState(PlayerEntry& inEntry)
+    {
+        using namespace ActionRPG::PlayerSkills;
+        if (!progressionPolicy.Normalized(inEntry.progression)) { inEntry.session->Stop(); return; }
+        const auto& growth = inEntry.progression;
+        const Catalog::Json payload{{"characterId", std::to_string(inEntry.persistentCharacterId)},
+            {"revision", std::to_string(inEntry.revision)}, {"level", growth.level},
+            {"experience", std::to_string(growth.experience)},
+            {"requiredExperience", std::to_string(progressionPolicy.RequiredExperience(growth.level))},
+            {"atMaxLevel", growth.level == MAX_CHARACTER_LEVEL}};
+        inEntry.session->Send(TownProtocol::Encode(TownProtocol::ExperienceState{payload.dump()}));
+    }
+
     void TownInstance::RequestSkillState(PlayerId inPlayerId)
     {
         const auto self = shared_from_this();
         asio::dispatch(strand, [self, inPlayerId]()
         {
             const auto found = self->players.find(inPlayerId);
-            if (found != self->players.end()) self->SendSkillState(found->second, "State");
+            if (found != self->players.end())
+            {
+                self->SendSkillState(found->second, "State");
+                self->SendExperienceState(found->second);
+            }
         });
     }
 
@@ -1159,6 +1177,7 @@ namespace TownServer::Domain
         }));
         RefreshVisibility(playerId);
         SendSkillState(playerEntry, "State");
+        SendExperienceState(playerEntry);
         SendInventoryState(playerEntry, inRequestId);
     }
 

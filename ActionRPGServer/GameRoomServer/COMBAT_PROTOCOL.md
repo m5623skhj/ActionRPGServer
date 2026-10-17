@@ -61,7 +61,7 @@ AI 실행 수치는 서버의 float 범위 안이어야 하며, 범위를 넘는
 `combatRules.version=3`이며 `slideDefinitions` 배열은 캐릭터별
 `characterId`, `attackPower`, `durationSeconds`, `distancePerRunSpeedSeconds`, `hitStartRatio`, `hitEndRatio`, `motionId`, `hitRecovery`, `hitstopSeconds`를 전달합니다.
 `shotHitstopSeconds`도 초기 월드에 포함합니다. 일반 경직의 기본 `hitStunSeconds`는 0.25초입니다.
-기본 사격의 `shot.damage`와 플레이어 스킬의 피해량·랭크 계산은 캐릭터 `attackPower`로 대체하지 않습니다.
+기본 사격의 `shot.damage`와 기존 고정 피해 스킬의 피해량·랭크 계산은 캐릭터 `attackPower`로 대체하지 않습니다. area의 damageRatio는 캐릭터 attackPower 기준입니다.
 
 기본 사격의 `muzzleForward`/`muzzleHeight`는 지상, `airMuzzleForward`/`airMuzzleHeight`는 공중 총구의
 전방 거리와 발 기준 높이입니다. 모두 0~1000 월드 단위이며 피격용 `bodyHeight`와 독립적으로 검사합니다.
@@ -579,6 +579,55 @@ Town은 수락 전에 Room strand의 sequence·위치 barrier를 조회하여 �
 outbox는 메모리이므로 DB 확정 전 프로세스 장애로 잃은 사실의 자동 복구는 보장하지 않는다.
 DB에 확정된 보상·처치는 요청 receipt와 Room fact 식별자로 중복 반영을 막는다.
 이번 구현은 정적 대조만 수행했으며 서버 실행·DB 적용·실제 전투 검증은 하지 않았다.
+
+
+## 플레이어 범위 스킬 · 난사
+
+PlayerSkills의 area는 캐릭터 attackPower × damageRatio × damageMultiplier를 매 타격에 적용한다.
+[T[eventFrame],T[endFrame+1])에 hitCount개 시점을 균등 배치하고 지나간 타격을 모두 처리한다.
+매 타격마다 현재 맵 생존 적의 시전자 중심 XY 거리와 벽 가시성을 검사한다.
+이동은 기존 스킬 잠금을 따르며 피격/사망으로 시전이 취소되면 이후 피해도 중단된다.
+
+Character1.Barrage는 반경 300, damageRatio=1, hitCount=20, durationSeconds=1.5,
+cooldownSeconds=8, force=0, hitstopSeconds=0, hitType=Normal이며 지상에서만 사용한다.
+전투 템포 0.7의 기본 실제 시간은 약 2.14초다. 습득 조건은 레벨 1 / SP 20 / 최대 랭크 1이다.
+같은 스킬 입력은 재시전 대신 tapSpeedStep=0.02씩 속도를 올리며 maxTapSpeed=1.2로 제한한다.
+룸 strand에서 actionSequence와 활성 시전을 검사하고 시전 번호·방향·쿨다운·타격 커서를 유지한다.
+클라이언트는 새 단축키 누름만 보내며 자동 키 반복을 제외한다.
+
+JSON player에 skillPlaybackRate(1~1.2, 비활성 1)를 추가한다. 실시간 v3의 기존 레코드와 tail은 유지하고
+KBK1 뒤에 ASCII RPD1 + playerCount(uint16) + 플레이어 행을 추가한다.
+각 행은 little endian 패딩 없는 playerId(uint64), skillSequence(uint32), skillPlaybackRate(float32)의
+16바이트다. 현재 맵의 준비된 모든 플레이어를 포함하며 클라이언트는 개수·ID·시전 번호·유한 속도를 검사한다.
+RPD1이 없는 이전 프레임은 속도 1이다. 모션과 총구 연출의 외삽도 같은 속도를 사용한다.
+구형 클라이언트는 미지 tail을 거절하므로 서버·클라이언트·데이터를 함께 배포해야 한다.
+기존 48KiB frame 제한과 세션 입력 횟수 제한을 유지한다.
+
+### 경험치와 레벨 반영
+
+성장 저장 JSON은 `level`, `skillPoints`, `skillLevels`, `experience`의 4개 키다.
+experience는 현재 레벨 안에서 누적한 U64 정규 십진 문자열이다. 확정된 Town 상태만 기존
+UpdatePlayerProgress로 Room strand에 반영하며 characterId/ownerGeneration/revision 검증을 유지한다.
+경험치·레벨·SP만 변경하고 HP/MP 회복이나 캐릭터 스탯 성장은 추가하지 않는다.
+
+서버 원본 `Data/ExperienceRewards.json`은 편집기의 Monster/Dungeon 출력과 분리한다.
+format=ExperienceRewards, schemaVersion=1, version=1이며 monsters 항목은
+monsterDataId/experience, dungeons 항목은 dungeonId/recommendedLevel/clearExperience다.
+보상 수치나 수혜 규칙을 바꿀 때는 version을 올리고 이미 생성된 사건 원문은 유지한다.
+모든 EXP 값은 U64 십진 문자열이며 기존 몬스터 전부와 실행할 던전의 보상 정의가 필요하다.
+partyCredit=RoomParticipantsFull에서 Room은 **동일 mapId의 실제 던전방**이다.
+처치/클리어 당시 entered·worldReady 참여자 각각에게 전량 지급하며 다른 맵의 파티원은 제외한다.
+
+MonsterKilled/DungeonCleared fact에 experience, experiencePlayerIds, rewardPolicyVersion을 고정한다.
+기존 creditedPlayerIds는 퀘스트 수혜자이며 두 배열의 합집합을 Town에서 처리한다.
+사건을 재전송할 때 지급량·정책 버전·대상을 다시 계산하지 않는다. 이 세 필드가 없는 과거 사건은
+EXP 없는 기존 사건으로 처리하며 새 보상 정보를 덧붙이지 않는다. 기존 Room fact 영수증으로
+퀘스트 진행과 성장 보상을 함께 확정하고 ACK한다. 메모리 outbox의 commit 전 프로세스 유실 한계는 유지한다.
+
+일반 몬스터 5, 보스 20, Dummy 0, 두 기존 던전의 Lv.1 클리어 20을 데이터로 지정한다.
+주경로 일반 12마리+보스+클리어는 100, 선택방 3마리 포함 시 115 EXP다.
+Town CharacterProgression 정책의 experienceBase=100/experiencePerLevel=50에 따라
+다음 레벨 필요량은 100+50×(현재 레벨−1)이며 레벨당 SP 200·초기 SP 0을 유지한다.
 
 ### Character4 여성 검사 기본 전투
 

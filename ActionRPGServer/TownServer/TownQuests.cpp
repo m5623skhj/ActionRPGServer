@@ -51,7 +51,11 @@ namespace TownServer::Domain
         if (response.progression)
         {
             growth = ActionRPG::PlayerSkills::CharacterProgression::Parse(Json::parse(*response.progression));
+            Q::Rules::Require(progressionPolicy.Normalized(growth), "Invalid stored experience.");
             skillTrees.ValidateProgression(playerSkills, growth, runtime.definitionId);
+        }
+        if (response.inventory)
+        {
             inventory = ActionRPG::Items::Inventory::Parse(Json::parse(*response.inventory), itemsCatalog, runtime.definitionId, growth.level);
         }
         runtime.progression = std::move(growth); runtime.inventory = std::move(inventory);
@@ -61,10 +65,15 @@ namespace TownServer::Domain
         if (entry != players.end() && entry->second.session->GetSessionId() == runtime.sessionId
             && entry->second.ownerGeneration == runtime.generation && entry->second.ownerToken == runtime.ownerToken)
         {
+            const auto previous = entry->second.progression;
             entry->second.revision = runtime.revision; entry->second.progression = runtime.progression;
             entry->second.inventory = runtime.inventory;
             NotifyProgression(runtime.playerId, entry->second);
-            if (response.progression) { SendInventoryState(entry->second, ""); SendSkillState(entry->second, "State"); }
+            if (response.inventory) SendInventoryState(entry->second, "");
+            if (previous.experience != runtime.progression.experience || previous.level != runtime.progression.level)
+                SendExperienceState(entry->second);
+            if (previous.level != runtime.progression.level || previous.skillPoints != runtime.progression.skillPoints
+                || previous.skillLevels != runtime.progression.skillLevels) SendSkillState(entry->second, "State");
         }
     }
 
@@ -314,6 +323,7 @@ namespace TownServer::Domain
                                 if (status == "Succeeded") for (const auto& item : Q::State::TurnIn(definition))
                                 { if (inventory.Consume(item.at("definitionId"), item.at("count")) != "Succeeded") { status = "RequirementsNotMet"; break; } }
                                 std::map<std::string, std::uint32_t> acquired;
+                                std::uint64_t experienceReward{};
                                 if (status == "Succeeded") for (const auto& reward : rewards)
                                 {
                                     if (reward.at("type") == "Item")
@@ -322,6 +332,13 @@ namespace TownServer::Domain
                                         status = inventory.Acquire(itemsCatalog, id, count, [] { return Persistence::RandomHex(16); });
                                         if (status != "Succeeded") break; acquired[id] += count;
                                     }
+                                    else if (reward.at("type") == "Experience")
+                                    {
+                                        const auto amount = ActionRPG::PlayerSkills::ExperienceValue(reward.at("amount"));
+                                        if (amount > std::numeric_limits<std::uint64_t>::max() - experienceReward)
+                                        { status = "RewardOverflow"; break; }
+                                        experienceReward += amount;
+                                    }
                                     else
                                     {
                                         const auto points = static_cast<std::uint64_t>(growth.skillPoints) + reward.at("amount").get<std::uint32_t>();
@@ -329,6 +346,7 @@ namespace TownServer::Domain
                                         growth.skillPoints = static_cast<std::uint32_t>(points);
                                     }
                                 }
+                                if (status == "Succeeded" && !progressionPolicy.AddExperience(growth, experienceReward)) status = "RewardOverflow";
                                 if (status == "Succeeded")
                                 {
                                     row["state"] = "Completed"; request.mode = "Claim";
@@ -351,7 +369,18 @@ namespace TownServer::Domain
                         }
                     }
                     else if (action == "RoomEvent" || action == "Location")
-                        for (auto& [key, row] : proposed.instances) proposed.Evaluate(questCatalog, row, inventory, now, work.event);
+                    {
+                        if (action != "RoomEvent" || std::find(work.event.at("creditedPlayerIds").begin(),
+                            work.event.at("creditedPlayerIds").end(), Q::Decimal(runtime->playerId)) != work.event.at("creditedPlayerIds").end())
+                            for (auto& [key, row] : proposed.instances) proposed.Evaluate(questCatalog, row, inventory, now, work.event);
+                        if (action == "RoomEvent" && work.event.contains("experience")
+                            && std::find(work.event.at("experiencePlayerIds").begin(), work.event.at("experiencePlayerIds").end(),
+                                Q::Decimal(runtime->playerId)) != work.event.at("experiencePlayerIds").end())
+                        {
+                            request.mode = "Growth";
+                            if (!progressionPolicy.AddExperience(growth, Q::Decimal(work.event.at("experience")))) status = "RewardOverflow";
+                        }
+                    }
                     else if (action == "LocationCheck")
                         for (auto& [key, row] : proposed.instances)
                         {
@@ -388,7 +417,8 @@ namespace TownServer::Domain
                 if (changes.at("upserts").empty() && !changes.contains("trackedQuestIds") && request.mode == "Progress" && work.internal && action != "RoomEvent")
                 { finish("Succeeded"); return; }
                 request.operationJson = operation.dump(); request.changesJson = changes.dump();
-                if (request.mode != "Progress") { request.progression = growth.ToJson().dump(); request.inventory = inventory.ToJson().dump(); }
+                if (request.mode != "Progress") request.progression = growth.ToJson().dump();
+                if (request.mode == "Claim" || request.mode == "Inventory") request.inventory = inventory.ToJson().dump();
                 work.retry = request;
             }
             else request = *work.retry;
@@ -600,7 +630,8 @@ namespace TownServer::Domain
                 std::vector<std::pair<std::shared_ptr<QuestRuntime>, QuestWork>> work;
                 for (const auto& event : body.at("events"))
                 {
-                    Q::Rules::Keys(event, {"incarnation", "sequence", "dungeonId", "mapId", "kind", "targetId", "creditedPlayerIds"}, {"monsterInstanceId"});
+                    Q::Rules::Keys(event, {"incarnation", "sequence", "dungeonId", "mapId", "kind", "targetId", "creditedPlayerIds"},
+                        {"monsterInstanceId", "experience", "experiencePlayerIds", "rewardPolicyVersion"});
                     Q::Rules::Require(ActionRPG::Items::IsHexId(event.at("incarnation"), 32), "Invalid room incarnation.");
                     Q::Decimal(event.at("sequence"), false); Q::Id(event.at("mapId"));
                     Q::Rules::Integer(event.at("dungeonId"), 1, 1000000);
@@ -610,6 +641,28 @@ namespace TownServer::Domain
                     for (const auto& player : event.at("creditedPlayerIds"))
                     {
                         const auto id = Q::Decimal(player, false); Q::Rules::Require(unique.insert(id).second, "Duplicate quest credit.");
+                    }
+                    const bool hasExperience = event.contains("experience");
+                    Q::Rules::Require(hasExperience == event.contains("experiencePlayerIds")
+                        && hasExperience == event.contains("rewardPolicyVersion"), "Incomplete experience fact.");
+                    if (hasExperience)
+                    {
+                        Q::Rules::Require(event.at("kind") == "MonsterKilled" || event.at("kind") == "DungeonCleared", "Invalid experience fact kind.");
+                        Q::Decimal(event.at("experience"));
+                        Q::Rules::Integer(event.at("rewardPolicyVersion"), 1, 1000000);
+                        Q::Rules::Require(event.at("experiencePlayerIds").is_array()
+                            && event.at("experiencePlayerIds").size() <= 4, "Invalid experience recipients.");
+                        std::set<PlayerId> experienceRecipients;
+                        for (const auto& player : event.at("experiencePlayerIds"))
+                        {
+                            const auto id = Q::Decimal(player, false);
+                            Q::Rules::Require(experienceRecipients.insert(id).second, "Duplicate experience credit.");
+                            unique.insert(id);
+                        }
+                    }
+                    Q::Rules::Require(unique.size() <= 4, "Too many Room fact recipients.");
+                    for (const auto id : unique)
+                    {
                         const auto runtime = std::find_if(self->questRuntimes.begin(), self->questRuntimes.end(),
                             [id](const auto& pair) { return pair.second->playerId == id; });
                         if (runtime == self->questRuntimes.end()) { completion->succeeded = false; continue; }

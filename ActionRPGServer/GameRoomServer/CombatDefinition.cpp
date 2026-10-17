@@ -94,6 +94,10 @@ namespace GameRoomServer
         Require(source.at("version") == 3, "Unsupported combat version.");
         auto result = std::make_shared<CombatDefinition>();
         result->quests = ActionRPG::Quests::Catalog::Load(inPath.parent_path() / "Quests.json");
+        result->experienceRewards = ActionRPG::PlayerSkills::ExperienceRewards::Load(inPath.parent_path() / "ExperienceRewards.json");
+        Require(result->experienceRewards.monsters.size() == inMonsters.size(), "Every monster needs an experience reward.");
+        for (const auto& [id, monster] : inMonsters)
+            Require(result->experienceRewards.monsters.contains(id), "Missing monster experience reward.");
         result->tempo = ActionRPG::Combat::CombatTempo::Parse(source.value("tempoScale", Json(1.0)));
         const auto& player = source.at("player");
         Keys(player, { "maxHp", "maxMp", "walkSpeed", "runSpeed", "bodyHeight", "hitRadius", "shot", "jump", "characters" });

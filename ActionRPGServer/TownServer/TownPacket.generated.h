@@ -65,6 +65,7 @@ namespace TownProtocol
         QuestStatePage = 54,
         QuestActionRequest = 55,
         QuestActionResult = 56,
+        ExperienceState = 57,
     };
 
     struct EnterTownRequest
@@ -411,6 +412,11 @@ namespace TownProtocol
     };
 
     struct QuestActionResult
+    {
+        std::string json{};
+    };
+
+    struct ExperienceState
     {
         std::string json{};
     };

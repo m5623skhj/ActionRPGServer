@@ -1,0 +1,15 @@
+{
+  "format": "ExperienceRewards",
+  "schemaVersion": 1,
+  "version": 1,
+  "partyCredit": "RoomParticipantsFull",
+  "monsters": [
+    { "monsterDataId": 1, "experience": "0" },
+    { "monsterDataId": 2, "experience": "5" },
+    { "monsterDataId": 3, "experience": "20" }
+  ],
+  "dungeons": [
+    { "dungeonId": 5, "recommendedLevel": 1, "clearExperience": "20" },
+    { "dungeonId": 6, "recommendedLevel": 1, "clearExperience": "20" }
+  ]
+}

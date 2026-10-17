@@ -5,6 +5,7 @@
 #include "../Shared/SkillTreeCatalog.h"
 #include "../Shared/CombatTempo.h"
 #include "../Shared/QuestCatalog.h"
+#include "../Shared/ExperienceRewards.h"
 
 #include <filesystem>
 #include <memory>
@@ -93,6 +94,7 @@ namespace GameRoomServer
         ActionRPG::PlayerSkills::Catalog playerSkills;
         ActionRPG::PlayerSkills::SkillTreeCatalog skillTrees;
         ActionRPG::Quests::Catalog quests;
+        ActionRPG::PlayerSkills::ExperienceRewards experienceRewards;
 
         [[nodiscard]] static std::shared_ptr<const CombatDefinition> Load(
             const std::filesystem::path& inPath, const MonsterDefinition::Catalog& inMonsters);

@@ -99,10 +99,14 @@ MySQL의 사용자 이름과 호스트는 함께 계정을 식별한다. `localh
 관리자로 신규 스키마에 사용할 migrator 권한을 준비한다. 다음은 `actionrpg` 이름을 사용하는 예시다.
 
 ```sql
-GRANT SELECT, INSERT, UPDATE, CREATE, DROP, REFERENCES,
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, REFERENCES,
       CREATE ROUTINE, ALTER ROUTINE, EXECUTE, LOCK TABLES
 ON actionrpg.* TO 'actionrpg_migrator'@'127.0.0.1';
 ```
+
+변경 없는 실패의 자동 검증 복구(`-Recover`)를 사용할 때는 숨겨진 트리거·이벤트 유무 확인을 위해
+같은 DB의 TRIGGER/EVENT 권한도 필요하다. 사전 검사 출력에 따라 관리자가 전용 migrator에만 부여한다.
+이 권한은 MySQL에서 객체 생성·변경도 허용하므로 런타임 계정에 부여하지 않는다.
 
 실행기는 사용자를 만들지 않는다. 일반 Up/Down은 스키마 단계 이후 별도 관리자로 필요한 공개 프로시저
 EXECUTE를 동기화한다. migrator는 루틴의 DEFINER이므로 적용 후에도 계정과
@@ -136,9 +140,9 @@ ODBC 드라이버가 하나면 자동 선택하고 여러 개면 번호를 묻�
 검증 옵션도 이 연결 문자열로 지정한다. 대화형 연결은 `SSLMODE=REQUIRED`로 암호화를 요구한다.
 자동화에서는 연결 환경 변수와 `-Database actionrpg -ServicesStopped`를 함께 제공하면 추가 입력이 없다.
 
-기대 결과는 `Complete. Active version: V000007; runtime permissions synchronized and checked.`와
+기대 결과는 `Complete. Active version: V000008; runtime permissions synchronized and checked.`와
 종료 코드 **0**이다. `Schema complete`만 출력되었다면 후속 권한 단계 결과도 확인한다. 기반 V000000 다음에
-V000001→V000002→V000003→V000004→V000005→V000006→V000007이 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
+V000001→V000002→V000003→V000004→V000005→V000006→V000007→V000008이 적용된다. DB 생성 뒤 실패하면 DB는 남으며 자동 삭제하지 않는다.
 실패 출력이 있으면 일반 Up을 반복하지 말고 아래 문제 해결 절차를 따른다.
 배치는 실행 정책 RemoteSigned를 자식 PowerShell에만 지정한다. 조직의 상위 정책을 덮어쓰는 기능은 아니다.
 [실행 정책 범위 설명](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy?view=powershell-5.1).
@@ -158,7 +162,7 @@ DATABASE를 대조한다. `CURRENT_USER()`에서 확인한 계정/Host에 공개
 프로시저 목록은 [RuntimePermissions.ps1](../../Tool/Database/RuntimePermissions.ps1)의 공통 계약을 사용한다.
 내부 emit/apply와 DB 전체 EXECUTE는 허용하지 않고, 기존의 다른 권한을 자동 회수하지 않는다.
 
-이미 V7 적용을 마쳤고 권한만 누락되었다면 서버를 종료한 뒤 다음 명령을 실행한다.
+이미 최신 V8 적용을 마쳤고 권한만 누락되었다면 서버를 종료한 뒤 다음 명령을 실행한다.
 
 ```bat
 Tool\Database\UpMigration.bat -Database actionrpg -PermissionsOnly
@@ -172,6 +176,12 @@ Tool\Database\UpMigration.bat -Database actionrpg -PermissionsOnly
 로컬 실행기는 빌드·기동 전에 실제 Auth/Town 계정으로 필수 CALL의 서버 측 PREPARE/DEALLOCATE만
 수행한다. 프로시저 본문을 실행하지 않고 권한·존재·인자 수를 검사하며, 누락 시 정확한 계정/Host와
 루틴을 표시하고 중단한다. 이 검사는 Auth의 기존 전체 스키마·감사 이력 검증을 대신하지 않는다.
+
+V8의 열 추가/삭제에는 마이그레이션 계정의 ALTER 권한도 필요하다.
+V8 적용 시 기존 level/SP/skills는 유지하고 experience만 기본0으로 추가한다.
+현재 서버 성장 JSON은 experience 문자열을 포함한4키이므로 DB head8과 같은 바이너리/SQL이
+필요하다. 권한 목록은 새 경험치 검사와 재생성 list/save/quest save를 포함한다.
+비0 경험치나 live Experience 보상 퀘스트 snapshot이 있으면 Down을 거절하며 강제로 지우지 않는다.
 
 ## 5. 서버와 클라이언트 빌드
 
@@ -244,7 +254,7 @@ Google secret은 ID와 짝지어 클라이언트 환경에만 전달되고 로�
 | Auth TLS 오류, curl 60 `revocation status is unknown` | 현재 사용자 CA 신뢰·localhost SAN·CA 경로 확인. 최신 실행기의 로컬 검사에는 `--ssl-revoke-best-effort`가 적용됨. `--insecure`나 전체 인증서 검증 해제로 대체하지 않음 |
 | Auth listening 로그 뒤 종료 코드 1 | 이전 소스는 실제 bind 전에 listening을 출력했음. 최신 실행기로 빌드한 뒤 서버 콘솔의 bind/listen/accept stage와 숫자 WSA_error 확인. 8443 점유·Windows 제외 포트 범위·로컬 보안 정책을 검토하며 임의 포트 변경이나 관리자 실행으로 우회하지 않음 |
 | 실행 전 권한 검사 실패 또는 Auth native_code=1370 | 로그의 실제 계정/Host·루틴을 확인한다. 서버 종료 후 `UpMigration.bat -Database actionrpg -PermissionsOnly`로 동기화한다. 프로시저 미존재/V7 미적용이면 일반 Up부터 수행한다. 최신 Up도 권한 단계를 재수행한다. 관리자/마이그레이션 계정을 런타임으로 사용하지 않는다. |
-| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=7, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
+| Auth가 listen 중인데 DB verification failed/HTTP 503 | listen 로그만으로 준비 완료를 판단하지 않음. stage·database_error·SQLSTATE·native_code·context 확인. DB head=8, DEFINER, 배포 SQL 경로·원문을 대조하고 문제 해결 후 Auth 재시작 |
 | `ODBC driver substituted the connection timeout` | 이전 공통 ODBC 코드의 MySQL 비지원 속성 검사. 최신 소스의 로그인 타임아웃 검사로 Auth와 Town을 모두 다시 빌드 |
 | Room 출력 없이 종료 | EXE 옆 해당 빌드의 OpenSSL DLL 두 개와 Debug C++ 런타임 확인. Room과 의존 프로젝트를 재빌드해 app-local 배포. 최신 프로젝트는 후속 빌드의 DLL 삭제도 방지 |
 | Room 종료 코드가 빈칸 | 최신 실행기는 네이티브 프로세스 핸들을 보유해 종료 코드를 읽음. 빈 코드 자체를 원인으로 보지 말고 위 런타임 파일 검사 |
@@ -270,6 +280,20 @@ Get-CimInstance Win32_Process -Filter "Name = 'ActionRPGClient.exe'" |
 ## 8. 마이그레이션 실패 후의 경계
 
 `FAILED`/`RUNNING` 또는 부분 생성 상태에서 DB나 감사 행을 삭제하거나 Up/DDL을 무작정 재실행하지 않는다.
+먼저 서비스 종료 후 다음 순서로 실행한다. 각 명령은 같은 마이그레이션 계정으로 접속한다.
+
+```bat
+Tool\Database\UpMigration.bat -Database actionrpg -Status
+Tool\Database\UpMigration.bat -Database actionrpg -Plan
+Tool\Database\UpMigration.bat -Database actionrpg -Recover
+```
+
+Status/Plan은 읽기 전용이다. Plan에서 권한이 부족하면 실제 사용자/Host와 마이그레이션 계정용
+GRANT 제안을 보여준다. 별도 관리자가 검토·부여한 뒤 같은 명령을 재실행한다. 런타임 계정에는 부여하지 않는다.
+Recover는 V2 이상 다음 Up 실패가 실제 구조를 전혀 바꾸지 않은 경우만 확인 이력을 추가하고 정상 Up과
+런타임 권한 준비까지 수행한다. 원래 FAILED는 보존한다. RUNNING·부분 적용·체크섬 불일치는 중단한다.
+수정된 Auth를 함께 빌드·배포한다. [전체 조건](DATABASE_MIGRATIONS.md#변경-없는-up-실패의-검증과-재시도)을 따른다.
+
 기존 연결 비밀을 제공한 상태로 `-InspectOnly -InspectVersion 0` 또는 `1`을 사용하면 해당 버전의
 실제 구조를 읽기 전용 비교할 수 있다. 검사 성공은 이력 유효성이나 복구 성공을 뜻하지 않는다.
 

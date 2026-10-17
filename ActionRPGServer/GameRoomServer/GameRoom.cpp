@@ -33,6 +33,7 @@ namespace GameRoomServer
           startedHandler(std::move(inStartedHandler))
     {
         dungeonWorld = definition->world;
+        (void)combatDefinition->experienceRewards.dungeons.at(dungeonId);
         dungeonWorld["roomId"] = roomId;
         dungeonWorld["playerSkills"] = combatDefinition->playerSkills.source;
         dungeonWorld["skillTrees"] = combatDefinition->skillTrees.source;

@@ -6,12 +6,15 @@ param(
     [switch]$ServicesStopped,
     [switch]$CreateDatabase,
     [switch]$InspectOnly,
-    [ValidateRange(0, 7)][int]$InspectVersion,
+    [ValidateRange(0, 8)][int]$InspectVersion,
     [switch]$RecoverBootstrap,
     [switch]$RecoverAccounts,
     [switch]$RecoverQuests,
     [switch]$PermissionsOnly,
-    [switch]$SchemaOnly
+    [switch]$SchemaOnly,
+    [switch]$Status,
+    [switch]$Plan,
+    [switch]$Recover
 )
 
 Set-StrictMode -Version Latest
@@ -161,7 +164,12 @@ function Read-SqlFile([string]$Path) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
-    return [pscustomobject]@{ Path = $Path; Hash = $hash; Statements = (Split-Sql $text).Statements }
+    $statements = (Split-Sql $text).Statements
+    for ($index = 0; $index -lt $statements.Count; ++$index) {
+        $script:stage = "local SQL validation: $([IO.Path]::GetFileName($Path)) statement $($index + 1)"
+        Assert-MigrationRoutineBlocks $statements[$index]
+    }
+    return [pscustomobject]@{ Path = $Path; Hash = $hash; Statements = $statements }
 }
 
 function New-Command([string]$Sql, [object[]]$Values = @()) {
@@ -182,6 +190,8 @@ function Invoke-Write([string]$Sql, [object[]]$Values = @()) {
         $count = $command.ExecuteNonQuery()
         Assert-Condition (-not $script:warningSeen) 'ODBC warning; execution requires inspection.'
         return $count
+    } catch [System.Data.Odbc.OdbcException] {
+        throw (New-MigrationDatabaseFailure $_.Exception)
     } finally { $command.Dispose() }
 }
 
@@ -209,6 +219,8 @@ function Read-Sets([string]$Sql, [object[]]$Values = @()) {
         } while ($reader.NextResult())
         Assert-Condition (-not $script:warningSeen) 'ODBC warning; inspection requires review.'
         return [pscustomobject]@{ Sets = $sets }
+    } catch [System.Data.Odbc.OdbcException] {
+        throw (New-MigrationDatabaseFailure $_.Exception)
     } finally {
         if ($null -ne $reader) { $reader.Dispose() }
         $command.Dispose()
@@ -351,11 +363,13 @@ function Normalize-Check([string]$Sql, [switch]$Metadata) {
 
 function Get-Snapshot {
     Assert-Lock
-    $quest = (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_quest_schema_migration_history'") -ceq '1'
+    $experience = (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_experience_schema_migration_history'") -ceq '1'
+    $quest = $experience -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_quest_schema_migration_history'") -ceq '1'
     $itemUse = $quest -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_item_use_schema_migration_history'") -ceq '1'
     $inventory = $itemUse -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_inventory_schema_migration_history'") -ceq '1'
     $expanded = $inventory -or (Read-Scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = 'get_character_schema_migration_history'") -ceq '1'
-    $snapshot = if ($quest) { Read-Sets 'CALL get_quest_schema_migration_history()' }
+    $snapshot = if ($experience) { Read-Sets 'CALL get_experience_schema_migration_history()' }
+        elseif ($quest) { Read-Sets 'CALL get_quest_schema_migration_history()' }
         elseif ($itemUse) { Read-Sets 'CALL get_item_use_schema_migration_history()' }
         elseif ($inventory) { Read-Sets 'CALL get_inventory_schema_migration_history()' }
         elseif ($expanded) { Read-Sets 'CALL get_character_schema_migration_history()' }
@@ -365,13 +379,14 @@ function Get-Snapshot {
     if ($inventory) { $shapes += @(6, 6, 6, 6, 6, 6, 6) }
     if ($itemUse) { $shapes += @(6, 6, 6, 6, 6, 6) }
     if ($quest) { $shapes += @(6, 6, 6, 6, 6) }
+    if ($experience) { $shapes += 6 }
     Assert-Condition ($snapshot.Sets.Count -eq $shapes.Count) 'Invalid history result set count.'
     for ($i = 0; $i -lt $shapes.Count; ++$i) {
         Assert-Condition ($snapshot.Sets[$i].Columns -eq $shapes[$i]) 'Invalid history result shape.'
     }
     Assert-Condition ($snapshot.Sets[0].Rows.Count -eq 1) 'Invalid history header.'
     $header = $snapshot.Sets[0].Rows[0]
-    $format = if ($quest) { '5' } elseif ($itemUse) { '4' } elseif ($inventory) { '3' } elseif ($expanded) { '2' } else { '1' }
+    $format = if ($experience) { '6' } elseif ($quest) { '5' } elseif ($itemUse) { '4' } elseif ($inventory) { '3' } elseif ($expanded) { '2' } else { '1' }
     Assert-Condition ($header[0] -ceq $format -and $header[1] -ceq 'sha256-utf8-lf-v1' -and
         $header[2] -ceq $Database -and $header[3] -match '^8\.0\.46(?:$|[-+])' -and $header[4] -notmatch 'MariaDB') 'Unsupported target/inspection format.'
     # Published routines sort the CHAR alias execution_id (1, 10, 2). Normalize
@@ -397,6 +412,8 @@ function Get-Head($Snapshot) {
     $bootstrapFailureFinished = $null
     $accountsFailureFinished = $null
     $questsFailureFinished = $null
+    $unchangedFailureFinished = $null
+    $unchangedFailureVersion = 0
     $hasQuestHistory = $false
     $hasApplicationHistory = $false
     for ($i = 0; $i -lt $rows.Count; ++$i) {
@@ -407,7 +424,7 @@ function Get-Head($Snapshot) {
         Assert-Condition ($id -gt $previousId -and
             $row[7] -cmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$' -and
             $row[8] -cmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$' -and
-            [string]::CompareOrdinal($row[8], $row[7]) -ge 0) 'Failed, unfinished, or invalid audit; inspect before repair.'
+            [string]::CompareOrdinal($row[8], $row[7]) -ge 0) ("Invalid/unfinished audit execution=$id; version=$version; state=$($row[6]). Run -Status; no DDL was replayed.")
         $previousId = $id
         if ($null -ne $bootstrapFailureFinished) {
             $checks = [ordered]@{
@@ -469,6 +486,14 @@ function Get-Head($Snapshot) {
             $head = 7
             continue
         }
+        if ($null -ne $unchangedFailureFinished) {
+            $file = $script:catalog[$unchangedFailureVersion]
+            Assert-Condition ($version -eq $unchangedFailureVersion -and $row[2] -ceq ($file.Name + '_unchanged_recovery') -and
+                $row[3] -ceq 'UP' -and $row[4] -ceq $file.Up.Hash -and $row[5] -ceq $file.Down.Hash -and
+                $row[6] -ceq 'SUCCEEDED' -and [string]::CompareOrdinal($row[7], $unchangedFailureFinished) -ge 0) 'Invalid/missing unchanged-schema confirmation; run -Status.'
+            $unchangedFailureFinished = $null
+            continue
+        }
         Assert-Condition ($version -gt 0 -and $script:catalog.ContainsKey($version)) 'Unknown/missing migration version.'
         $file = $script:catalog[$version]
         if ($version -eq 7 -and $head -eq 6 -and -not $hasQuestHistory -and
@@ -488,7 +513,13 @@ function Get-Head($Snapshot) {
             $accountsFailureFinished = $row[8]
             continue
         }
-        Assert-Condition ($row[6] -ceq 'SUCCEEDED') 'Failed/unfinished migration; inspect before repair.'
+        if ($version -ge 2 -and $version -eq $head + 1 -and $row[3] -ceq 'UP' -and $row[6] -ceq 'FAILED') {
+            Assert-Condition ($i + 1 -lt $rows.Count) ("Unrecovered UP V$('{0:D6}' -f $version), execution=$id, state=FAILED. Run -Plan to verify recovery; use -Recover only if the actual schema is unchanged.")
+            $unchangedFailureVersion = $version
+            $unchangedFailureFinished = $row[8]
+            continue
+        }
+        Assert-Condition ($row[6] -ceq 'SUCCEEDED') ("Failed/unfinished migration execution=$id; version=$version; state=$($row[6]). Run -Status; no DDL was replayed.")
         $hasApplicationHistory = $true
         if ($row[3] -ceq 'UP') {
             Assert-Condition ($version -eq $head + 1) 'Non-contiguous Up history.'
@@ -501,6 +532,7 @@ function Get-Head($Snapshot) {
     Assert-Condition ($null -eq $bootstrapFailureFinished) 'Missing bootstrap recovery confirmation.'
     Assert-Condition ($null -eq $accountsFailureFinished) 'Missing account-table recovery confirmation.'
     Assert-Condition ($null -eq $questsFailureFinished) 'Missing V7 recovery confirmation.'
+    Assert-Condition ($null -eq $unchangedFailureFinished) 'Missing unchanged-schema confirmation.'
     return $head
 }
 
@@ -520,9 +552,9 @@ function Assert-Rows($Actual, $Expected, [string]$Label) {
 
 function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
     Assert-Condition (-not $TablesOnly -or ($RecoverQuests -and $Head -eq 7)) 'Table-only verification is restricted to V7 recovery.'
-    Assert-Condition ($Head -ge 0 -and $Head -le 7) 'Update the schema inspection contract before adding schema versions.'
-    $resultCount = if ($TablesOnly) { 5 } elseif ($Head -ge 7) { 29 } elseif ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
-    $format = if ($TablesOnly) { '4' } elseif ($Head -ge 7) { '5' } elseif ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
+    Assert-Condition ($Head -ge 0 -and $Head -le 8) 'Update the schema inspection contract before adding schema versions.'
+    $resultCount = if ($TablesOnly) { 5 } elseif ($Head -ge 8) { 30 } elseif ($Head -ge 7) { 29 } elseif ($Head -ge 6) { 24 } elseif ($Head -ge 5) { 18 } elseif ($Head -ge 4) { 11 } else { 10 }
+    $format = if ($TablesOnly) { '4' } elseif ($Head -ge 8) { '6' } elseif ($Head -ge 7) { '5' } elseif ($Head -ge 6) { '4' } elseif ($Head -ge 5) { '3' } elseif ($Head -ge 4) { '2' } else { '1' }
     Assert-Condition ($Snapshot.Sets.Count -eq $resultCount -and $Snapshot.Sets[0].Rows[0][0] -ceq $format) 'Inspector/version mismatch.'
     $columns = [System.Collections.Generic.List[object]]::new()
     $constraints = [System.Collections.Generic.List[object]]::new()
@@ -740,6 +772,9 @@ function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
         $indexes.Add(@('character_quests','ix_character_quests_live','1','1','character_id',$null))
         $indexes.Add(@('character_quests','ix_character_quests_live','1','2','status',$null))
     }
+    if ($Head -ge 8) {
+        $columns.Add(@('characters','experience','bigint unsigned','NO',$null,'','InnoDB','0',$null))
+    }
     $actualConstraints = [System.Collections.Generic.List[object]]::new()
     foreach ($row in $Snapshot.Sets[3].Rows) {
         if ($InspectOnly) { Write-Host ('Constraints raw: ' + (ConvertTo-Json -InputObject $row -Compress)) }
@@ -841,7 +876,8 @@ function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
         $parameters.Add(@('apply_quest_inventory','3','IN','inInventoryJson','text','utf8mb4','utf8mb4_bin'))
         $parameters.Add(@('emit_quest_state','1','IN','inResultCode','int',$null,$null))
         $parameters.Add(@('emit_quest_state','2','IN','inCharacterId','bigint unsigned',$null,$null))
-        $parameters.Add(@('emit_quest_state','3','IN','inIncludeSnapshots','tinyint(1)',$null,$null))
+        if ($Head -ge 8) { $parameters.Add(@('emit_quest_state','3','IN','inSnapshotMode','int',$null,$null)) }
+        else { $parameters.Add(@('emit_quest_state','3','IN','inIncludeSnapshots','tinyint(1)',$null,$null)) }
         $parameters.Add(@('emit_quest_state','4','IN','inServerNowMs','bigint unsigned',$null,$null))
         $parameters.Add(@('emit_quest_state','5','IN','inQuestIdsJson','text','utf8mb4','utf8mb4_bin'))
         $parameters.Add(@('get_character_quests','1','IN','inAccountId','bigint unsigned',$null,$null))
@@ -862,6 +898,7 @@ function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
         $parameters.Add(@('save_character_quests','11','IN','inInventoryJson','text','utf8mb4','utf8mb4_bin'))
         $parameters.Add(@('save_character_quests','12','IN','inQuestIdsJson','text','utf8mb4','utf8mb4_bin'))
     }
+    if ($Head -ge 8) { $files += $script:catalog[8].Up }
     $routineMap = @{}
     foreach ($file in $files) {
         foreach ($statement in $file.Statements) {
@@ -880,6 +917,7 @@ function Assert-Structure($Snapshot, [int]$Head, [switch]$TablesOnly) {
     if ($Head -ge 5) { $routineNames += @('emit_character_state','list_characters','create_character','claim_character','save_character_state','release_character','get_inventory_schema_migration_history') }
     if ($Head -ge 6) { $routineNames += @('emit_item_use','reserve_item_use','get_item_use','complete_item_use','cancel_item_use','get_item_use_schema_migration_history') }
     if ($Head -ge 7) { $routineNames += @('emit_quest_state','get_character_quests','save_character_quests','get_quest_schema_migration_history','apply_quest_inventory') }
+    if ($Head -ge 8) { $routineNames += 'get_experience_schema_migration_history' }
     for ($i = 0; $i -lt $routineNames.Count; ++$i) {
         $set = $Snapshot.Sets[7 + $i]
         Assert-Condition ($set.Rows.Count -eq 1) 'Invalid SHOW CREATE row count.'
@@ -982,7 +1020,7 @@ WHERE other.execution_id IS NULL AND failed.execution_id = ? AND failed.version 
     Assert-Condition ((Get-Head $final) -eq 0) 'Bootstrap recovery head mismatch.'
     Assert-Structure $final 0
     Assert-RecoveryObjects 0
-    Write-Host 'Recovery complete. Active version: V000000. Original FAILED audit preserved; run a separate normal Up to apply V000001..V000007.'
+    Write-Host 'Recovery complete. Active version: V000000. Original FAILED audit preserved; run a separate normal Up to apply V000001..V000008.'
 }
 
 function Assert-QuestRecoveryObjects([int]$ExpectedRoutines) {
@@ -1118,7 +1156,7 @@ WHERE later.execution_id IS NULL AND failed.execution_id = ? AND failed.version 
     Assert-Structure $final 1
     Assert-RecoveryObjects 1
     Assert-Condition ((Read-Scalar 'SELECT NOT EXISTS (SELECT 1 FROM accounts) AND NOT EXISTS (SELECT 1 FROM account_identities)') -ceq '1') 'Account data changed during recovery; inspect before proceeding.'
-    Write-Host 'Recovery complete. Active version: V000001. Original FAILED audit preserved; run a separate normal Up to apply V000002..V000007.'
+    Write-Host 'Recovery complete. Active version: V000001. Original FAILED audit preserved; run a separate normal Up to apply V000002..V000008.'
 }
 
 # RUNNING is committed before the first DDL. A crash/unknown completion remains
@@ -1127,6 +1165,7 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
     $id = [uint64]0
     $tableLocks = $false
     try {
+        $script:stage = "$Action version $Version rollback data guard"
         if ($Action -eq 'DOWN' -and $Version -eq 1) {
             [void](Invoke-Write 'LOCK TABLES accounts WRITE, account_identities WRITE, schema_migrations WRITE')
             $tableLocks = $true
@@ -1158,27 +1197,40 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
                 (Read-Scalar 'SELECT COUNT(*) FROM character_quest_tracking') -ceq '0' -and
                 (Read-Scalar 'SELECT COUNT(*) FROM character_quests') -ceq '0') 'Down 000007 refused: quest state, tracking or event history exists.'
         }
+        if ($Action -eq 'DOWN' -and $Version -eq 8) {
+            [void](Invoke-Write 'LOCK TABLES characters WRITE, character_quests WRITE, schema_migrations WRITE')
+            $tableLocks = $true
+            Assert-Condition ((Read-Scalar 'SELECT NOT EXISTS (SELECT 1 FROM characters WHERE experience <> 0)') -ceq '1') 'Down 000008 refused: nonzero experience exists.'
+            $liveExperience = 'SELECT NOT EXISTS (SELECT 1 FROM character_quests WHERE status IN (_binary''Active'', _binary''ReadyToReport'', _binary''RewardPending'') AND JSON_SEARCH(state_json, ''one'', ''Experience'', NULL,     ''$.definition.fixedRewards[*].type'', ''$.definition.choiceRewards[*].rewards[*].type'') IS NOT NULL)'
+            Assert-Condition ((Read-Scalar $liveExperience) -ceq '1') 'Down 000008 refused: a live Experience reward snapshot needs the V8 server.'
+        }
         $script:stage = "$Action version $Version"
         $file = if ($Action -eq 'UP') { $Up } else { $Down }
         $start = 0
         if ($Bootstrap) {
             # No guessed baseline: only an empty schema can create this table.
+            $script:stage = "$Action version $Version statement 1"
+            Write-Host ("[{0} V{1:D6} 1/{2}] {3}" -f $Action,$Version,$file.Statements.Count,(Get-MigrationStatementLabel $file.Statements[0]))
             [void](Invoke-Write $file.Statements[0]); $start = 1
         }
         $downHash = if ($null -eq $Down) { $null } else { $Down.Hash }
+        $script:stage = "$Action version $Version starting audit"
         $id = Start-Audit $Version $Name $Action $Up.Hash $downHash
         for ($i = $start; $i -lt $file.Statements.Count; ++$i) {
             $script:stage = "$Action version $Version statement $($i + 1)"
+            Write-Host ("[{0} V{1:D6} {2}/{3}] {4}" -f $Action,$Version,($i + 1),$file.Statements.Count,(Get-MigrationStatementLabel $file.Statements[$i]))
             Assert-Lock
             [void](Invoke-Write $file.Statements[$i])
             # The empty pair is gone atomically. CREATE/DROP routines must not run
             # with explicit table locks; the named migration lock remains owned.
-            if ($tableLocks -and $Action -eq 'DOWN' -and $Version -in @(4, 5, 6, 7) -and $i -eq 0) {
+            if ($tableLocks -and $Action -eq 'DOWN' -and $Version -in @(4, 5, 6, 7, 8) -and $i -eq 0) {
                 [void](Invoke-Write 'UNLOCK TABLES'); $tableLocks = $false
             }
         }
         if ($tableLocks) { [void](Invoke-Write 'UNLOCK TABLES'); $tableLocks = $false }
+        $script:stage = "$Action version $Version final schema verification"
         Assert-Structure (Get-Snapshot) $TargetHead
+        $script:stage = "$Action version $Version completing audit"
         Complete-Audit $id 'SUCCEEDED'
         Write-Host "$Action V$('{0:D6}' -f $Version) succeeded."
     } catch {
@@ -1191,6 +1243,13 @@ function Invoke-Migration([int]$Version, [string]$Name, [string]$Action, $Up, $D
 try {
     $script:stage = 'operator confirmation'
     . (Join-Path $PSScriptRoot 'RuntimePermissions.ps1')
+    . (Join-Path $PSScriptRoot 'MigrationWorkflow.ps1')
+    $workflowModes = @($Status,$Plan,$Recover | Where-Object { $_.IsPresent }).Count
+    Assert-Condition ($workflowModes -le 1) 'Choose only one of -Status, -Plan and -Recover.'
+    Assert-Condition ($workflowModes -eq 0 -or (-not $CreateDatabase -and -not $InspectOnly -and
+        -not $RecoverBootstrap -and -not $RecoverAccounts -and -not $RecoverQuests -and
+        -not $PermissionsOnly -and -not $SchemaOnly)) 'Workflow options cannot be combined with creation, legacy recovery, inspection or permission/schema-only options.'
+    Assert-Condition (-not $Recover -or $Direction -eq 'Up') '-Recover supports the next failed Up migration only.'
     if ([string]::IsNullOrWhiteSpace($Database)) { $Database = Read-MigrationValue 'Target database' 'actionrpg' }
     Assert-Condition ($Database.Length -ge 1 -and $Database.Length -le 64) 'Database name must contain 1..64 characters.'
     Assert-Condition (-not $PermissionsOnly.IsPresent -or ($Direction -eq 'Up' -and -not $SchemaOnly.IsPresent -and
@@ -1213,7 +1272,7 @@ try {
         -not $RecoverAccounts.IsPresent -and -not $RecoverBootstrap.IsPresent -and
         -not $CreateDatabase.IsPresent -and -not $InspectOnly.IsPresent)) '-RecoverQuests requires Up without other recovery, creation or inspection options.'
     Assert-Condition (-not $InspectOnly.IsPresent -or ($Direction -eq 'Up' -and -not $CreateDatabase.IsPresent)) '-InspectOnly requires Up without -CreateDatabase.'
-    Assert-Condition ($PSBoundParameters.ContainsKey('InspectVersion') -eq $InspectOnly.IsPresent) 'Supply -InspectOnly and -InspectVersion 0..7 together; the comparison version is not an active-version claim.'
+    Assert-Condition ($PSBoundParameters.ContainsKey('InspectVersion') -eq $InspectOnly.IsPresent) 'Supply -InspectOnly and -InspectVersion 0..8 together; the comparison version is not an active-version claim.'
     Assert-Condition (-not $CreateDatabase.IsPresent -or $Direction -eq 'Up') '-CreateDatabase is only supported with Up.'
     if ($CreateDatabase) {
         Assert-Condition ($Database -cmatch '\A[a-z][a-z0-9_]{0,63}\z' -and
@@ -1231,7 +1290,7 @@ try {
         Assert-Condition ($version -gt 0 -and -not $script:catalog.ContainsKey($version)) 'Duplicate/reserved migration version.'
         $script:catalog.Add($version, [pscustomobject]@{ Name = $name; Up = (Read-SqlFile $item.FullName); Down = (Read-SqlFile (Join-Path (Join-Path $root 'Down') $item.Name)) })
     }
-    Assert-Condition ($script:catalog.Count -eq 7) 'Current schema inspection supports versions 000001..000007; extend the contract with new migrations.'
+    Assert-Condition ($script:catalog.Count -eq 8) 'Current schema inspection supports versions 000001..000008; extend the contract with new migrations.'
     if (!$SchemaOnly -and !$InspectOnly -and !$RecoverBootstrap -and !$RecoverAccounts -and !$RecoverQuests) {
         Assert-Condition ($script:catalog.Count -eq (Get-RuntimeSchemaVersion)) 'Update the runtime permission contract with the migration catalog before DB preparation.'
     }
@@ -1267,6 +1326,20 @@ try {
         $drops = @($script:catalog[7].Down.Statements | Where-Object { (Normalize-Sql $_) -ceq ('drop procedure ' + $routineName) })
         Assert-Condition ($drops.Count -eq 1) 'Down 000007 must drop only the declared quest routines.'
     }
+    Assert-Condition ($script:catalog[8].Up.Statements.Count -eq 14 -and
+        $script:catalog[8].Down.Statements.Count -eq 14 -and
+        (Normalize-Sql $script:catalog[8].Up.Statements[0]) -ceq 'alter table characters add column experience bigint unsigned not null default 0' -and
+        (Normalize-Sql $script:catalog[8].Down.Statements[0]) -ceq 'alter table characters drop column experience') 'Unsafe experience migration contract.'
+    foreach ($entry in @(@('apply_quest_inventory',7),@('emit_character_state',5),@('list_characters',5),
+        @('save_character_state',6),@('emit_quest_state',7),@('save_character_quests',7))) {
+        $routineName = [string]$entry[0]; $previousVersion = [int]$entry[1]
+        $original = @($script:catalog[$previousVersion].Up.Statements | Where-Object { $_ -match ('(?is)^CREATE\s+PROCEDURE\s+' + $routineName + '\b') })
+        $restored = @($script:catalog[8].Down.Statements | Where-Object { $_ -match ('(?is)^CREATE\s+PROCEDURE\s+' + $routineName + '\b') })
+        $dropped = @($script:catalog[8].Down.Statements | Where-Object { (Normalize-Sql $_) -ceq ('drop procedure ' + $routineName) })
+        Assert-Condition ($original.Count -eq 1 -and $restored.Count -eq 1 -and $dropped.Count -eq 1 -and
+            (Normalize-Sql $original[0]) -ceq (Normalize-Sql $restored[0])) 'Down 000008 must restore the exact V7-compatible routine contract.'
+    }
+    Assert-Condition ((@($script:catalog[8].Down.Statements | Where-Object { (Normalize-Sql $_) -ceq 'drop procedure get_experience_schema_migration_history' })).Count -eq 1) 'Invalid V8 inspector Down.'
     $script:stage = 'connection input'
     $secret = Get-MigrationConnectionString
     if ($CreateDatabase) {
@@ -1300,6 +1373,7 @@ try {
     Assert-Condition ((Read-Scalar 'SELECT GET_LOCK(?, 0)' @($script:lockName)) -ceq '1') 'Another migrator/schema inspector owns this DB lock.'
     $script:ownsLock = $true
     if ($CreateDatabase) {
+        Assert-MigrationPrivileges 0 'UP' -Bootstrap
         Initialize-Database
         $target = Get-Target
         Assert-Condition ($target.Database -ceq $Database) 'Selected database must match -Database.'
@@ -1308,6 +1382,42 @@ try {
     }
     $script:stage = 'history/actual schema verification'
     $hasHistory = Read-Scalar "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'schema_migrations'"
+    if ($Status) {
+        Show-MigrationStatus -HasHistory ($hasHistory -ceq '1')
+        return
+    }
+    if ($Plan -or $Recover) {
+        Write-Host 'Checking history, actual schema and migration privileges before any writes.'
+        if ($hasHistory -ceq '0') {
+            Assert-Condition (-not $Recover) 'Recovery requires a failed managed migration; no audit or DDL was written.'
+            Assert-Condition ($Direction -eq 'Up') 'Unmanaged schema: Down has no verified version to roll back.'
+            Assert-EmptyMigrationDatabase
+            Assert-MigrationPrivileges 0 'UP' -Bootstrap
+            Write-Host 'Plan only: bootstrap V000000, then Up V000001 -> V000008. No writes were made.'
+            return
+        }
+        $workflow = Get-MigrationWorkflowState
+        if ($null -ne $workflow.Pending) {
+            Assert-Condition ($Direction -eq 'Up') 'Pending failed Up must be resolved before Down.'
+            Assert-Condition ($workflow.Pending[6] -ceq 'FAILED') 'RUNNING has unknown completion; use -Status and inspect before repair. No writes were made.'
+            Assert-MigrationPrivileges $workflow.Head 'UP' -Recovery
+            Assert-UnchangedRecovery $workflow
+        } else {
+            Assert-Structure (Get-Snapshot) $workflow.Head
+            if ($Recover) { Write-Host 'No pending failed migration; continuing normal Up.' }
+        }
+        if ($null -eq $workflow.Pending -and (($Direction -eq 'Up' -and $workflow.Head -lt $script:catalog.Count) -or
+            ($Direction -eq 'Down' -and $workflow.Head -gt 0))) {
+            Assert-MigrationPrivileges $workflow.Head $Direction.ToUpperInvariant()
+        }
+        if ($Plan) {
+            Write-Host ("Plan only: active V{0:D6}; direction={1}; target={2}. No writes were made." -f
+                $workflow.Head,$Direction,$(if ($Direction -eq 'Up') { 'V000008' } else { 'one version down' }))
+            if ($null -ne $workflow.Pending) { Write-Host 'Verified unchanged schema. Use -Recover to preserve the failed audit and retry normal Up, including runtime permissions.' }
+            return
+        }
+        if ($null -ne $workflow.Pending) { Confirm-UnchangedRecovery $workflow }
+    }
     if ($InspectOnly) {
         # This branch must precede bootstrap/audit writes and Get-Head's success-only gate.
         # The existing inspection routine reads metadata/audit and takes the same named lock.
@@ -1338,11 +1448,12 @@ try {
     if ($hasHistory -ceq '0') {
         Assert-Condition (-not $PermissionsOnly.IsPresent) 'Permissions-only requires an existing verified schema; run normal Up first.'
         Assert-Condition ($Direction -eq 'Up') 'Unmanaged schema: Down requires a verified migration history.'
-        $objects = Read-Scalar 'SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()) + (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE())'
-        Assert-Condition ($objects -ceq '0') 'Refusing to baseline a nonempty/unmanaged schema.'
-        Write-Host 'Plan: bootstrap V000000, then Up V000001 -> V000007.'
+        Assert-EmptyMigrationDatabase
+        Assert-MigrationPrivileges 0 'UP' -Bootstrap
+        Write-Host 'Plan: bootstrap V000000, then Up V000001 -> V000008.'
         Invoke-Migration 0 'migration_history' 'UP' $script:bootstrap $null 0 -Bootstrap
     }
+    $script:stage = 'history/actual schema verification'
     $snapshot = Get-Snapshot
     $head = Get-Head $snapshot
     Assert-Structure $snapshot $head
@@ -1354,13 +1465,15 @@ try {
         return
     }
     if ($Direction -eq 'Up') {
-        Write-Host "Plan: active V$('{0:D6}' -f $head) -> V000007; Up each pending version in order."
+        Write-Host "Plan: active V$('{0:D6}' -f $head) -> V000008; Up each pending version in order."
+        if ($head -lt $script:catalog.Count) { Assert-MigrationPrivileges $head 'UP' }
         for ($version = $head + 1; $version -le $script:catalog.Count; ++$version) {
             $file = $script:catalog[$version]
             Invoke-Migration $version $file.Name 'UP' $file.Up $file.Down $version
         }
     } elseif ($head -gt 0) {
         Write-Host "Plan: Down V$('{0:D6}' -f $head) only -> V$('{0:D6}' -f ($head - 1))."
+        Assert-MigrationPrivileges $head 'DOWN'
         $file = $script:catalog[$head]
         Invoke-Migration $head $file.Name 'DOWN' $file.Up $file.Down ($head - 1)
     } else { Write-Host 'No active application migration to roll back; V000000 audit infrastructure remains.' }
@@ -1380,13 +1493,15 @@ try {
     # Any driver/framework exception may include connection details or SQL.
     # Only explicitly tagged, credential-free precondition messages are shown.
     $exception = $_.Exception
-    $detail = 'File/ODBC/inspection failed; inspect the target using protected diagnostics.'
+    $detail = 'File/ODBC/inspection failed; PowerShell line={0}; exception_type={1}; HRESULT=0x{2:X8}.' -f
+        $_.InvocationInfo.ScriptLineNumber,$exception.GetType().FullName,$exception.HResult
     while ($null -ne $exception) {
         if ($exception.Data.Contains('SafeMigrationMessage')) { $detail = [string]$exception.Data['SafeMigrationMessage']; break }
+        if ($exception -is [System.Data.Odbc.OdbcException]) { $detail = Get-MigrationDatabaseFailure $exception; break }
         $exception = $exception.InnerException
     }
     $operation = if ($PermissionsOnly -or $script:stage.StartsWith('runtime permissions')) { 'Permission preparation' }
-        elseif ($InspectOnly) { 'Inspection' } elseif ($RecoverBootstrap -or $RecoverAccounts -or $RecoverQuests) { 'Recovery' } else { 'Migration' }
+        elseif ($InspectOnly -or $Status -or $Plan) { 'Inspection' } elseif ($Recover -or $RecoverBootstrap -or $RecoverAccounts -or $RecoverQuests) { 'Recovery' } else { 'Migration' }
     [Console]::Error.WriteLine("$operation stopped at $script:stage. $detail")
     if ($CreateDatabase) { [Console]::Error.WriteLine('Any successfully created database remains; database creation is not rolled back or recorded as a versioned migration.') }
     if ($script:stage.StartsWith('runtime permissions')) {

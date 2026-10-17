@@ -42,6 +42,19 @@ namespace GameRoomServer
         Json fact{{"incarnation", questIncarnation}, {"sequence", Q::Decimal(++questSequence)}, {"dungeonId", dungeonId},
             {"mapId", mapId}, {"kind", std::move(kind)}, {"targetId", std::move(target)}, {"creditedPlayerIds", ids}};
         if (monsterId) fact["monsterInstanceId"] = Q::Decimal(monsterId);
+        if (fact.at("kind") == "MonsterKilled" || fact.at("kind") == "DungeonCleared")
+        {
+            const auto& rewards = combatDefinition->experienceRewards;
+            const auto amount = fact.at("kind") == "MonsterKilled"
+                ? rewards.monsters.at(monsters.at(monsterId).definition->dataId)
+                : rewards.dungeons.at(dungeonId).clearExperience;
+            const auto participants = QuestParticipants(mapId);
+            auto recipients = Json::array();
+            for (const auto id : participants) recipients.push_back(Q::Decimal(id));
+            fact["experience"] = Q::Decimal(amount);
+            fact["experiencePlayerIds"] = std::move(recipients);
+            fact["rewardPolicyVersion"] = rewards.version;
+        }
         questOutbox.push_back(std::move(fact)); if (questBatch.empty()) FlushQuests(); return true;
     }
     void GameRoom::ObserveQuestLocations()

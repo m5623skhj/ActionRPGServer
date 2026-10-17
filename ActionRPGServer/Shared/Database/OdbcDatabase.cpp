@@ -21,7 +21,7 @@ namespace ActionRPG::Database
         constexpr std::size_t MAX_PARAMETER_COUNT = 64;
         constexpr std::size_t MAX_INPUT_STRING_CHARACTERS = 262144;
         constexpr std::size_t MAX_RESULT_ROWS = 4096;
-        constexpr std::size_t MAX_RESULT_SETS = 29;
+        constexpr std::size_t MAX_RESULT_SETS = 30;
         constexpr std::size_t MAX_RESULT_TRANSITIONS = 64;
         constexpr std::size_t MAX_RESULT_BYTES = 4 * 1024 * 1024;
 

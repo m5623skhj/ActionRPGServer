@@ -492,3 +492,9 @@ Packet:
     Items:
       - Type: std::string
         Name: json
+
+  - Type: ReplyPacket
+    PacketName: ExperienceState
+    Items:
+      - Type: std::string
+        Name: json
